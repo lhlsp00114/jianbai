@@ -11,19 +11,19 @@
       role="separator"
       aria-orientation="horizontal"
       aria-label="调整输入框高度"
-      aria-valuemin="44"
+      :aria-valuemin="senderMinHeight"
       :aria-valuemax="senderMaxHeight"
       :aria-valuenow="senderHeight"
       tabindex="0"
       title="拖动调整输入框高度"
-      @focus="senderHeight = sender?.chatElement.rollBox.clientHeight ?? 44"
+      @focus="senderHeight = sender?.chatElement.rollBox.clientHeight ?? senderMinHeight"
       @pointerdown="startSenderResize"
       @pointermove="moveSenderResize"
       @pointerup="stopSenderResize"
       @pointercancel="stopSenderResize"
       @lostpointercapture="stopSenderResize"
-      @keydown.up.prevent="setSenderHeight((sender?.chatElement.rollBox.clientHeight ?? 44) + 16)"
-      @keydown.down.prevent="setSenderHeight((sender?.chatElement.rollBox.clientHeight ?? 44) - 16)" />
+      @keydown.up.prevent="setSenderHeight((sender?.chatElement.rollBox.clientHeight ?? senderMinHeight) + 16)"
+      @keydown.down.prevent="setSenderHeight((sender?.chatElement.rollBox.clientHeight ?? senderMinHeight) - 16)" />
     <attachmentList v-if="draftAttachments.length" class="draftAttachments" :attachments="draftAttachments" :directory="directory" removable restorable :disabled="locked" @remove="draftAttachments.splice($event, 1)" @restore="restoreTextAttachment" />
     <div class="senderInput" @pointerdown.capture="armVoiceInput" @contextmenu="voiceActive && $event.preventDefault()" @dragstart="voiceActive && $event.preventDefault()">
       <div ref="senderElement" class="senderEditor" @keydown.capture="handleSenderKeydown"></div>
@@ -98,8 +98,9 @@ const mentionMenuRef = ref<InstanceType<typeof mentionMenu>>();
 const mentionQuery = ref<string>();
 let mentionPosition: { node: ReturnType<xSender["getCurrentNode"]>; remove: number } | undefined;
 let insertingMentions = false;
-const senderHeight = ref(44);
-const senderMaxHeight = ref(Math.max(44, window.innerHeight / 2));
+const senderMinHeight = 96;
+const senderHeight = ref(senderMinHeight);
+const senderMaxHeight = ref(Math.max(senderMinHeight, window.innerHeight / 2));
 let senderResize: { pointerId: number; y: number; height: number } | undefined;
 const contextMenuVisible = ref(false);
 const running = computed(() => props.busy || props.remoteRunning);
@@ -198,10 +199,14 @@ function handleSenderKeydown(event: KeyboardEvent) {
 
 async function insertMentions(mentions: AgentMention[]) {
   const instance = sender;
-  if (!instance || locked.value || running.value || !props.active) return;
+  if (!instance || locked.value || running.value || !props.active) return false;
   const currentIds = new Set(instance.getTagData().mention.map(item => item.id));
-  if (currentIds.size + mentions.length > 20) return ElMessage.warning("每条消息最多提及 20 个输出或素材");
+  if (currentIds.size + mentions.length > 20) {
+    ElMessage.warning("每条消息最多提及 20 个输出或素材");
+    return false;
+  }
   insertingMentions = true;
+  let inserted = false;
   try {
     if (mentionPosition?.node.instance.$el.isConnected) mentionPosition.node.instance.focus(mentionPosition.node.offset);
     else instance.focus("last");
@@ -211,6 +216,7 @@ async function insertMentions(mentions: AgentMention[]) {
       draftMentions.value.push(mention);
       await instance.setMention({ id: mention.id, name: mentionName(mention) });
     }
+    inserted = true;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "添加提及失败");
   } finally {
@@ -218,6 +224,7 @@ async function insertMentions(mentions: AgentMention[]) {
     mentionPosition = undefined;
     insertingMentions = false;
   }
+  return inserted;
 }
 
 async function removeDraftMention(id: string) {
@@ -297,8 +304,8 @@ async function cancelEdit() {
 
 function setSenderHeight(height: number) {
   if (!sender) return;
-  senderMaxHeight.value = Math.max(44, window.innerHeight / 2);
-  senderHeight.value = Math.max(44, Math.min(senderMaxHeight.value, Math.round(height)));
+  senderMaxHeight.value = Math.max(senderMinHeight, window.innerHeight / 2);
+  senderHeight.value = Math.max(senderMinHeight, Math.min(senderMaxHeight.value, Math.round(height)));
   sender.chatElement.rollBox.style.height = `${senderHeight.value}px`;
 }
 
@@ -428,7 +435,7 @@ watch(senderElement, (element, _previous, onCleanup) => {
   const instance = new xSender(element, {
     autoFocus: props.active,
     placeholder: placeholder.value,
-    chatStyle: { minHeight: "44px", maxHeight: "50vh", fontSize: "14px", lineHeight: "24px" },
+    chatStyle: { minHeight: `${senderMinHeight}px`, maxHeight: "50vh", fontSize: "14px", lineHeight: "24px" },
     keyboardSendFun: event => event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229 && !sender?.chatEditor.isComposition,
     keyboardWrapFun: event => event.key === "Enter" && event.shiftKey && !event.isComposing && event.keyCode !== 229 && !sender?.chatEditor.isComposition,
   });
@@ -454,7 +461,7 @@ watch(senderElement, (element, _previous, onCleanup) => {
         element.className = "agentMentionThumbnail";
         const label = document.createElement("span");
         label.className = "agentMentionLabel";
-        label.textContent = content.textContent;
+        label.textContent = mentionThumbnailProps(mention).thumbnail ? "" : content.textContent;
         content.replaceChildren(element, label);
       }
       targets.push({ key: draftMentionTargets.value.find(target => target.element === element)?.key ?? Symbol(), element, mention });
@@ -517,7 +524,7 @@ async function clearDraft() {
   await sender?.reset();
 }
 
-defineExpose({ getDraft, clearDraft, fillPrompt, fillQueuedMessage, editMessage, cancelEdit, restoreEditingDraft });
+defineExpose({ getDraft, clearDraft, fillPrompt, fillQueuedMessage, editMessage, cancelEdit, restoreEditingDraft, insertMentions });
 </script>
 
 <style lang="scss">
@@ -531,7 +538,7 @@ defineExpose({ getDraft, clearDraft, fillPrompt, fillQueuedMessage, editMessage,
     flex-shrink: 0;
     margin: 0 12px 8px;
     border: 1px solid var(--el-border-color-light);
-    border-radius: calc(var(--ui-radius) * 2.75);
+    border-radius: 22px;
     background: var(--el-bg-color);
     box-shadow: 0 4px 16px rgb(0 0 0 / 8%);
 
@@ -563,7 +570,7 @@ defineExpose({ getDraft, clearDraft, fillPrompt, fillQueuedMessage, editMessage,
         z-index: 12;
         overflow: auto;
         padding: 12px;
-        border-radius: calc(var(--ui-radius) * 2.75);
+        border-radius: 22px;
         background: var(--el-bg-color);
         color: var(--el-text-color-placeholder);
         font-size: 14px;

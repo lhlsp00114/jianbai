@@ -27,7 +27,7 @@
         tabindex="0"
         @pointerdown.stop="startInteraction($event, handle.edge)"
         @keydown="resizeWithKeyboard($event, handle.edge)" />
-      <agent v-model="visible">
+      <agent ref="agentRef" v-model="visible">
         <template #menuActions>
           <el-button
             text
@@ -47,19 +47,22 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, shallowRef, watch } from "vue";
 import { IconLayoutSidebarRight, IconAppWindowBottomRight } from "@tabler/icons-vue";
+import type { AgentMention } from "@toonflow/server/agent/types";
 import agent from "@/components/agent/index.vue";
 
 const visible = defineModel<boolean>({ default: false });
+const agentRef = ref<InstanceType<typeof agent>>();
 const emit = defineEmits<{ resize: [width: number] }>();
-const docked = ref(false);
+const docked = ref(true);
 const viewport = reactive({ width: window.innerWidth, height: window.innerHeight });
 const gap = computed(() => Math.min(15, viewport.width / 2, viewport.height / 2));
+const dockedVerticalGap = computed(() => Math.min(44, viewport.height / 2));
 const maxWidth = computed(() => Math.max(0, docked.value ? viewport.width * 0.45 : viewport.width - gap.value * 2));
 const preferredWidth = ref(420);
 const width = computed(() => Math.min(preferredWidth.value, maxWidth.value));
 const preferredHeight = ref<number>();
 const height = computed(() =>
-  docked.value ? viewport.height : Math.min(preferredHeight.value ?? viewport.height * 0.8, viewport.height - gap.value * 2)
+  docked.value ? viewport.height - dockedVerticalGap.value * 2 : Math.min(preferredHeight.value ?? viewport.height * 0.8, viewport.height - gap.value * 2)
 );
 const resizeHandles = computed(
   () =>
@@ -78,8 +81,8 @@ const bottom = ref(15);
 const left = computed(() => Math.max(gap.value, Math.min(viewport.width - width.value - right.value, viewport.width - gap.value - width.value)));
 const top = computed(() => Math.max(gap.value, Math.min(viewport.height - height.value - bottom.value, viewport.height - gap.value - height.value)));
 const panelStyle = computed(() => ({
-  left: `${docked.value ? viewport.width - width.value : left.value}px`,
-  top: `${docked.value ? 0 : top.value}px`,
+  left: `${docked.value ? viewport.width - width.value - gap.value : left.value}px`,
+  top: `${docked.value ? dockedVerticalGap.value : top.value}px`,
   width: `${width.value}px`,
   height: `${height.value}px`,
 }));
@@ -103,12 +106,12 @@ function movePanel(x: number, y: number) {
 }
 
 function resizeAnchor(edge: ResizeEdge) {
-  if (docked.value) return viewport.width;
+  if (docked.value) return viewport.width - gap.value;
   return edge === "left" ? left.value + width.value : edge === "right" ? left.value : top.value;
 }
 
 function resizeLimit(edge: ResizeEdge, anchor = resizeAnchor(edge)) {
-  if (edge === "left") return Math.min(maxWidth.value, anchor - (docked.value ? 0 : gap.value));
+  if (edge === "left") return Math.min(maxWidth.value, anchor - gap.value);
   return Math.max(0, (edge === "right" ? viewport.width : viewport.height) - gap.value - anchor);
 }
 
@@ -181,7 +184,7 @@ function resizeViewport() {
 
 watch([visible, docked], () => stopInteraction());
 watch(
-  () => (visible.value && docked.value ? width.value : 0),
+  () => (visible.value && docked.value ? width.value + gap.value : 0),
   (value) => emit("resize", value),
   { immediate: true }
 );
@@ -190,6 +193,8 @@ onBeforeUnmount(() => {
   stopInteraction();
   window.removeEventListener("resize", resizeViewport);
 });
+
+defineExpose({ insertMentions: (mentions: AgentMention[]) => agentRef.value?.insertMentions(mentions) });
 </script>
 
 <style scoped lang="scss">
@@ -200,14 +205,14 @@ onBeforeUnmount(() => {
   max-width: 100vw;
   max-height: 100dvh;
   border: 1px solid var(--el-border-color-light);
-  border-radius: var(--ui-radius-large, 12px);
+  border-radius: calc(var(--ui-radius) * 2);
   background: color-mix(in srgb, var(--el-bg-color-overlay) 70%, transparent);
   backdrop-filter: blur(6px);
   box-shadow: var(--el-box-shadow-light);
 
   &.docked {
-    border-width: 0 0 0 1px;
-    border-radius: 0;
+    border-width: 1px;
+    border-radius: calc(var(--ui-radius) * 2);
     background: var(--el-bg-color-overlay);
     box-shadow: none;
   }

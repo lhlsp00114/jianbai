@@ -1,0 +1,70 @@
+diff --git a/es/components/image-viewer/src/image-viewer.vue_vue_type_script_setup_true_lang.mjs b/es/components/image-viewer/src/image-viewer.vue_vue_type_script_setup_true_lang.mjs
+index d9718a9608eaca2e8b18de17a18dfc6a94e03bac..b07f50d207b37ad748ae0e7f497765a257ce4b7a 100644
+--- a/es/components/image-viewer/src/image-viewer.vue_vue_type_script_setup_true_lang.mjs
++++ b/es/components/image-viewer/src/image-viewer.vue_vue_type_script_setup_true_lang.mjs	
+@@ -144,7 +144,7 @@ var image_viewer_vue_vue_type_script_setup_true_lang_default = /* @__PURE__ */ d
+ 			e.target.alt = t("el.image.error");
+ 		}
+ 		function handleMouseDown(e) {
+-			if (loading.value || e.button !== 0 || !wrapper.value) return;
++			if (loading.value || e.button !== 1 || !wrapper.value) return;
+ 			transform.value.enableTransition = false;
+ 			const { offsetX, offsetY } = transform.value;
+ 			const startX = e.pageX;
+@@ -192,6 +192,13 @@ var image_viewer_vue_vue_type_script_setup_true_lang_default = /* @__PURE__ */ d
+ 				enableTransition: false
+ 			};
+ 		}
++		function fitImage(e) {
++			if (e.button !== 0 || loading.value || loadError.value) return;
++			e.preventDefault();
++			e.stopPropagation();
++			mode.value = modes.CONTAIN;
++			reset();
++		}
+ 		function toggleMode() {
+ 			if (loading.value || loadError.value) return;
+ 			const modeNames = keysOf(modes);
+@@ -382,6 +389,7 @@ setActiveItem });
+ 							onLoad: handleImgLoad,
+ 							onError: handleImgError,
+ 							onMousedown: handleMouseDown,
++							onDblclick: fitImage,
+ 							onTouchstart: handleTouchStart
+ 						}, null, 46, _hoisted_1))], 2),
+ 						renderSlot(_ctx.$slots, "default")
+diff --git a/lib/components/image-viewer/src/image-viewer.vue_vue_type_script_setup_true_lang.js b/lib/components/image-viewer/src/image-viewer.vue_vue_type_script_setup_true_lang.js
+index 8ab64d304007253b19a699c7653e25b0993a572b..aa47e5f5e82e36291ea0d4a1f0e471caa14edbf8 100644
+--- a/lib/components/image-viewer/src/image-viewer.vue_vue_type_script_setup_true_lang.js
++++ b/lib/components/image-viewer/src/image-viewer.vue_vue_type_script_setup_true_lang.js	
+@@ -145,7 +145,7 @@ var image_viewer_vue_vue_type_script_setup_true_lang_default = /* @__PURE__ */ (
+ 			e.target.alt = t("el.image.error");
+ 		}
+ 		function handleMouseDown(e) {
+-			if (loading.value || e.button !== 0 || !wrapper.value) return;
++			if (loading.value || e.button !== 1 || !wrapper.value) return;
+ 			transform.value.enableTransition = false;
+ 			const { offsetX, offsetY } = transform.value;
+ 			const startX = e.pageX;
+@@ -193,6 +193,13 @@ var image_viewer_vue_vue_type_script_setup_true_lang_default = /* @__PURE__ */ (
+ 				enableTransition: false
+ 			};
+ 		}
++		function fitImage(e) {
++			if (e.button !== 0 || loading.value || loadError.value) return;
++			e.preventDefault();
++			e.stopPropagation();
++			mode.value = modes.CONTAIN;
++			reset();
++		}
+ 		function toggleMode() {
+ 			if (loading.value || loadError.value) return;
+ 			const modeNames = require_objects.keysOf(modes);
+@@ -383,6 +390,7 @@ setActiveItem });
+ 							onLoad: handleImgLoad,
+ 							onError: handleImgError,
+ 							onMousedown: handleMouseDown,
++							onDblclick: fitImage,
+ 							onTouchstart: handleTouchStart
+ 						}, null, 46, _hoisted_1))], 2),
+ 						(0, vue.renderSlot)(_ctx.$slots, "default")

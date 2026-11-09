@@ -60,9 +60,18 @@ for (const [brand, names] of Object.entries(aliases)) {
 }
 modelNames.sort((left, right) => right.prefix.length - left.prefix.length);
 
+// 兼容旧适配器的内部模型 ID，仅用于图标识别，不修改实际请求或画布配置。
+const legacyModelNames: Record<string, string> = {
+  gptimage2all: "gpt-image-2-all",
+  nanobananapro: "gemini-3-pro-image-preview",
+  nanobanana2: "gemini-3.1-flash-image-preview",
+};
+
 export function getModelIcon(model: string) {
   // ACT: 无法凭任意名称可靠识别品牌；优先模型路径末段，未匹配再尝试服务商，最终使用通用图标。
-  const segments = model.trim().toLowerCase().replace(/[_.\s]+/g, "-").split("/").reverse();
+  const modelName = model.trim().toLowerCase();
+  const canonicalName = Object.hasOwn(legacyModelNames, modelName) ? legacyModelNames[modelName]! : modelName;
+  const segments = canonicalName.replace(/[_.\s]+/g, "-").split("/").reverse();
   for (const name of segments) {
     const match = modelNames.find(({ prefix }) => name.startsWith(prefix)
       && (!name[prefix.length] || /[-:0-9]/.test(name[prefix.length]!)));

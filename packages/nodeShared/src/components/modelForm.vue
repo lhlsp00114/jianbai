@@ -9,7 +9,7 @@ import { computed } from "vue";
 import formCreate, { type Options } from "@form-create/element-ui";
 import {
   ElForm, ElFormItem, ElRow, ElCol, ElInput, ElInputNumber, ElSwitch,
-  ElSelect, ElOption, ElCheckbox, ElCheckboxGroup, ElRadio, ElRadioGroup,
+  ElSelect, ElOption, ElCheckbox, ElCheckboxGroup, ElRadio, ElRadioGroup, ElRadioButton,
 } from "element-plus";
 import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
 
@@ -28,6 +28,7 @@ for (const [name, component] of Object.entries({
   "el-input": ElInput, "el-input-number": ElInputNumber, "el-switch": ElSwitch,
   "el-select": ElSelect, "el-option": ElOption, "el-checkbox": ElCheckbox,
   "el-checkbox-group": ElCheckboxGroup, "el-radio": ElRadio, "el-radio-group": ElRadioGroup,
+  "el-radio-button": ElRadioButton,
 })) formCreate.component(name, component);
 </script>
 
@@ -49,6 +50,33 @@ for (const [name, component] of Object.entries({
     }
 
     .el-select, .el-input-number { width: 100%; }
+
+    .qualityChoices {
+      display: flex;
+      width: 100%;
+      gap: 8px;
+
+      .el-radio-button {
+        flex: 1;
+        min-width: 0;
+        --el-radio-button-checked-bg-color: var(--el-fill-color);
+        --el-radio-button-checked-text-color: var(--el-text-color-primary);
+        --el-radio-button-checked-border-color: var(--el-text-color-regular);
+
+        .el-radio-button__inner {
+          width: 100%;
+          padding: 8px 12px;
+          font-size: 14px;
+          border: 1px solid var(--el-border-color);
+          border-radius: var(--el-border-radius-base);
+          box-shadow: none;
+
+          &:hover { color: var(--el-text-color-primary); }
+        }
+
+        &.is-active .el-radio-button__inner { border-color: var(--el-text-color-regular); }
+      }
+    }
   }
 
   :deep(.el-row > .el-col:last-child .el-form-item) { margin-bottom: 0; }

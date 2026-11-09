@@ -2671,8 +2671,9 @@
     "apps/web/src/components/settings/panels/developer/index.vue",
     "apps/web/src/components/settings/panels/pluginMarket/index.vue",
     "apps/web/src/components/settings/panels/pluginMarket/uploadPluginDialog.vue",
-    "apps/server/src/utils/plugins/install.ts",
-    "apps/web/src/lib/pluginInstallConfirmation.ts"
+    "apps/web/src/lib/pluginInstallConfirmation.ts",
+    "apps/web/src/pages/home/index.vue",
+    "apps/server/src/utils/plugins/install.ts"
   ],
   "选择脚手架打包的 .tool.js 文件。": [
     "apps/web/src/components/settings/panels/developer/index.vue"

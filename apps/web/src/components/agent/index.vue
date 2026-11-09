@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch, type ComponentPublicInstance } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch, type ComponentPublicInstance } from "vue";
 import axios from "axios";
 import { translate } from "@toonflow/i18n/vue";
 import { ElMessage } from "element-plus";
@@ -45,7 +45,7 @@ import { useWorkspaceStore } from "@/stores/workspace";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
 import { stopAgent } from "@/lib/agentControl";
 import type { AgentConversation, AgentHistory, AgentMessage } from "./types";
-import type { AgentEvent, AgentSubAgent } from "@toonflow/server/agent/types";
+import type { AgentEvent, AgentMention, AgentSubAgent } from "@toonflow/server/agent/types";
 import agentMenu from "./menu.vue";
 import conversation from "./conversation.vue";
 
@@ -255,6 +255,15 @@ async function loadHistory(openLatest = false) {
   }
 }
 
+async function insertMentions(mentions: AgentMention[]) {
+  visible.value = true;
+  if (!initialized.value) await loadHistory(true);
+  if (!initialized.value) throw new Error("Agent 对话尚未准备好，请重试");
+  await nextTick();
+  const inserted = await conversationRefs.get(conversationKey.value)?.insertMentions(mentions);
+  if (!inserted) throw new Error("Agent 输入框当前不可用，请稍后重试");
+}
+
 async function selectConversation(file: string) {
   const directory = workspaceStore.project?.directory;
   if (!directory || loading.value || historyLoading.value || file === sessionFile.value) return;
@@ -367,6 +376,8 @@ onBeforeUnmount(() => {
   stopProject();
   window.removeEventListener("pagehide", pageHide);
 });
+
+defineExpose({ insertMentions });
 
 </script>
 

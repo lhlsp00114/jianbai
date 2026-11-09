@@ -65,13 +65,17 @@
           <span class="menuLabel">上传</span>
         </button>
       </template>
+      <button v-if="showFitView" type="button" class="menuButton" role="menuitem" @mouseenter="focusItem($event)" @click="emit('fitView')">
+        <icon-focus-centered class="menuIcon" :size="14" />
+        <span class="menuLabel">适应视图</span>
+      </button>
     </div>
   </li>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, shallowRef, type Component, type ComponentPublicInstance } from "vue";
-import { IconBox, IconChevronRight, IconFolder, IconFolderOpen, IconUpload } from "@tabler/icons-vue";
+import { IconBox, IconChevronRight, IconFolder, IconFolderOpen, IconUpload, IconFocusCentered } from "@tabler/icons-vue";
 import type { NodeMenuItem } from "@toonflow/server/nodeMenu";
 
 const props = withDefaults(defineProps<{
@@ -79,8 +83,9 @@ const props = withDefaults(defineProps<{
   nodes: { type: string; label: string; icon: Component }[];
   appendTo?: HTMLElement;
   uploadDisabled?: boolean;
+  showFitView?: boolean;
 }>(), { uploadDisabled: undefined });
-const emit = defineEmits<{ select: [type: string]; upload: []; close: [] }>();
+const emit = defineEmits<{ select: [type: string]; upload: []; fitView: []; close: [] }>();
 const menuList = ref<HTMLElement>();
 const menuHost = shallowRef<HTMLElement>();
 const openGroupId = ref<string>();

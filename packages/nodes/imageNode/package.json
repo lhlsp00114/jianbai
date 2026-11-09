@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./useImageRotation": "./src/useImageRotation.ts",
     "./imageInpaint": "./src/imageInpaint.ts",
     "./imagePanorama": "./src/components/imagePanorama.vue",
     "./imageLighting": "./src/components/imageLighting.vue",

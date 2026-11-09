@@ -12,9 +12,10 @@
     @pointerdown.capture="updateCanvasSelection"
     @click.capture="updateCanvasSelection"
     @auxclick.capture="preventMiddleClick"
-    @pointermove="pointerPosition = { x: $event.clientX, y: $event.clientY }; if (!$event.buttons) updateCanvasSelection($event)"
-    @pointerleave="pointerPosition = undefined"
+    @pointermove="updatePointerPosition($event)"
+    @pointerleave="pointerPosition = undefined; hoveredNodeId = undefined"
     @dragover="dragFilesOver"
+    @dragstart.capture="preventNativeNodeDrag"
     @drop="dropFiles">
     <vue-flow
       :id="runtimeKey"
@@ -27,6 +28,7 @@
       :max-zoom="8"
       :nodes-connectable="true"
       :connection-mode="ConnectionMode.Strict"
+      :connectionRadius="32 / viewport.zoom"
       :nodes-focusable="false"
       :edges-focusable="false"
       :edges-updatable="false"
@@ -52,7 +54,7 @@
       v-model="flowData"
       @connect="addEdges"
       @edgeClick="showEdgeDisconnect"
-      @paneClick="edgeDisconnect = undefined"
+      @paneClick="edgeDisconnect = undefined; assetsVisible = false; nodePanelVisible = false"
       @moveStart="edgeDisconnect = undefined"
       :default-edge-options="defaultEdgeOptions">
       <template v-for="type in remoteNodeTypes" :key="type" #[`node-${type}`]="nodeProps">
@@ -77,7 +79,6 @@
       <canvasControls
         v-if="canvasId"
         ref="canvasControlsRef"
-        v-model:assetsVisible="assetsVisible"
         v-model:snapEnabled="snapEnabled"
         v-model:showEdges="showEdges"
         :canvasId="canvasId"
@@ -107,6 +108,50 @@
         :disabled="!canvasId || !project?.directory" />
       <nodeSearch ref="nodeSearchRef" :disabled="!active || settingsVisible || !canvasId || !project?.directory" />
     </vue-flow>
+    <div
+      v-if="active && canvasId"
+      class="sideToolbar nodrag nopan nowheel"
+      role="toolbar"
+      aria-label="左侧工具栏"
+      aria-orientation="vertical"
+      @pointerdown.stop
+      @mousedown.stop
+      @click.stop
+      @dblclick.stop
+      @contextmenu.stop.prevent
+      @wheel.stop>
+      <el-tooltip :showArrow="false" :content="nodePanelVisible ? '关闭添加节点' : '添加节点'" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+        <el-button class="sideToolButton addNodeButton" :class="{ active: nodePanelVisible }" text :aria-pressed="nodePanelVisible" aria-label="添加节点" @click="nodePanelVisible = !nodePanelVisible">
+          <icon-x v-if="nodePanelVisible" :size="22" aria-hidden="true" />
+          <icon-plus v-else :size="22" aria-hidden="true" />
+        </el-button>
+      </el-tooltip>
+      <el-tooltip v-if="currentUser?.role !== 'user'" :showArrow="false" :content="assetsVisible ? '关闭素材库' : '打开素材库'" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+        <el-button class="sideToolButton" :class="{ active: assetsVisible }" text :aria-pressed="assetsVisible" aria-label="素材库" @click="assetsVisible = !assetsVisible">
+          <icon-folder :size="'24'" :stroke="'1.7'" aria-hidden="true" />
+        </el-button>
+      </el-tooltip>
+      <el-tooltip :showArrow="false" :content="historyVisible ? '关闭历史记录' : '历史记录'" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+        <el-button class="sideToolButton" :class="{ active: historyVisible }" text :aria-pressed="historyVisible" aria-label="历史记录" @click="historyVisible = !historyVisible">
+          <icon-history :size="'24'" :stroke="'1.7'" aria-hidden="true" />
+        </el-button>
+      </el-tooltip>
+    </div>
+    <section v-if="nodePanelVisible && active && canvasId" class="nodePanel nodrag nopan nowheel" aria-label="添加节点" @pointerdown.stop @click.stop @keydown.esc.stop="nodePanelVisible = false">
+      <header class="nodePanelHeader">
+        <span>添加节点</span>
+        <el-button text aria-label="关闭添加节点" @click="nodePanelVisible = false"><icon-x :size="18" /></el-button>
+      </header>
+      <nodeMenuItems
+        :items="nodePanelItems"
+        :nodes="nodePanelNodes"
+        :uploadDisabled="!canvasId || !project?.directory || !canvasReady"
+        showFitView
+        @select="addNodeFromPanel"
+        @upload="uploadFromPanel"
+        @fitView="fitViewFromPanel" />
+    </section>
+    <generationHistory v-model="historyVisible" :directory="project?.directory" :nodeIds="canvasNodeIds" :nodes="generationHistoryNodes" @send="sendHistoryToCanvas" />
     <el-dialog v-if="currentUser?.role !== 'user'" :modelValue="!!assetSelection" class="referenceAssetDialog" title="全局素材库" width="min(1200px, 88vw)" alignCenter appendToBody destroyOnClose @update:modelValue="finishAssetSelection()">
       <assetLibrary :modelValue="!!assetSelection" expanded :canSelect="canSelectAsset" :selecting="assetSelecting" @select="selectAsset" />
     </el-dialog>
@@ -132,13 +177,13 @@
 
 <script setup lang="ts">
 import { t, translate } from "@toonflow/i18n/vue";
-import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, onScopeDispose, provide, ref, shallowReactive, shallowRef, watch } from "vue";
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, onScopeDispose, provide, ref, shallowReactive, shallowRef, watch, type Component } from "vue";
 import axios from "axios";
 import { debounce } from "lodash-es";
 import { ElMessage } from "element-plus";
 import { actualPlatform, isMobile } from "@/lib/platform";
 import { storeToRefs } from "pinia";
-import { IconUnlink } from "@tabler/icons-vue";
+import { IconUnlink, IconFolder, IconHistory, IconPlus, IconX, IconBox } from "@tabler/icons-vue";
 import * as vueRuntime from "vue";
 import * as vueFlowRuntime from "@vue-flow/core";
 import * as elementPlusRuntime from "element-plus";
@@ -177,6 +222,8 @@ import canvasControls from "./components/canvasControls.vue";
 import canvasEmpty from "./components/canvasEmpty.vue";
 import canvasViewportHint from "./components/canvasViewportHint.vue";
 import assetLibrary from "./components/assetLibrary.vue";
+import generationHistory from "./components/generationHistory.vue";
+import nodeMenuItems from "./components/nodeMenuItems.vue";
 import groupNode from "./components/groupNode.vue";
 import selectionToolbar from "./components/selectionToolbar.vue";
 import nodeSearch from "./components/nodeSearch.vue";
@@ -189,6 +236,7 @@ import { useNodeToolsContext } from "@toonflow/nodes-scaffold/nodeTools";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { currentUser } from "@/stores/multiTenant";
 import { generalSettings } from "@/stores/settings";
+import { filterNodeMenu, resolveNodeMenu } from "@toonflow/server/nodeMenu";
 import { getShortcutBindings, shortcutLabel, shortcutMatches, shortcutPressed } from "@/lib/canvasShortcuts";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
 import anonymousData from "@/lib/anonymousData";
@@ -224,6 +272,14 @@ const nodeReloads = new Set<string>();
 const handledPluginEvents = new WeakSet<Event>();
 const nodeErrors = ref<Record<string, string>>({});
 const availableNodes = computed(() => nodeOptions.value.filter(node => nodeTypes.value[node.type] && !nodeErrors.value[node.type]));
+const nodePanelNodes = computed(() => availableNodes.value.map(node => ({
+  ...node,
+  icon: (nodeTypes.value[node.type] as Component & { icon?: Component }).icon ?? IconBox,
+})));
+const nodePanelItems = computed(() => filterNodeMenu(
+  resolveNodeMenu(generalSettings.value.nodeMenu, availableNodes.value),
+  new Set(availableNodes.value.map(node => node.type)),
+));
 const nodeListLoading = ref(true);
 const remoteNodeTypes = computed(() => [
   ...new Set((flowData.value as { type?: string }[]).map((item) => item.type).filter((type): type is string => !!type?.startsWith("remote-"))),
@@ -238,14 +294,27 @@ const defaultDragPan = computed(() => getShortcutBindings(generalSettings.value.
 const selectedTool = defineModel<"move" | "hand">("selectedTool", { default: "move" });
 const handMode = computed(() => props.active && !props.settingsVisible && (selectedTool.value === "hand" || panKeyPressed.value));
 let pointerPosition: XYPosition | undefined;
+let hoveredNodeId: string | undefined;
 const pressedCodes = new Set<string>();
+let suppressAltRelease = false;
 let gestureScale: number | undefined;
 let copyingNodes = false;
 const showEdges = ref(true);
 const assetsVisible = ref(false);
+const historyVisible = ref(false);
+const nodePanelVisible = ref(false);
 const assetLibraryRef = ref<InstanceType<typeof assetLibrary>>();
 const edgeDisconnect = ref<{ id: string; x: number; y: number }>();
 const flow = useVueFlow(props.runtimeKey);
+const canvasNodeIds = computed(() => flow.getNodes.value.map(node => node.id));
+const generationHistoryNodes = computed(() => flow.getNodes.value.map(node => ({
+  id: node.id,
+  type: node.type ?? "",
+  label: typeof node.data.label === "string" ? node.data.label : "",
+  prompt: typeof node.data.prompt === "string" ? node.data.prompt : "",
+  model: typeof node.data.model === "string" ? node.data.model : "",
+  promptModel: node.data.promptModel,
+})));
 const nodeDocument: NodeDocumentContext = { targets: shallowReactive(new Map()), mounts: new Map(), states: shallowReactive(new Map()) };
 const canvasDirty = ref(false);
 const canvasSaveError = ref("");
@@ -262,6 +331,7 @@ flow.onNodeDragStart(({ event, nodes }) => {
   const shortcuts = generalSettings.value.canvasShortcuts;
   const withEdges = shortcutPressed(event, shortcuts.duplicateOnDrag, pressedCodes);
   if (withEdges || shortcutPressed(event, shortcuts.copyOnDrag, pressedCodes)) {
+    if (event.altKey) suppressAltRelease = true;
     dragCopy = selectionToolbarRef.value?.startDragCopy(nodes, withEdges);
   }
 });
@@ -279,6 +349,23 @@ const { canUndo, canRedo } = canvasHistory;
 provide("batchCanvasHistory", canvasHistory.batch);
 const getNodeTools = useNodeToolsContext();
 const { addNodes, addEdges, removeEdges, findEdge, findNode, toObject, viewport, screenToFlowCoordinate } = flow;
+
+function sendHistoryToCanvas(item: { name: string; path: string; mediaType: "image" | "video" | "audio"; mimeType: string }) {
+  const type = `remote-${item.mediaType}Node`;
+  if (!nodeTypes.value[type]) return void ElMessage.error(`请先启用${item.mediaType === "image" ? "图片" : item.mediaType === "video" ? "视频" : "音频"}节点插件`);
+  const rect = canvasElement.value?.getBoundingClientRect();
+  if (!rect || !props.active || props.settingsVisible || !canvasReady.value) return;
+  const center = screenToFlowCoordinate({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  const dataType = item.mediaType === "image" ? "IMAGE" : item.mediaType === "video" ? "VIDEO" : "AUDIO";
+  void canvasHistory.batch(async () => {
+    addNodes({
+      id: crypto.randomUUID(),
+      type,
+      position: { x: center.x - 180, y: center.y - 140 },
+      data: { label: item.name, outputs: { [item.mediaType]: { dataType, value: { url: item.path, mimeType: item.mimeType } } } },
+    });
+  }).then(() => { historyVisible.value = false; }).catch(error => ElMessage.error(error instanceof Error ? error.message : "发送到画布失败"));
+}
 provide("copyNodeToClipboard", async (node: Parameters<typeof copyNodeToClipboard>[0]) => {
   const directory = project.value?.directory;
   if (!directory) throw new Error("请先选择工作目录");
@@ -658,6 +745,30 @@ function openNodeMenu(event: MouseEvent) {
   if (event.target instanceof Element && event.target.classList.contains("vue-flow__pane")) nodeMenuRef.value?.openMenu(event, true);
 }
 
+function addNodeFromPanel(type: string) {
+  const center = getCanvasCenterPosition();
+  if (!props.active || props.settingsVisible || !canvasId.value || !project.value?.directory || !canvasReady.value || !center) return;
+  nodePanelVisible.value = false;
+  void nodeMenuRef.value?.addNode(type, { x: center.x - 180, y: center.y - 140 });
+}
+
+function getCanvasCenterPosition() {
+  const rect = canvasElement.value?.getBoundingClientRect();
+  return rect ? screenToFlowCoordinate({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : undefined;
+}
+
+function uploadFromPanel() {
+  const center = getCanvasCenterPosition();
+  if (!center || !props.active || props.settingsVisible || !canvasId.value || !project.value?.directory || !canvasReady.value) return;
+  nodePanelVisible.value = false;
+  selectFiles(center);
+}
+
+function fitViewFromPanel() {
+  nodePanelVisible.value = false;
+  void flow.fitView({ duration: 250 });
+}
+
 function createEmptyNode(type: string) {
   if (!props.active || props.settingsVisible || !project.value?.directory || !canvasReady.value || flow.getNodes.value.length) return;
   const rect = canvasElement.value?.getBoundingClientRect();
@@ -833,6 +944,7 @@ watch(
       workspaceController.abort(new Error("工作区已切换，本轮画布操作已停止"));
       workspaceController = new AbortController();
     }
+    nodePanelVisible.value = false;
     edgeDisconnect.value = undefined;
     dragCopy = undefined;
     pointerPosition = undefined;
@@ -848,8 +960,9 @@ watch(
 );
 
 // ACT: 切换显示面板不会卸载画布；仅清理交互，不中断本轮工具调用。
-watch(() => props.active, (active) => {
+watch([() => props.active, () => props.settingsVisible], ([active, settingsVisible]) => {
   if (!active) assetsVisible.value = false;
+  if (!active || settingsVisible) nodePanelVisible.value = false;
   edgeDisconnect.value = undefined;
   dragCopy = undefined;
   pointerPosition = undefined;
@@ -1118,6 +1231,16 @@ function preventMiddleClick(event: MouseEvent) {
   if (event.button === 1) event.preventDefault();
 }
 
+function preventNativeNodeDrag(event: DragEvent) {
+  if (!props.active || props.settingsVisible || !canvasId.value || !(event.target instanceof Element)
+    || !event.target.closest(".vue-flow__node")
+    || event.target.closest(".nodrag, input, textarea, select, button, [contenteditable]:not([contenteditable='false'])")) return;
+  const shortcuts = generalSettings.value.canvasShortcuts;
+  if (!shortcutPressed(event, shortcuts.copyOnDrag, pressedCodes) && !shortcutPressed(event, shortcuts.duplicateOnDrag, pressedCodes)) return;
+  event.preventDefault();
+  if (event.altKey) suppressAltRelease = true;
+}
+
 function updateCanvasSelection(event: MouseEvent | KeyboardEvent) {
   // 失焦期间可能漏掉修饰键；不能在按下到抬起之间改变已命中的选区，避免 click 落到画布清空选择。
   if (event.type === "pointerdown" && event.target instanceof Element && event.target.closest(".vue-flow__nodesselection-rect")) return;
@@ -1125,7 +1248,23 @@ function updateCanvasSelection(event: MouseEvent | KeyboardEvent) {
     && shortcutPressed(event, generalSettings.value.canvasShortcuts.multiSelection, pressedCodes);
 }
 
+function updatePointerPosition(event: PointerEvent) {
+  trackPointerPosition(event);
+  if (!event.buttons) updateCanvasSelection(event);
+}
+
+function trackPointerPosition(event: PointerEvent) {
+  pointerPosition = { x: event.clientX, y: event.clientY };
+  const nodeElement = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>(".vue-flow__node");
+  hoveredNodeId = nodeElement && canvasElement.value?.contains(nodeElement) ? nodeElement.dataset.id : undefined;
+}
+
 function updateCanvasKeys(event: KeyboardEvent) {
+  // Alt 的浏览器菜单行为可能发生在松开时；只配对拦截已由画布接管的按键。
+  if (event.type === "keyup" && event.key === "Alt" && suppressAltRelease) {
+    event.preventDefault();
+    suppressAltRelease = false;
+  }
   if (event.type === "keydown") {
     pressedCodes.add(event.code);
   } else pressedCodes.delete(event.code);
@@ -1143,6 +1282,26 @@ function updateCanvasKeys(event: KeyboardEvent) {
   const editing =
     !(target instanceof Element) ||
     !!target.closest("input, textarea, select, button, [contenteditable]:not([contenteditable='false']), [role='textbox'], [role='slider']");
+  const textEditing = !(target instanceof Element)
+    || !!target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='textbox'], [role='slider']");
+  const agentFocused = target instanceof Element && !!target.closest("#agentPanel");
+  if (event.type === "keydown" && !event.defaultPrevented && !event.repeat && !event.isComposing && (!textEditing || agentFocused)
+    && !(target instanceof Element && target.closest("[role='dialog']"))
+    && shortcutMatches(event, shortcuts.focusNode)) {
+    const nodeElement = pointerPosition && document.elementFromPoint(pointerPosition.x, pointerPosition.y)?.closest<HTMLElement>(".vue-flow__node");
+    const node = flow.findNode(nodeElement?.dataset.id ?? hoveredNodeId ?? "");
+    if (node && !node.hidden) {
+      event.preventDefault();
+      void flow.fitView({ nodes: [node.id], padding: 0.2, maxZoom: 1.4, duration: 250 });
+      return;
+    }
+  }
+  if (event.type === "keydown" && inCanvas && !editing && !event.isComposing && canvasId.value && project.value?.directory
+    && ["Alt", "Control", "Shift", "Meta"].includes(event.key)
+    && (shortcutPressed(event, shortcuts.copyOnDrag, pressedCodes) || shortcutPressed(event, shortcuts.duplicateOnDrag, pressedCodes))) {
+    event.preventDefault();
+    if (event.altKey) suppressAltRelease = true;
+  }
   panKeyPressed.value = !!inCanvas && !editing && !event.isComposing
     && shortcutPressed(event, getShortcutBindings(shortcuts.pan).filter(binding => binding !== "None").join(" / "), pressedCodes);
   updateCanvasSelection(event);
@@ -1190,6 +1349,7 @@ function updateCanvasKeys(event: KeyboardEvent) {
 
 function resetCanvasKeys() {
   pressedCodes.clear();
+  suppressAltRelease = false;
   gestureScale = undefined;
   zoomKeyPressed.value = false;
   panKeyPressed.value = false;
@@ -1208,6 +1368,7 @@ const refreshNodeConfig = () => { void loadRemoteNodes(); };
 
 onMounted(() => {
   // 在捕获阶段同步修饰键，避免节点编辑器截断 keydown/keyup 后缩放状态丢失或卡住。
+  window.addEventListener("pointermove", trackPointerPosition, true);
   window.addEventListener("keydown", updateCanvasKeys, true);
   window.addEventListener("keyup", updateCanvasKeys, true);
   window.addEventListener("blur", resetCanvasKeys);
@@ -1220,6 +1381,7 @@ onMounted(() => {
   void loadRemoteNodes();
 });
 onBeforeUnmount(() => {
+  window.removeEventListener("pointermove", trackPointerPosition, true);
   window.removeEventListener("keydown", updateCanvasKeys, true);
   window.removeEventListener("keyup", updateCanvasKeys, true);
   window.removeEventListener("blur", resetCanvasKeys);
@@ -1386,6 +1548,80 @@ const defaultEdgeOptions = markRaw({
 .canvas {
   width: 100%;
   height: 100%;
+
+  .sideToolbar {
+    position: absolute;
+    top: 50%;
+    left: 12px;
+    z-index: 8;
+    transform: translateY(-50%);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 56px;
+    max-height: calc(100% - 160px);
+    overflow-y: auto;
+    scrollbar-width: none;
+    padding: 6px;
+    border: 1px solid var(--el-border-color-light);
+    border-radius: calc(var(--ui-radius) * 2.25);
+    background: color-mix(in srgb, var(--el-bg-color-overlay) 94%, transparent);
+    box-shadow: 0 4px 16px rgb(0 0 0 / 14%);
+
+    &:not(:has(.sideToolButton)) { display: none; }
+
+    .sideToolButton {
+      display: flex;
+      flex-shrink: 0;
+      width: 42px;
+      height: 42px;
+      margin: 0;
+      padding: 8px;
+      border-radius: var(--ui-radius-large);
+      color: var(--el-text-color-regular);
+
+      &:hover { color: var(--el-text-color-primary); background: var(--el-fill-color); }
+      &.active { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+    }
+
+    .addNodeButton {
+      border-radius: 50%;
+      background: var(--el-color-white);
+      color: var(--el-color-black);
+
+      &:hover, &.active { background: var(--el-color-white); color: var(--el-color-black); }
+    }
+  }
+
+  .nodePanel {
+    position: absolute;
+    top: 50%;
+    left: 76px;
+    z-index: 8;
+    width: min(182px, calc(100% - 92px));
+    max-height: min(500px, calc(100% - 32px));
+    overflow: hidden;
+    transform: translateY(-50%);
+    border: 1px solid var(--el-border-color-light);
+    border-radius: var(--ui-radius);
+    background: var(--el-bg-color-overlay);
+    box-shadow: 0 4px 16px rgb(0 0 0 / 16%);
+
+    .nodePanelHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 34px;
+      padding: 0 8px 0 16px;
+      border-bottom: 1px solid var(--el-border-color-lighter);
+      color: var(--el-text-color-secondary);
+      font-size: 13px;
+    }
+
+    :deep(.menuEntries) { max-height: min(480px, calc(100dvh - 100px)); overflow-y: auto; }
+  }
 
   &.canvasUnselected :deep(.vue-flow__viewport) {
     visibility: hidden;

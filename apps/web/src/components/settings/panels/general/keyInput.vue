@@ -28,7 +28,8 @@
         <span v-else class="bindings">
           <span v-for="(binding, index) in getShortcutBindings(draft)" :key="binding" class="binding">
             <span v-if="index" class="separator">/</span>
-            <template v-for="(part, partIndex) in binding.split('+')" :key="part">
+            <kbd v-if="binding === 'Shift+Backquote'">~</kbd>
+            <template v-else v-for="(part, partIndex) in binding.split('+')" :key="part">
               <span v-if="partIndex" class="separator">+</span>
               <kbd>{{ shortcutLabel(part) }}</kbd>
             </template>

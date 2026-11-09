@@ -1,7 +1,7 @@
 <template>
   <div v-if="documentTarget" class="nodeDocumentPlaceholder" :style="canvasSize" aria-hidden="true" />
   <teleport :to="documentTarget ?? 'body'" :disabled="!documentTarget">
-  <div ref="skeletonElement" v-bind="$attrs" class="nodeSkeleton" :class="{ documentNode: documentTarget, resized: !!resizedStyle.height, resizing: !!resize }" :style="resizedStyle" @wheel.capture="zoomCanvas" @dblclick.stop="focusNode" @contextmenu="documentTarget && openMenu($event)">
+  <div ref="skeletonElement" v-bind="$attrs" class="nodeSkeleton" :class="{ documentNode: documentTarget, resized: !!resizedStyle.height, resizing: !!resize }" :style="resizedStyle" @wheel.capture="zoomCanvas" @dblclick.stop="focusNode" @contextmenu="openMenu($event)">
     <el-dropdown
       v-if="!readOnly"
       ref="menu"
@@ -16,7 +16,9 @@
       <template #dropdown>
         <el-dropdown-menu>
           <el-dropdown-item v-if="assetOutputs.length && saveNodeToAssets" command="saveAsset" :icon="IconFolderPlus">保存到素材库</el-dropdown-item>
-          <el-dropdown-item :divided="!!(assetOutputs.length && saveNodeToAssets)" command="copy" :icon="IconCopy">复制节点</el-dropdown-item>
+          <el-dropdown-item v-if="assetOutputs.length && sendNodeToAgent" command="sendToAgent" :icon="IconSend" :disabled="sendingToAgent">发送到 Agent</el-dropdown-item>
+          <slot name="contextActions" />
+          <el-dropdown-item :divided="!!(assetOutputs.length && (saveNodeToAssets || sendNodeToAgent))" command="copy" :icon="IconCopy">复制节点</el-dropdown-item>
           <el-dropdown-item command="duplicate" :icon="IconCopyPlus">创建副本</el-dropdown-item>
           <el-dropdown-item command="delete" :icon="IconTrash">删除节点</el-dropdown-item>
           <el-dropdown-item divided command="clipboard" :icon="IconCopy" :disabled="!copyNodeToClipboard || copyingToClipboard">
@@ -61,12 +63,12 @@
             @click.stop />
           <el-button
             v-if="fullscreenVisible"
-            :icon="IconMaximize"
-            :disabled="!downloadUrl"
+            :icon="focusOnToolbar ? IconFocus2 : IconMaximize"
+            :disabled="!focusOnToolbar && !downloadUrl"
             text
-            title="全屏"
-            aria-label="全屏"
-            @click.stop="emit('fullscreen')" />
+            :title="focusOnToolbar ? '聚焦节点' : '全屏'"
+            :aria-label="focusOnToolbar ? '聚焦节点' : '全屏'"
+            @click.stop="focusOnToolbar ? focusNode() : emit('fullscreen')" />
         </el-card>
       </slot>
     </div>
@@ -105,6 +107,7 @@
         @keydown.enter.stop.prevent="editLabel">
         {{ label }}
       </span>
+      <div v-if="$slots.titleMeta" class="titleMeta"><slot name="titleMeta" /></div>
       <div v-if="!readOnly" class="nodeActions nodrag nopan" @pointerdown.stop @mousedown.stop @dblclick.stop>
         <el-button
           :icon="IconRefresh"
@@ -120,6 +123,7 @@
     <div class="cardContainer">
       <el-card
         class="contentCard"
+        :data-connection-snap="!readOnly && !loading && !documentTarget ? 'true' : undefined"
         :class="{ selected: node.selected }"
         shadow="never"
         :bodyStyle="{ padding: '8px' }"
@@ -149,11 +153,8 @@
           :data-connection-status="getHandleStatus(item)"
           :style="{ top: `${((index + 1) / (group.items.length + 1)) * 100}%` }"
           :title="`${item.label ?? item.id} · ${Array.isArray(item.dataType) ? item.dataType.join(' / ') : item.dataType}`"
-          :aria-label="`${item.label ?? item.id} · ${Array.isArray(item.dataType) ? item.dataType.join(' / ') : item.dataType}`"
-          @pointermove="moveHandle"
-          @pointerleave="resetHandle"
-          @pointercancel="resetHandle">
-          <component :is="isHandleConnected(item) ? IconCircleDot : IconCircleDashed" class="handleIcon" :size="18" aria-hidden="true" />
+          :aria-label="`${item.label ?? item.id} · ${Array.isArray(item.dataType) ? item.dataType.join(' / ') : item.dataType}`">
+          <span class="handleIcon" aria-hidden="true"><span class="handlePlus" /></span>
         </handle>
       </template>
       <button
@@ -186,10 +187,10 @@ import {
   IconFolderPlus,
   IconDownload,
   IconMaximize,
+  IconFocus2,
   IconBox,
-  IconCircleDashed,
-  IconCircleDot,
   IconLoader2,
+  IconSend,
 } from "@tabler/icons-vue";
 import { ElCard, ElButton, ElDivider, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage } from "element-plus";
 import type { DropdownInstance } from "element-plus";
@@ -217,6 +218,7 @@ const props = withDefaults(
       downloadUrl?: string;
       downloadName?: string;
       fullscreenVisible?: boolean;
+      toolbarAction?: "fullscreen" | "focus";
     }
   >(),
   {
@@ -226,6 +228,7 @@ const props = withDefaults(
     previewReady: true,
     readOnly: false,
     fullscreenVisible: true,
+    toolbarAction: "fullscreen",
     topWidth: "20vw",
     bottomWidth: "20vw",
   }
@@ -238,6 +241,7 @@ const cardHeight = computed(() => Math.max(100, ...handleGroups.value.map((group
 const { id: nodeId, node } = useNode();
 const documentContext = inject<NodeDocumentContext | undefined>("nodeDocument", undefined);
 const documentTarget = computed(() => props.readOnly ? undefined : documentContext?.targets.get(nodeId));
+const focusOnToolbar = computed(() => props.toolbarAction === "focus" && !documentTarget.value);
 const skeletonElement = ref<HTMLElement>();
 const canvasSize = shallowRef<{ width: string; height: string }>();
 let documentLease: symbol | undefined;
@@ -395,12 +399,12 @@ const connectedHandles = computed<Set<string>>((previous) => {
   return previous?.size === connected.size && [...connected].every((key) => previous.has(key)) ? previous : connected;
 });
 
-async function focusNode(event: MouseEvent) {
+async function focusNode() {
   if (documentTarget.value) return;
-  const element = event.currentTarget as HTMLElement;
+  const element = skeletonElement.value;
   await nextTick();
   const flowElement = vueFlowRef.value;
-  if (!flowElement || !element.isConnected) return;
+  if (!flowElement || !element?.isConnected) return;
   const flowRect = flowElement.getBoundingClientRect();
   if (flowRect.width <= 0 || flowRect.height <= 0) return;
   const rects = [element, ...element.querySelectorAll<HTMLElement>(":scope > .floatingSlot")]
@@ -477,7 +481,7 @@ async function reloadNode() {
 async function openMenu(event: MouseEvent | TouchEvent) {
   if (props.readOnly) return;
   event.preventDefault();
-  if (documentTarget.value) event.stopPropagation();
+  event.stopPropagation();
   menu.value?.handleClose();
   const point = "changedTouches" in event ? event.changedTouches[0] : event;
   if (!point) return;
@@ -506,17 +510,29 @@ const saveNodeToAssets = inject<((label: string, outputs: { label: string; outpu
   "saveNodeToAssets",
   undefined
 );
+const sendNodeToAgent = inject<((nodeId: string, outputIds: string[]) => Promise<void>) | undefined>("sendNodeToAgent", undefined);
+const sendingToAgent = ref(false);
 const assetOutputs = computed(() =>
   props.handles.flatMap((handle) => {
     const output = props.outputs[handle.id];
     if (handle.type !== "source" || !output || (output.dataType === "STRING" && !output.value.trim())) return [];
-    return [{ label: handle.label ?? handle.id, output }];
+    return [{ id: handle.id, label: handle.label ?? handle.id, output }];
   })
 );
 
 async function handleCommand(command: string) {
   if (props.readOnly) return;
   if (command === "saveAsset") saveNodeToAssets?.(props.label, assetOutputs.value);
+  if (command === "sendToAgent" && sendNodeToAgent && assetOutputs.value.length && !sendingToAgent.value) {
+    sendingToAgent.value = true;
+    try {
+      await sendNodeToAgent(nodeId, assetOutputs.value.map(output => output.id));
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : "发送到 Agent 失败");
+    } finally {
+      sendingToAgent.value = false;
+    }
+  }
   if (command === "clipboard" && copyNodeToClipboard && !copyingToClipboard.value) {
     copyingToClipboard.value = true;
     try {
@@ -590,25 +606,6 @@ function confirmLabel(event: KeyboardEvent) {
   if (props.readOnly || event.isComposing) return;
   event.preventDefault();
   saveLabel();
-}
-
-function moveHandle(event: PointerEvent) {
-  if (event.pointerType === "touch") return;
-  const element = event.currentTarget as HTMLElement;
-  const rect = element.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
-  // 以 Handle 中心为原点，按画布缩放还原距离，限制总偏移半径为 6px。
-  const x = ((event.clientX - rect.left - rect.width / 2) / rect.width) * 18;
-  const y = ((event.clientY - rect.top - rect.height / 2) / rect.height) * 18;
-  const strength = Math.min(0.3, 6 / (Math.hypot(x, y) || 1));
-  element.style.setProperty("--handleX", `${x * strength}px`);
-  element.style.setProperty("--handleY", `${y * strength}px`);
-}
-
-function resetHandle(event: PointerEvent) {
-  const element = event.currentTarget as HTMLElement;
-  element.style.removeProperty("--handleX");
-  element.style.removeProperty("--handleY");
 }
 
 function isHandleConnected(item: NodeHandle) {
@@ -751,12 +748,15 @@ watch(
   }
 
   .titleBar {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 0 4px 8px;
     font-size: 14px;
     line-height: 20px;
+
+    &:has(.titleMeta) { padding-top: 20px; }
 
     .titleIcon {
       flex-shrink: 0;
@@ -790,6 +790,17 @@ watch(
       line-height: inherit;
     }
 
+    .titleMeta {
+      position: absolute;
+      top: 0;
+      right: 4px;
+      color: var(--el-text-color-secondary);
+      font-size: 11px;
+      line-height: 14px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
     .nodeActions {
       visibility: hidden;
       display: flex;
@@ -803,6 +814,11 @@ watch(
         padding: 0;
       }
     }
+  }
+
+  &:has(> .titleBar > .titleMeta) {
+    > .el-dropdown { position: absolute; }
+    > .topSlot { bottom: calc(100% + 8px); }
   }
 
   .cardContainer {
@@ -860,32 +876,49 @@ watch(
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 18px;
-      height: 18px;
+      width: 24px;
+      height: 24px;
       border: 0;
       background: transparent;
       color: var(--el-text-color-secondary);
 
       &.vue-flow__handle-left {
-        left: -12px;
+        left: -16px;
       }
 
       &.vue-flow__handle-right {
-        right: -12px;
+        right: -16px;
       }
 
       &::before {
         content: "";
         position: absolute;
-        inset: -13px;
+        inset: -14px;
         border-radius: 50%;
       }
 
       .handleIcon {
         pointer-events: none;
-        opacity: 0;
-        transform: translate(var(--handleX, 0px), var(--handleY, 0px));
-        transition: transform 120ms ease-out, opacity 120ms ease-out;
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        box-sizing: border-box;
+        border: 1.5px solid currentColor;
+        border-radius: 50%;
+        background: var(--el-bg-color);
+        opacity: 0.75;
+        transition: opacity 120ms ease-out, box-shadow 120ms ease-out;
+
+        .handlePlus {
+          position: relative;
+          width: 10px;
+          height: 10px;
+
+          &::before, &::after { content: ""; position: absolute; background: currentColor; border-radius: 1px; }
+          &::before { width: 10px; height: 1.5px; left: 0; top: 4.25px; }
+          &::after { width: 1.5px; height: 10px; left: 4.25px; top: 0; }
+        }
       }
 
       &.connected .handleIcon,
@@ -905,6 +938,10 @@ watch(
       &[data-connection-status="invalid"] {
         color: var(--el-color-danger);
         cursor: not-allowed;
+      }
+
+      &[data-connection-status="valid"] .handleIcon {
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--el-color-primary) 18%, transparent);
       }
 
       @media (prefers-reduced-motion: reduce) {

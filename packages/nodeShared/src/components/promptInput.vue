@@ -1,11 +1,11 @@
 <template>
   <div class="promptInputWrap nodrag nopan nowheel">
-    <el-button v-if="expandable" class="expandButton" :icon="IconMaximize" text circle title="展开编辑提示词" aria-label="展开编辑提示词" @mousedown.prevent @click.stop="expanded = true" />
+    <el-button v-if="expandable && panelExpanded === undefined" class="expandButton" :icon="IconMaximize" text circle title="展开编辑提示词" aria-label="展开编辑提示词" @mousedown.prevent @click.stop="expanded = true" />
     <teleport :to="expandedTarget || 'body'" :disabled="!expanded || !expandedTarget">
-      <div ref="senderElement" class="promptInput nodrag nopan nowheel" :class="{ expandedInput: expanded }" @keydown.capture="handleMentionKey" @click.capture="previewReference" />
+      <div ref="senderElement" class="promptInput chat-area-wrap nodrag nopan nowheel" :class="{ expandedInput: editorExpanded }" @keydown.capture="handleMentionKey" @click.capture="previewReference" />
     </teleport>
   </div>
-  <el-dialog v-if="expandable" v-model="expanded" class="promptEditorDialog" title="生成提示词" width="80%" alignCenter appendToBody :closeOnClickModal="false" @opened="sender?.focus('mark')" @close="expanded = false" @closed="sender?.focus('mark')">
+  <el-dialog v-if="expandable && panelExpanded === undefined" v-model="expanded" class="promptEditorDialog" title="生成提示词" width="80%" alignCenter appendToBody :closeOnClickModal="false" @opened="sender?.focus('mark')" @close="expanded = false" @closed="sender?.focus('mark')">
     <div ref="expandedTarget" class="promptExpandedTarget nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop />
   </el-dialog>
   <el-image-viewer v-if="previewUrl" :urlList="[previewUrl]" teleported @close="previewReferenceId = undefined" />
@@ -28,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, inject, nextTick, ref, watch, type Ref } from "vue";
 import { ElButton, ElDialog, ElImageViewer, ElMessage, useZIndex } from "element-plus";
 import { IconMaximize } from "@tabler/icons-vue";
 import xSender, { type AnyTagProps, type MentionItem } from "x-sender";
@@ -50,6 +50,8 @@ const model = defineModel<AnyTagProps[][]>({ required: true });
 const text = defineModel<string>("text", { default: "" });
 const senderElement = ref<HTMLElement>();
 const expanded = ref(false);
+const panelExpanded = inject<Ref<boolean> | undefined>("expandedGenerationPrompt", undefined);
+const editorExpanded = computed(() => expanded.value || panelExpanded?.value === true);
 const expandedTarget = ref<HTMLElement>();
 const { nextZIndex } = useZIndex();
 const mentionMenu = ref<InstanceType<typeof promptReferenceMenu>>();
@@ -298,15 +300,15 @@ watch(senderElement, (element, _previous, onCleanup) => {
   });
   sender = instance;
   // ACT: 弹窗只移动现有编辑器，保留参考标签、光标与撤销记录。
-  const stopExpandedWatch = watch([expanded, expandedTarget], async ([visible, target]) => {
+  const stopExpandedWatch = watch([editorExpanded, expandedTarget], async ([visible]) => {
     instance.bus.emit(xSender.EventSet.EVENT_COMMON_DIALOG_CLOSE);
     closeMentionMenu();
-    instance.updateConfig({ chatStyle: { minHeight: visible ? "100%" : "70px", maxHeight: visible ? "100%" : "180px" } });
-    if (!visible || !target) return;
+    instance.updateConfig({ chatStyle: { minHeight: visible ? "100%" : "70px", maxHeight: visible ? "100%" : "180px", fontSize: visible ? "16px" : "14px", lineHeight: visible ? "1.8" : "1.6" } });
+    if (!visible) return;
     await nextTick();
-    if (sender !== instance || !expanded.value) return;
+    if (sender !== instance || !editorExpanded.value) return;
     popup.style.zIndex = String(nextZIndex());
-  });
+  }, { immediate: true });
   const editor = instance.chatElement.richText;
   // ACT: 1.4.6 未检查卸载节点和空 Range 矩形；只适配当前实例，升级到库内修复后可移除。
   const chatEditor = instance.chatEditor as typeof instance.chatEditor & {
@@ -496,9 +498,17 @@ function handleMentionKey(event: KeyboardEvent) {
   -webkit-user-select: text;
   user-select: text;
 
+  :deep(.chat-rich-text > [contenteditable]) {
+    min-height: inherit;
+  }
+
   &.expandedInput {
     height: 100%;
     margin: 0;
+
+    :deep(.chat-area-wrap),
+    :deep(.chat-rich-text) { height: 100%; min-height: 0; }
+    :deep(.chat-rich-text > [contenteditable]) { min-height: 100%; outline: none; }
   }
 
   &:deep(.imageReference) {

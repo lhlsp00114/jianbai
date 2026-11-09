@@ -1,12 +1,11 @@
 <template>
   <div class="home" :class="{ sidebarCollapsed }" :inert="creating || opening || workspaceStore.projectLoadingVisible">
-    <bg class="pageBackground" :scrollTop="backgroundScrollTop" />
     <homeAdvertisementCarousel class="topPromotion" :advertisements="advertisements.banners" placement="banner" :mode="advertisements.bannerMode" :interval="advertisements.bannerInterval" @activate="activateAdvertisement" />
     <aside id="homeSidebar" class="homeSidebar" aria-label="首页侧栏">
       <div class="sidebarHeader">
         <div class="sidebarBrand">
-          <el-image class="sidebarLogo" :src="logoUrl" fit="contain" alt="Toonflow" />
-          <span class="brandName">Toonflow</span>
+          <el-image class="sidebarLogo" :src="logoUrl" fit="contain" alt="见白" />
+          <span class="brandName">见白</span>
         </div>
         <button class="sidebarToggle" type="button" :aria-label="sidebarCollapsed ? '展开侧栏' : '收起侧栏'" :title="sidebarCollapsed ? '展开侧栏' : '收起侧栏'" :aria-expanded="!sidebarCollapsed" aria-controls="homeSidebar" @click="sidebarCollapsed = !sidebarCollapsed">
           <icon-layout-sidebar-left-expand v-if="sidebarCollapsed" :size="18" aria-hidden="true" />
@@ -46,12 +45,13 @@
         </a>
       </div>
     </aside>
-    <el-scrollbar ref="pageScroll" class="pageScroll" @scroll="updateActiveSection">
+    <main v-if="activeSection === 'tools'" class="pageScroll" aria-label="工具" />
+    <el-scrollbar v-show="activeSection !== 'tools'" ref="pageScroll" class="pageScroll" @scroll="updateActiveSection">
       <div class="pageBody">
         <el-main class="pageContent">
           <section class="creationPanel" data-home-section="home" aria-label="创建项目">
             <div class="brand">
-              <el-image class="brandLogo" :src="logoUrl" fit="contain" alt="Toonflow" />
+              <el-image class="brandLogo" :src="logoUrl" fit="contain" alt="见白" />
               <h1>今天要做点什么？</h1>
             </div>
             <div class="promptArea">
@@ -132,7 +132,7 @@ import { getReadableFileMimeType, readableFileAccept } from "@toonflow/server/do
 import {
   IconQrcode, IconDeviceDesktop, IconHome, IconCompass,
   IconArrowUp, IconPlus, IconLoader2,
-  IconFolder, IconEdit, IconFileZip,
+  IconFolder, IconEdit, IconFileZip, IconTools,
   IconTrash, IconPaperclip,
 } from "@tabler/icons-vue";
 import modelPopover from "@/components/modelPopover.vue";
@@ -140,7 +140,7 @@ import attachmentList from "@/components/agent/attachmentList.vue";
 import { createPastedTextFile, readTextAttachment } from "@/components/agent/textAttachments";
 import type { AgentAttachment } from "@/components/agent/types";
 import type { HomeAdvertisement, HomeAdvertisements } from "@toonflow/server/channel";
-import logoUrl from "@toonflow/assets/logo.svg";
+import logoUrl from "@toonflow/assets/jianbaiLogo.svg";
 import { useWorkspaceStore, type Project } from "@/stores/workspace";
 import { currentUser, publicWeb } from "@/stores/multiTenant";
 import { hasDesktopUpdate } from "@/stores/desktopUpdate";
@@ -151,7 +151,6 @@ import http from "@/lib/http";
 import { waitForControlValue } from "@/lib/mcpControl";
 import settings from "@/components/settings/index.vue";
 import assetLibraryDialog from "./assetLibraryDialog.vue";
-import bg from "./bg.vue";
 import explore from "./explore.vue";
 import projectCard from "./projectCard.vue";
 import workspacePicker from "./workspacePicker.vue";
@@ -164,12 +163,12 @@ const assetsVisible = ref(false);
 const mobileConnectVisible = ref(false);
 const sidebarCollapsed = ref(false);
 const pageScroll = ref<ScrollbarInstance>();
-const backgroundScrollTop = ref(0);
 const activeSection = ref("home");
 const projectType = ref<"local" | "team">("local");
 const homeSections = [
   { id: "home", label: "首页", icon: IconHome },
   { id: "projects", label: "项目", icon: IconFolder },
+  { id: "tools", label: "工具", icon: IconTools },
   { id: "explore", label: "探索", icon: IconCompass },
 ];
 const mobileConnect = defineAsyncComponent(() => import("@/components/mobileConnect.vue"));
@@ -290,7 +289,7 @@ async function loadAdvertisements() {
         <circle cx="330" cy="237" r="12" fill="#fff" opacity=".85"/>
         <path d="m495 146 25 14-25 14z" fill="#fff"/>
         <g fill="#fff" font-family="Arial, Microsoft YaHei, sans-serif">
-          <text x="40" y="58" font-size="17" letter-spacing="3" opacity=".7">TOONFLOW · PREVIEW</text>
+          <text x="40" y="58" font-size="17" letter-spacing="3" opacity=".7">见白 · PREVIEW</text>
           <text x="40" y="136" font-size="38" font-weight="bold">${slide.title}</text>
           <text x="40" y="177" font-size="19" opacity=".7">${slide.subtitle}</text>
           <text x="40" y="303" font-size="16" opacity=".6">侧栏轮播预览 · ${index + 1} / 3</text>
@@ -370,7 +369,10 @@ async function activateAdvertisement(advertisement: HomeAdvertisement) {
   }
 }
 
-function scrollToSection(section: string) {
+async function scrollToSection(section: string) {
+  activeSection.value = section;
+  if (section === "tools") return;
+  await nextTick();
   const wrap = pageScroll.value?.wrapRef;
   const target = wrap?.querySelector<HTMLElement>(`[data-home-section="${section}"]`);
   if (!wrap || !target) return;
@@ -382,9 +384,9 @@ function scrollToSection(section: string) {
 }
 
 function updateActiveSection() {
+  if (activeSection.value === "tools") return;
   const wrap = pageScroll.value?.wrapRef;
   if (!wrap) return;
-  backgroundScrollTop.value = wrap.scrollTop;
   if (wrap.scrollTop > 0 && wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 2) {
     activeSection.value = "explore";
     return;
@@ -606,16 +608,6 @@ async function createProject(fromPrompt = true) {
   @media (prefers-reduced-motion: reduce) { transition: none; }
 
   .topPromotion { grid-column: 1 / -1; grid-row: 1; z-index: 1; }
-
-  .pageBackground {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: var(--sidebarWidth);
-    width: calc(100% - var(--sidebarWidth));
-    transition: inset-inline-start var(--sidebarMotion) ease, width var(--sidebarMotion) ease;
-
-    @media (prefers-reduced-motion: reduce) { transition: none; }
-  }
 
   &.sidebarCollapsed {
     --sidebarWidth: 72px;

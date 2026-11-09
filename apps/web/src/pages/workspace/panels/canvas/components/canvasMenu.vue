@@ -821,6 +821,7 @@ defineExpose({ getCanvases, peekCanvases, initialized, addCanvas, switchCanvas, 
 
 .balanceMenuPanel.vue-flow__panel {
   max-width: calc(50% - 90px);
+  transform: translateX(var(--agentWidth, 0px));
 
   .balanceList {
     display: flex;
@@ -917,8 +918,8 @@ defineExpose({ getCanvases, peekCanvases, initialized, addCanvas, switchCanvas, 
 
 .menuExtension {
   position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
+  top: 48px;
+  left: 64px;
 }
 
 .canvasMenu {

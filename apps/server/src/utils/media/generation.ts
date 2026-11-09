@@ -2,6 +2,7 @@ import { t, translateMessage } from "@/lib/i18n";
 import { mkdir, readFile, realpath, stat, unlink } from "@toonflow/file";
 import { join, relative } from "node:path";
 import { createHash } from "node:crypto";
+import { setTimeout } from "node:timers/promises";
 import { mediaProviders, type Provider, type ProviderTaskData } from "@toonflow/providers";
 import type { GeneratedMedia, MediaGenerationRequest, MediaModel, MediaReference } from "@toonflow/tools-scaffold/runtime";
 import conf from "@/utils/conf";
@@ -73,6 +74,9 @@ export async function listMediaModels(): Promise<MediaModel[]> {
       rules: model.rules,
       mode: model.mode, durationResolutionMap: model.durationResolutionMap, audio: model.audio,
       ...(model.type === "audio" ? { voices: model.voices } : {}),
+      ...(model.type === "video" ? {
+        imageRatios: imageOptions(model.imageRatios, /^[1-9]\d{0,3}:[1-9]\d{0,3}$/),
+      } : {}),
       ...(model.type === "image" ? {
         imageSizes: imageOptions(Array.isArray(model.imageSizes) ? model.imageSizes : builtIn?.imageSizes, /^[^\u0000-\u001f\u007f]+$/),
         imageRatios: imageOptions(Array.isArray(model.imageRatios) ? model.imageRatios : builtIn?.imageRatios, /^[1-9]\d{0,3}:[1-9]\d{0,3}$/),
@@ -94,11 +98,29 @@ export async function readReference(cwd: string, reference: MediaReference, medi
 }
 
 async function downloadAsset(url: string, signal?: AbortSignal) {
+  // 只重试取回已生成的文件，绝不重新调用生成接口；每次下载含读流最多两分钟。
+  for (let attempt = 0; ; attempt++) {
+    signal?.throwIfAborted();
+    const timeout = AbortSignal.timeout(120000);
+    try { return await downloadAssetOnce(url, signal ? AbortSignal.any([signal, timeout]) : timeout); }
+    catch (cause) {
+      signal?.throwIfAborted();
+      const info = cause as { status?: number; name?: string; message?: string; code?: string; cause?: { code?: string } };
+      const transient = timeout.aborted || [408, 429, 500, 502, 503, 504].includes(info.status ?? 0)
+        || info.message === "fetch failed" || /^(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|UND_ERR_)/.test(info.cause?.code ?? info.code ?? "");
+      if (!transient || attempt >= 3) throw cause;
+      await setTimeout(3000 * 2 ** attempt, undefined, { signal });
+    }
+  }
+}
+
+async function downloadAssetOnce(url: string, signal?: AbortSignal) {
   if (!/^https?:\/\//i.test(url)) invalid("生成结果必须使用 HTTP 或 HTTPS 地址");
   const response = await fetch(url, { signal });
   if (!response.ok) {
     await response.body?.cancel();
     throw Object.assign(new Error(t`下载生成结果失败（HTTP ${response.status}）`), {
+      status: response.status,
       code: [401, 403, 404, 410].includes(response.status) ? "MEDIA_ASSET_URL_EXPIRED" : "MEDIA_ASSET_DOWNLOAD_FAILED",
     });
   }

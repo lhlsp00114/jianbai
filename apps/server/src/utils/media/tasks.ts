@@ -232,7 +232,9 @@ async function load(cwd: string, taskId: string, key: string, owner?: AuthIdenti
 
 async function resumable(task: MediaTask) {
   const { checkpoint, state } = task.record;
-  if (state !== "running" && state !== "interrupted") return false;
+  if (state !== "running" && state !== "interrupted" && state !== "cancelled") return false;
+  // 已取消的计费任务维持原账务终态；仅允许独立供应商任务显式取回已有结果。
+  if (state === "cancelled" && (task.record.ownerUserId || task.record.modelRouteCipher || !task.record.request)) return false;
   if (checkpoint.providerData || checkpoint.assets?.length) return true;
   if (!checkpoint.assetCount || checkpoint.files?.length !== checkpoint.assetCount) return false;
   for (const file of checkpoint.files) {
@@ -262,7 +264,9 @@ function publicData(task: MediaTask) {
 
 async function snapshot(task: MediaTask, owner?: AuthIdentity | null) {
   const { taskId, state, nodeId, canvasPath, result } = task.record;
-  return { taskId, state, resumable: await resumable(task), nodeId, canvasPath,
+  const checkpoint = task.record.checkpoint;
+  const recoveryStage = state === "succeeded" ? "result" : checkpoint.assets?.length ? "download" : checkpoint.providerData ? "query" : "unknown";
+  return { taskId, state, resumable: await resumable(task), recoveryStage, nodeId, canvasPath,
     ...(owner?.role === "user" ? {} : { providerData: publicData(task) }), ...(result ? { result } : {}) };
 }
 
@@ -507,7 +511,15 @@ export async function start(cwd: string, taskId: string, mediaType: "image" | "v
   });
 }
 
-export async function status(cwd: string, taskIds: string[], resume = false, owner?: AuthIdentity | null) {
+export async function promptForOutput(cwd: string, taskId: string, path: string, owner?: AuthIdentity | null) {
+  requireOwner(owner);
+  cwd = await realpath(cwd);
+  const task = await load(cwd, taskId, taskPath(cwd, taskId), owner);
+  // ACT: 仅返回与当前输出相符的生成记录，避免替换图片或新任务把旧提示词附给其他素材。
+  return task?.record.result?.data?.some(file => file.path === path) ? task.record.request?.prompt ?? "" : "";
+}
+
+export async function status(cwd: string, taskIds: string[], resume = false, owner?: AuthIdentity | null, recoverCancelled = false) {
   requireOwner(owner);
   cwd = await realpath(cwd);
   return Promise.all(taskIds.map(taskId => {
@@ -517,6 +529,9 @@ export async function status(cwd: string, taskIds: string[], resume = false, own
       if (!task) return { taskId, state: "interrupted" as const, resumable: false, result: error<GeneratedMedia[]>("生成任务不存在", null, 404) };
       if (task.persistenceError) await persist(task);
       await reconcileCharge(task);
+      if (resume && recoverCancelled && task.record.state === "cancelled" && !task.active && await resumable(task)) {
+        await launch(task, true);
+      }
       if (!task.active && task.record.state === "running" && await prepareCharge(task, true)) await launch(task, false);
       if (!task.active && (task.record.state === "running" || (resume && task.record.state === "interrupted"))) {
         if (await resumable(task)) await launch(task, true);

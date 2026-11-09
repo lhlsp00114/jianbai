@@ -2,7 +2,7 @@
   <el-dialog
     :key="requestId"
     :modelValue="visible"
-    title="退出 Toonflow"
+    title="退出见白"
     width="min(420px, 92vw)"
     alignCenter
     appendToBody

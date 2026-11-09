@@ -19,7 +19,7 @@ export const defaultCanvasShortcuts = {
   handTool: "KeyH",
   arrange: "Alt+Shift+KeyF",
   search: `${primaryModifier}+KeyF`,
-  delete: "Backspace",
+  delete: "Backspace / Delete",
   copy: `${primaryModifier}+KeyC`,
   paste: `${primaryModifier}+KeyV`,
   undo: `${primaryModifier}+KeyZ`,
@@ -27,6 +27,7 @@ export const defaultCanvasShortcuts = {
   zoomIn: isMac ? "Meta+Equal / Shift+Meta+Equal" : "Ctrl+Equal / Ctrl+Shift+Equal",
   zoomOut: `${primaryModifier}+Minus`,
   fitView: `${primaryModifier}+Digit0`,
+  focusNode: "Shift+Backquote",
 };
 export type CanvasShortcutAction = keyof typeof defaultCanvasShortcuts;
 export type CanvasShortcuts = Record<CanvasShortcutAction, string>;
@@ -47,6 +48,7 @@ export const canvasShortcutFields: {
   { id: "zoomIn", label: "放大" },
   { id: "zoomOut", label: "缩小" },
   { id: "fitView", label: "适应画布" },
+  { id: "focusNode", label: "聚焦悬停节点" },
   { id: "zoom", label: "滚轮缩放", hold: true, gesture: "wheel", allowNone: true },
   { id: "pan", label: "画布平移", hold: true, allowNone: true },
   { id: "selection", label: "框选节点", hold: true, allowNone: true },
@@ -106,13 +108,17 @@ export function isShortcutAllowed(field: typeof canvasShortcutFields[number], bi
 }
 
 export function shortcutFromEvent(event: KeyboardEvent) {
+  if (event.key === "~" && !event.ctrlKey && !event.altKey && !event.metaKey) return "Shift+Backquote";
   const modifier = ["Control", "Alt", "Shift", "Meta"].includes(event.key);
   return [event.ctrlKey && "Ctrl", event.altKey && "Alt", event.shiftKey && "Shift", event.metaKey && "Meta", !modifier && event.code]
     .filter(Boolean).join("+");
 }
 
 export function shortcutMatches(event: KeyboardEvent, binding: string) {
-  return !!binding && event.type !== "keyup" && getShortcutBindings(binding).includes(shortcutFromEvent(event));
+  if (!binding || event.type === "keyup") return false;
+  const pressed = shortcutFromEvent(event);
+  return getShortcutBindings(binding).some(value => value === pressed
+    || value === "Shift+Backquote" && (event.key === "~" || event.code === "Backquote") && !event.ctrlKey && !event.altKey && !event.metaKey);
 }
 
 export function shortcutPressed(event: Pick<KeyboardEvent, "ctrlKey" | "altKey" | "shiftKey" | "metaKey">, binding: string, pressedCodes: ReadonlySet<string>) {
@@ -127,6 +133,6 @@ export function shortcutPressed(event: Pick<KeyboardEvent, "ctrlKey" | "altKey" 
 }
 
 export function shortcutLabel(binding: string) {
-  return getShortcutBindings(binding).map(value => value.split("+")
+  return getShortcutBindings(binding).map(value => value === "Shift+Backquote" ? "~" : value.split("+")
     .map(part => keyLabels[part] ?? (part.startsWith("Numpad") ? t`小键盘 ${part.slice(6)}` : part.replace(/^(?:Key|Digit)/, ""))).join(" + ")).join(" / ");
 }

@@ -1,9 +1,9 @@
 <template>
   <div class="about">
     <div class="brand">
-      <div class="brandMark"><img class="brandLogo" :src="logoUrl" alt="Toonflow Logo" /></div>
+      <div class="brandMark"><img class="brandLogo" :src="logoUrl" alt="见白 Logo" /></div>
       <div class="brandInfo">
-        <h3>Toonflow</h3>
+        <h3>见白</h3>
         <div class="brandMeta">
           <span v-if="currentVersion">v{{ currentVersion }}</span>
           <el-tag v-if="clientBuild?.channel || snapshot?.channel" type="info" size="small" round>{{ clientBuild?.channel || snapshot?.channel }}</el-tag>
@@ -61,7 +61,7 @@
       <a class="repositoryLink" :href="repositoryUrl" target="_blank" rel="noopener noreferrer" aria-label="GitHub 仓库：HBAI-Ltd/Toonflow-app">
         <icon-brand-github class="repositoryIcon" :size="22" aria-hidden="true" />
         <div class="repositoryInfo">
-          <span class="repositoryTitle">GitHub 仓库</span>
+          <span class="repositoryTitle">上游开源项目 · Toonflow</span>
         </div>
         <icon-external-link class="externalIcon" :size="16" aria-hidden="true" />
       </a>
@@ -235,7 +235,7 @@ import {
   IconBrandWechat,
   IconQrcode,
 } from "@tabler/icons-vue";
-import logoUrl from "@toonflow/assets/logo.svg";
+import logoUrl from "@toonflow/assets/jianbaiLogo.svg";
 import type { Sponsor } from "@toonflow/server/channel";
 import http from "@/lib/http";
 import { saveSettings } from "@/stores/settings";

@@ -7,7 +7,7 @@
       <el-button class="toolbarButton" text :icon="IconFolderPlus" title="新建文件夹" aria-label="新建文件夹" :disabled="newFolderParent !== undefined" @click="startFolder" />
       <el-button class="toolbarButton" text :icon="IconX" title="关闭素材库" aria-label="关闭素材库" @click="visible = false" />
     </div>
-    <el-scrollbar class="libraryScroll" maxHeight="min(440px, calc(100dvh - 198px))">
+    <el-scrollbar class="libraryScroll">
       <el-tree ref="assetTree" class="assetTree" :data="displayEntries" nodeKey="path" :props="{ label: 'name' }" :icon="IconChevronRight" :currentNodeKey="folder === '.' ? undefined : folder" :filterNodeMethod="filterEntry" defaultExpandAll highlightCurrent emptyText="" @nodeClick="selectFolder">
         <template #default="{ data, node }">
           <div class="assetEntry" :title="data.name" :draggable="data.type === 'file'" @dragstart.stop="startAssetDrag($event, data)" @dblclick.stop="openPreview(data)" @contextmenu="openItemMenu($event, data)">
@@ -371,13 +371,18 @@ defineExpose({ openSave });
 
 <style lang="scss" scoped>
 .assetLibrary {
-  width: min(320px, calc(100vw - 30px));
-  max-height: calc(100dvh - 140px);
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 24px));
+  height: min(86dvh, 860px);
+  max-height: calc(100dvh - 100px);
 
   :deep(.el-card__body) {
     display: flex;
+    flex: 1;
     flex-direction: column;
-    max-height: inherit;
+    min-height: 0;
+    height: 100%;
     box-sizing: border-box;
   }
 
@@ -405,8 +410,9 @@ defineExpose({ openSave });
   }
 
   .libraryScroll {
+    flex: 1;
     min-height: 0;
-    max-height: 440px;
+    max-height: none;
   }
 
   .audioPreview {

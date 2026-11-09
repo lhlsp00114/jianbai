@@ -1,5 +1,5 @@
 <template>
-  <div class="videoPlayer" :aria-busy="preparingPreview">
+  <div class="videoPlayer" :aria-busy="preparingPreview" title="双击全屏预览" @dblclick.stop.prevent="!fullscreen && enterFullscreen()">
     <video
       ref="video"
       class="videoPreview"

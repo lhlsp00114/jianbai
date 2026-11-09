@@ -1,6 +1,6 @@
 <template>
   <div class="imageEditor" :class="{ editing: mode, previewUnavailable: preparingPreview || previewError }" :style="{ '--imageRatio': imageRatio }" :aria-busy="preparingPreview">
-    <img ref="sourceImage" :src="previewSrc" :alt="alt" draggable="false" @load="imageLoaded" @error="handleError" />
+    <img ref="sourceImage" :src="previewSrc" :alt="alt" draggable="false" title="双击放大预览" @dblclick.stop="!mode && !preparingPreview && !previewError && emit('preview')" @load="imageLoaded" @error="handleError" />
     <div v-if="preparingPreview || previewError" class="previewStatus" role="status">{{ preparingPreview ? "正在生成兼容预览…" : previewError }}</div>
     <canvas
       v-if="mode"
@@ -65,7 +65,7 @@ import { useImageVariationNode } from "../useImageVariationNode";
 import { buildInpaintPrompt, type InpaintDraftInput } from "../imageInpaint";
 
 const props = defineProps<{ src: string; alt: string; toolbarTarget?: HTMLElement; disabled?: boolean }>();
-const emit = defineEmits<{ load: [event: Event]; error: [error: Error] }>();
+const emit = defineEmits<{ load: [event: Event]; error: [error: Error]; preview: [] }>();
 const { src: previewSrc, preparing: preparingPreview, error: previewError, handleError, handleLoaded } = useMediaPreview(() => props.src, "image");
 watch(previewError, message => { if (message) emit("error", new Error(message)); });
 const { node } = useNode();

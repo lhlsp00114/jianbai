@@ -96,6 +96,7 @@ declare module 'vue' {
     IconLayoutSidebarLeftExpand: typeof import('@tabler/icons-vue')['IconLayoutSidebarLeftExpand']
     IconLibraryPhoto: typeof import('@tabler/icons-vue')['IconLibraryPhoto']
     IconMovie: typeof import('@tabler/icons-vue')['IconMovie']
+    IconPlus: typeof import('@tabler/icons-vue')['IconPlus']
     IconSettings: typeof import('@tabler/icons-vue')['IconSettings']
     IconSitemap: typeof import('@tabler/icons-vue')['IconSitemap']
     IconTextSize: typeof import('@tabler/icons-vue')['IconTextSize']

@@ -1,7 +1,7 @@
 <template>
-  <el-popover v-model:visible="settingsVisible" trigger="click" placement="top-start" width="min(340px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '14px' }">
+  <el-popover ref="settingsPopover" v-model:visible="settingsVisible" trigger="click" placement="top-start" :appendTo="settingsTarget" width="min(340px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '14px' }">
     <template #reference>
-      <el-button class="settingsButton" text size="small" :disabled="disabled" :aria-expanded="settingsVisible" aria-label="图片生成设置">
+      <el-button ref="settingsTrigger" class="settingsButton" text size="small" :disabled="disabled" :aria-expanded="settingsVisible" aria-label="图片生成设置">
         <span class="ratioShape" :style="ratioStyle(ratio)" aria-hidden="true" />
         <span>{{ ratio }} · {{ size }} · 1张</span>
         <component :is="settingsVisible ? IconChevronDown : IconChevronUp" :size="14" aria-hidden="true" />
@@ -34,7 +34,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, inject, ref, watch, type Ref } from "vue";
+import { useNode, useVueFlow } from "@vue-flow/core";
 import { ElButton, ElPopover, ElRadioGroup, ElRadioButton } from "element-plus";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
 import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
@@ -42,6 +43,21 @@ import modelForm from "./modelForm.vue";
 
 defineProps<{ sizes: string[]; ratios: string[]; model?: NodeMediaModel; disabled?: boolean }>();
 const settingsVisible = ref(false);
+const expandedPrompt = inject<Ref<boolean> | undefined>("expandedGenerationPrompt", undefined);
+watch(() => expandedPrompt?.value, () => { settingsVisible.value = false; });
+const settingsPopover = ref<InstanceType<typeof ElPopover>>();
+const settingsTrigger = ref<InstanceType<typeof ElButton>>();
+const { node } = useNode();
+const { viewport } = useVueFlow();
+const settingsTarget = computed(() => {
+  if (expandedPrompt?.value) return undefined;
+  const element = settingsTrigger.value?.$el as HTMLElement | undefined;
+  return element?.closest<HTMLElement>(".vue-flow__node") ?? element?.closest<HTMLElement>(".nodeSkeleton") ?? undefined;
+});
+watch(() => settingsVisible.value ? [viewport.value.x, viewport.value.y, viewport.value.zoom,
+  node.computedPosition.x, node.computedPosition.y, node.dimensions.width, node.dimensions.height] : [], () => {
+  void settingsPopover.value?.popperRef?.popperInstanceRef?.update();
+}, { flush: "post" });
 const size = defineModel<string>("size", { required: true });
 const ratio = defineModel<string>("ratio", { required: true });
 const other = defineModel<Record<string, unknown>>("other", { required: true });

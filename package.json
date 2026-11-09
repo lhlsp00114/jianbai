@@ -17,7 +17,8 @@
   "patchedDependencies": {
     "@vue-flow/core@1.48.2": "patches/vueFlowCore.patch",
     "@earendil-works/pi-agent-core@0.85.1": "patches/piAgentCore.patch",
-    "@earendil-works/pi-coding-agent@0.85.1": "patches/piCodingAgent.patch"
+    "@earendil-works/pi-coding-agent@0.85.1": "patches/piCodingAgent.patch",
+    "element-plus@2.14.5": "patches/elementPlusImageViewer.patch"
   },
   "workspaces": [
     "apps/*",

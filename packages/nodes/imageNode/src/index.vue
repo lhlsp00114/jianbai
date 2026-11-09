@@ -5,11 +5,13 @@
     :bottomVisible="node.selected && (lightingVisible || multiAngleVisible || editor?.mode === 'inpaint')"
     :bottomWidth="660"
     topWidth="max-content"
+    toolbarAction="focus"
     :downloadUrl="previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
     @fullscreen="previewVisible = true"
     :style="{ width: previewUrl && imageWidth ? `${imageWidth + 18}px` : undefined }">
-    <template v-if="editor?.mode" #top><div ref="paintToolbar" /></template>
+    <template v-if="imageResolution" #titleMeta><span :title="`${imageResolution} 像素`" :aria-label="`图片分辨率：${imageResolution}`">{{ imageResolution }}</span></template>
+    <template v-if="editor?.mode || data.rotationDraft" #top><div ref="paintToolbar" /></template>
     <template #topActions>
       <el-button class="panoramaButton" :icon="IconPanoramaHorizontal" :disabled="uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || inpaintPrompt?.creating || panorama?.busy || !previewUrl" text title="全景图" aria-label="全景图" @click.stop="panorama?.open($event)">全景图<icon-chevron-down class="menuChevron" :size="14" /></el-button>
       <el-button :icon="IconBrush" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="局部重绘" aria-label="局部重绘" @click.stop="startEditor('inpaint')">局部重绘</el-button>
@@ -26,16 +28,27 @@
         @click.stop="fileInput?.click()">替换图片</el-button>
     </template>
     <template #topRightActions>
+      <el-button :icon="IconRotateClockwise" :loading="creatingRotation" :disabled="uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting || inpaintPrompt?.creating" text title="旋转与镜像" aria-label="旋转与镜像" @click.stop="createRotation(outputFile)" />
       <el-button :icon="IconPencil" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="标记" aria-label="标记" @click.stop="startEditor('mark')" />
     </template>
     <div class="imageContent nopan" :class="{ empty: !outputFile }">
+      <imageRotation
+        v-if="data.rotationDraft"
+        ref="rotationEditor"
+        v-model="data.rotationDraft"
+        :src="previewUrl"
+        :toolbarTarget="paintToolbar"
+        :save="saveRotation"
+        @close="data.rotationDraft = undefined"
+        @resize="resizeRotation" />
       <imageEditor
-        v-if="previewUrl"
+        v-else-if="previewUrl"
         ref="editor"
         :src="previewUrl"
         :toolbarTarget="paintToolbar"
         :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy"
         alt="节点图片"
+        @preview="previewVisible = true"
         @load="resizeImage"
         @error="ElMessage.error('无法预览该图片')" />
       <input ref="fileInput" class="fileInput" type="file" accept="image/*" aria-label="选择图片" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy" @change="uploadImage" />
@@ -69,10 +82,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
-import { IconPhoto, IconUpload, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown } from "@tabler/icons-vue";
+import { computed, nextTick, ref, watch } from "vue";
+import { IconPhoto, IconUpload, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconRotateClockwise } from "@tabler/icons-vue";
 import { ElButton, ElImageViewer, ElMessage } from "element-plus";
-import { nodeSkeleton, nodeTools, useNode, z, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
+import { nodeSkeleton, nodeTools, useNode, uploadNodeFile, z, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
 import imageGridSplit from "./components/imageGridSplit.vue";
 import imageEditor from "./components/imageEditor.vue";
@@ -81,6 +94,8 @@ import imageLighting from "./components/imageLighting.vue";
 import imagePanorama from "./components/imagePanorama.vue";
 import imageMultiAngle from "./components/imageMultiAngle.vue";
 import type { InpaintDraftInput } from "./imageInpaint";
+import imageRotation from "./components/imageRotation.vue";
+import { useImageRotation, type ImageRotation } from "./useImageRotation";
 
 defineOptions({
   inheritAttrs: false,
@@ -94,6 +109,9 @@ const { node, nodeProps, outputs, nodeEvent, files, updateNodeInternals } = useN
   label: "图片",
 });
 const fileInput = ref<HTMLInputElement>();
+const data = computed(() => node.data as { rotationDraft?: ImageRotation });
+const { createRotation, creatingRotation } = useImageRotation();
+const rotationEditor = ref<InstanceType<typeof imageRotation>>();
 const gridSplit = ref<InstanceType<typeof imageGridSplit>>();
 const editor = ref<InstanceType<typeof imageEditor>>();
 const paintToolbar = ref<HTMLElement>();
@@ -109,8 +127,10 @@ const panorama = ref<InstanceType<typeof imagePanorama>>();
 const uploading = ref(false);
 const previewVisible = ref(false);
 const imageWidth = ref(0);
+const imageResolution = ref("");
 
 const outputFile = computed(() => outputs.value.image?.dataType === "IMAGE" ? outputs.value.image.value : undefined);
+watch(outputFile, () => { imageResolution.value = ""; }, { flush: "sync" });
 const previewUrl = files.useFileUrl(
   outputFile,
   (error) => showError(error, "图片读取失败")
@@ -119,10 +139,11 @@ const imagePreviewUrl = computed(() => editor.value?.previewSrc || previewUrl.va
 
 nodeEvent.on("save", reason => {
   // ACT: 普通保存不等待打光和多角度生成，后台任务继续由原画布实例承载。
-  if (uploading.value || editor.value?.busy || inpaintPrompt.value?.creating || panorama.value?.busy
+  if (uploading.value || editor.value?.busy || rotationEditor.value?.busy || inpaintPrompt.value?.creating || panorama.value?.busy
     || (reason === "reload" && (lighting.value?.generating || multiAngle.value?.generating))) throw new Error("图片处理中，请完成后再切换或刷新节点");
 });
 nodeEvent.on("delete", () => {
+  if (rotationEditor.value?.busy) throw new Error("图片正在保存，请稍后删除节点");
   if (uploading.value || editor.value?.busy || inpaintPrompt.value?.creating || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy) throw new Error("图片处理中，请稍后删除节点");
   uploading.value = true;
   return files.removeNodeFiles().finally(() => {
@@ -139,6 +160,7 @@ nodeTools.register({
   }),
   async execute({ path, mimeType }, { signal }) {
     signal?.throwIfAborted();
+    if (data.value.rotationDraft) throw new Error("请先保存或退出旋转与镜像");
     if (uploading.value || editor.value?.busy || inpaintPrompt.value?.creating || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy) throw new Error("图片处理中，请稍后重试");
     uploading.value = true;
     try {
@@ -156,9 +178,27 @@ nodeTools.register({
 async function resizeImage(event: Event) {
   const image = event.currentTarget as HTMLImageElement;
   if (!image.naturalWidth || !image.naturalHeight) return;
+  imageResolution.value = `${image.naturalWidth} × ${image.naturalHeight}`;
   imageWidth.value = 240 * image.naturalWidth / image.naturalHeight;
   await nextTick();
   updateNodeInternals();
+}
+
+async function resizeRotation(size: { width: number; height: number }) {
+  imageResolution.value = `${size.width} × ${size.height}`;
+  imageWidth.value = 240 * size.width / size.height;
+  await nextTick();
+  updateNodeInternals();
+}
+
+async function saveRotation(file: File, signal: AbortSignal) {
+  signal.throwIfAborted();
+  if (!data.value.rotationDraft) throw new Error("请先进入旋转与镜像");
+  const workspace = files.getWorkspaceFiles();
+  const url = await uploadNodeFile(workspace, node.id, file);
+  signal.throwIfAborted();
+  outputs.value.image = { dataType: "IMAGE", value: { url, mimeType: "image/png" } };
+  data.value.rotationDraft = undefined;
 }
 
 function openPanorama() {
@@ -197,6 +237,7 @@ async function uploadImage(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = "";
+  if (data.value.rotationDraft) return;
   if (!file || uploading.value || editor.value?.busy || inpaintPrompt.value?.creating || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy) return;
   const mimeType = getMediaMimeType(file);
   if (!mimeType.startsWith("image/")) return void ElMessage.error("请选择图片文件");

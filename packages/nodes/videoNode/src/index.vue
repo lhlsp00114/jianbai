@@ -3,6 +3,7 @@
     v-bind="nodeProps"
     :topVisible="node.selected"
     topWidth="max-content"
+    toolbarAction="focus"
     :downloadUrl="exporting ? '' : previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
     :style="{ width: previewUrl && videoWidth ? `${videoWidth + 18}px` : undefined }"

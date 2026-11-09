@@ -13,6 +13,8 @@
       :key="JSON.stringify([item.source, item.sourceHandle])"
       :item="item"
       :index="index + 1"
+      :class="{ inactiveReference: inactiveMedia && isMedia(item) }"
+      :title="inactiveMedia && isMedia(item) ? '文生视频模式：此素材不会上传，连线保留' : undefined"
       tabindex="0"
       aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
       @keydown.alt.left.stop.prevent="moveReference(index, index - 1)"
@@ -27,8 +29,13 @@ import { VueDraggable } from "vue-draggable-plus";
 import type { NodeInputValue } from "@toonflow/nodes-scaffold/values";
 import referenceCard from "./referenceCard.vue";
 
+defineProps<{ inactiveMedia?: boolean }>();
 const items = defineModel<NodeInputValue[]>({ required: true });
 const emit = defineEmits<{ remove: [item: NodeInputValue]; preview: [item: NodeInputValue, url: string] }>();
+
+function isMedia(item: NodeInputValue) {
+  return typeof item.dataType === "string" && ["IMAGE", "VIDEO", "AUDIO"].includes(item.dataType);
+}
 
 function moveReference(from: number, index: number) {
   const item = items.value[from];
@@ -40,7 +47,7 @@ function moveReference(from: number, index: number) {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .referenceList {
   display: flex;
   flex: 1;
@@ -48,5 +55,12 @@ function moveReference(from: number, index: number) {
   min-width: 0;
   min-height: 48px;
   overflow-x: auto;
+
+  .inactiveReference {
+    filter: grayscale(1);
+    opacity: 0.4;
+
+    &:focus-visible { opacity: 0.7; }
+  }
 }
 </style>

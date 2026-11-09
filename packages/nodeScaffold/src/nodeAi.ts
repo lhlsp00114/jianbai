@@ -124,6 +124,7 @@ export type NodeMediaTaskStatus = {
   taskId: string;
   state?: "running" | "interrupted" | "succeeded" | "failed" | "cancelled";
   resumable?: boolean;
+  recoveryStage?: "query" | "download" | "result" | "unknown";
   providerData?: unknown;
   nodeId?: string;
   canvasPath?: string;
@@ -135,8 +136,9 @@ export type NodeMediaTaskOptions = {
   canvasPath?: string;
   onStatus?: (status: NodeMediaTaskStatus) => void | Promise<void>;
   isCancelled?: () => boolean;
+  recoverCancelled?: boolean;
 };
-type PendingMediaTask = { directory: string; failedAt?: number; resume?: boolean; onStatus?: NodeMediaTaskOptions["onStatus"]; finish: (result: MediaTaskResult) => void; fail: (error: unknown) => void };
+type PendingMediaTask = { directory: string; failedAt?: number; resume?: boolean; recoverCancelled?: boolean; onStatus?: NodeMediaTaskOptions["onStatus"]; finish: (result: MediaTaskResult) => void; fail: (error: unknown) => void };
 const mediaTasksKey = Symbol.for("toonflow.nodeMediaTasks.v2");
 const mediaTasksHost = globalThis as typeof globalThis & { [mediaTasksKey]?: ReturnType<typeof createMediaTasks> };
 // ACT: 图片、视频等独立 UMD 共用短轮询；每批最多 100 项，不按节点占用长连接。
@@ -156,9 +158,9 @@ function createMediaTasks() {
     timer = undefined;
     polling = true;
     try {
-      const groups = new Map([...pending.values()].map(task => [JSON.stringify([task.directory, !!task.resume]), { directory: task.directory, resume: !!task.resume }]));
-      for (const { directory, resume } of groups.values()) {
-        const taskIds = [...pending].filter(([, task]) => task.directory === directory && !!task.resume === resume).map(([id]) => id);
+      const groups = new Map([...pending.values()].map(task => [JSON.stringify([task.directory, !!task.resume, !!task.recoverCancelled]), { directory: task.directory, resume: !!task.resume, recoverCancelled: !!task.recoverCancelled }]));
+      for (const { directory, resume, recoverCancelled } of groups.values()) {
+        const taskIds = [...pending].filter(([, task]) => task.directory === directory && !!task.resume === resume && !!task.recoverCancelled === recoverCancelled).map(([id]) => id);
         for (let offset = 0; offset < taskIds.length; offset += 100) {
           const batch = taskIds.slice(offset, offset + 100).filter(id => pending.has(id));
           if (!batch.length) continue;
@@ -166,7 +168,7 @@ function createMediaTasks() {
           try {
             const results = await fetch("/api/ai/media/tasks/status", {
               method: "POST", headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
-              body: JSON.stringify({ directory, taskIds: batch, ...(resume ? { resume: true } : {}) }), signal: AbortSignal.timeout(10000),
+              body: JSON.stringify({ directory, taskIds: batch, ...(resume ? { resume: true, recoverCancelled } : {}) }), signal: AbortSignal.timeout(10000),
             }).then(readResult<NodeMediaTaskStatus[]>);
             const byId = new Map(results.map(result => [result.taskId, result]));
             for (const id of batch) {
@@ -210,6 +212,7 @@ function createMediaTasks() {
       const task: PendingMediaTask = {
         directory,
         resume,
+        recoverCancelled: options.recoverCancelled,
         onStatus: options.onStatus,
         finish(result) {
           cleanup();
@@ -438,6 +441,16 @@ export function useNodeAi(options: { onModelsChanged?: () => unknown } = {}) {
     return mediaTasks.wait(directory, taskId, requestSignal(signal), options, true);
   }
 
+  async function readMediaTask(directory: string, taskId: string, signal?: AbortSignal) {
+    const results = await fetch("/api/ai/media/tasks/status", {
+      method: "POST", headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+      body: JSON.stringify({ directory, taskIds: [taskId] }), signal: requestSignal(signal),
+    }).then(readResult<NodeMediaTaskStatus[]>);
+    const result = results.find(item => item.taskId === taskId);
+    if (!result) throw new Error("任务状态不存在");
+    return result;
+  }
+
   async function cancelMedia(directory: string, taskId: string) {
     await fetch("/api/ai/media/tasks/cancel", {
       method: "POST", headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
@@ -502,5 +515,5 @@ export function useNodeAi(options: { onModelsChanged?: () => unknown } = {}) {
     return { text, ...(reasoning ? { reasoning } : {}) };
   }
 
-  return { getModels, getMediaModels, getMediaPrice, generateImage, generateVideo, generateAudio, resumeMedia, cancelMedia, generate };
+  return { getModels, getMediaModels, getMediaPrice, generateImage, generateVideo, generateAudio, resumeMedia, readMediaTask, cancelMedia, generate };
 }

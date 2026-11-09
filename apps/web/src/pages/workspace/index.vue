@@ -99,18 +99,18 @@
             </el-tooltip>
           </div>
         </el-card>
-        <el-tooltip v-if="!agentVisible" content="Toonflow Agent" placement="top" :showArrow="false" :hideAfter="0">
+        <el-tooltip v-if="!agentVisible" content="见白 Agent" placement="top" :showArrow="false" :hideAfter="0">
           <el-button
             class="agentButton"
             :class="{ standalone: activePanel !== 'canvas' }"
             :aria-expanded="agentVisible"
-            aria-label="Toonflow Agent"
+            aria-label="见白 Agent"
             aria-controls="agentPanel"
             @click="agentVisible = !agentVisible"></el-button>
         </el-tooltip>
       </div>
     </div>
-    <floatingAgent v-model="agentVisible" :inert="workspaceStore.projectLoadingVisible" @resize="agentWidth = $event" />
+    <floatingAgent ref="floatingAgentRef" v-model="agentVisible" :inert="workspaceStore.projectLoadingVisible" @resize="agentWidth = $event" />
     <settings v-model="settingsVisible" />
     <el-dialog v-model="contactVisible" :title="contactInfo.title" width="min(360px, calc(100vw - 32px))" alignCenter appendToBody>
       <div class="contactContent">
@@ -137,6 +137,7 @@ import axios from "axios";
 import { IconVector, IconFileText, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase } from "@tabler/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { QRCode } from "tdesign-vue-next";
+import type { AgentMention } from "@toonflow/server/agent/types";
 import settings from "@/components/settings/index.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { registerWorkspaceControl, waitForControlValue } from "@/lib/mcpControl";
@@ -169,7 +170,7 @@ const panelOptions = [
   { label: "画布", value: "canvas", icon: IconVector },
   { label: "文档", value: "document", icon: IconFileText },
 ];
-const agentVisible = ref(true);
+const agentVisible = ref(false);
 const agentWidth = ref(0);
 const settingsVisible = ref(false);
 const helpVisible = ref(false);
@@ -195,6 +196,7 @@ function showContact(type: "community" | "business") {
   contactVisible.value = true;
 }
 const canvasPanelRef = ref<InstanceType<typeof canvasPanel>>();
+const floatingAgentRef = ref<InstanceType<typeof floatingAgent>>();
 watch(() => canvasPanelRef.value?.canvasListReady, ready => {
   workspaceStore.projectLoading = !ready;
 }, { immediate: true });
@@ -212,6 +214,17 @@ function setDocumentPanel(value: Element | ComponentPublicInstance | null) {
 }
 provide("canvas", () => canvasPanelRef.value?.getCanvasContext());
 provide("mentionCanvas", () => canvasPanelRef.value?.mentionSource);
+provide("sendNodeToAgent", async (nodeId: string, outputIds: string[]) => {
+  const source = canvasPanelRef.value?.mentionSource;
+  const canvasId = source?.currentCanvasId();
+  if (!source || !canvasId) throw new Error("请先打开画布");
+  const mentions = (await Promise.all(outputIds.map(outputId => source.selectCanvas(canvasId, nodeId, outputId))))
+    .filter((mention): mention is AgentMention => !!mention);
+  if (!mentions.length) throw new Error("此节点没有可发送的输出");
+  agentVisible.value = true;
+  if (!floatingAgentRef.value) throw new Error("Agent 面板尚未准备好，请重试");
+  await floatingAgentRef.value.insertMentions(mentions);
+});
 provide("activateCanvasPanel", () => switchPanel("canvas"));
 provide("performWorkspaceFileAction", (directory: string, action: "copy" | "rename" | "move" | "delete", path: string, target?: string, entryType: "canvas" | "directory" = "canvas") =>
   documentPanelRef.value ? documentPanelRef.value.performFileAction(directory, action, path, target, entryType) : performFileAction(directory, action, path, target));
@@ -407,7 +420,7 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
   .workspaceTools {
     position: absolute;
     inset: 0;
-    width: calc(100% - var(--agentWidth, 0px));
+    width: 100%;
     container: workspaceTools / inline-size;
     pointer-events: none;
 

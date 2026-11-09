@@ -77,8 +77,10 @@
             :nodes="filteredNodes"
             :appendTo="menuContainer"
             :uploadDisabled="!uploadFiles"
+            :showFitView="directNodes && !pendingHandle && !pendingGroup.length"
             @select="handleCommand"
             @upload="handleCommand('upload')"
+            @fitView="handleCommand('fitView')"
             @close="menu?.handleClose()" />
         </template>
       </el-dropdown-menu>
@@ -300,6 +302,11 @@ async function handleCommand(command: unknown) {
   if (command === "upload") {
     menu.value?.handleClose();
     uploadFiles?.({ ...nodePosition });
+    return;
+  }
+  if (command === "fitView") {
+    menu.value?.handleClose();
+    await flow.fitView({ duration: 250 });
     return;
   }
   if (command === "undo" || command === "redo") {

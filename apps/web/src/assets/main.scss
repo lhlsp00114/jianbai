@@ -1,5 +1,5 @@
 html:root {
-  --ui-radius: 8px;
+  --ui-radius: 16px;
   --ui-radius-small: calc(var(--ui-radius) * 0.5);
   --ui-radius-large: calc(var(--ui-radius) * 1.5);
   --el-border-radius-base: var(--ui-radius);
@@ -48,6 +48,27 @@ body,
 
 .stream-markdown [data-stream-markdown="tooltip"] {
   z-index: var(--markdown-tooltip-z-index);
+}
+
+.el-image-viewer__wrapper {
+  .el-image-viewer__close,
+  .el-image-viewer__actions {
+    color: #fff;
+    background-color: rgba(24, 27, 33, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+    opacity: 1;
+  }
+
+  .el-image-viewer__close:hover { background-color: #3b4352; }
+
+  .el-image-viewer__actions .el-icon {
+    padding: 4px;
+    border-radius: 5px;
+    box-sizing: content-box;
+
+    &:hover { background-color: rgba(255, 255, 255, 0.18); }
+  }
 }
 
 *::-webkit-scrollbar {

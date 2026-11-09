@@ -44,7 +44,7 @@
       <bg class="artBg" />
       <div class="artBrand">
         <span class="artLogo" v-html="logoSvg" />
-        <span class="artName">Toonflow</span>
+        <span class="artName">见白</span>
       </div>
     </div>
     <mobileConnect v-model="mobileConnectVisible" />
@@ -59,7 +59,7 @@ import { IconArrowLeft, IconDevices } from "@tabler/icons-vue";
 import { customProviders, multiTenantEnabled, toonflowAccountToken } from "@/stores/settings";
 import { useHelloStore } from "@/stores/hello";
 import anonymousData from "@/lib/anonymousData";
-import logoSvg from "@toonflow/assets/logo.svg?raw";
+import logoSvg from "@toonflow/assets/jianbaiLogo.svg?raw";
 import bg from "./bg.vue";
 import languageSelect from "@/components/languageSelect.vue";
 import { mobileConnectionLabel } from "@/lib/mobile";

@@ -77,6 +77,7 @@ import { modelChoices, refreshModelChoices } from "@/stores/settings";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { AgentAttachment, AgentConversation, AgentMessage } from "./types";
 import type { AgentEvent, AgentQueue, AgentQueuedMessage } from "@toonflow/server/agent/types";
+import type { AgentMention } from "@toonflow/server/agent/types";
 import { createConversationStream, createReplyStream, readAgentEvents } from "./replyStream";
 import { mentionPlainText } from "./mentionText";
 import type { CanvasContext } from "@toonflow/tool-canvas/runtime";
@@ -204,7 +205,7 @@ function receiveEvent(event: AgentEvent) {
   }
 }
 
-defineExpose({ receiveEvent, beginProjectStop, getRunId: () => runId, getSelectedModel: () => selectedModel.value });
+defineExpose({ receiveEvent, beginProjectStop, insertMentions: (mentions: AgentMention[]) => input.value?.insertMentions(mentions), getRunId: () => runId, getSelectedModel: () => selectedModel.value });
 
 function submitMessage(mode?: "steer" | "followUp") {
   if (busy.value || remoteRunning.value) return sendQueuedMessage(mode ?? "followUp");
@@ -567,7 +568,7 @@ async function sendMessage(source?: AgentMessage) {
         if (!notifiedQuestions.has(toolEvent.callId) && !stopping.value && !projectStops.value
           && !requestController.signal.aborted && !canvasRunIds.some(id => stoppedRunIds.has(id))) {
           notifiedQuestions.add(toolEvent.callId);
-          void showNotification({ title: "Toonflow", body: translate("工具正在等待你的确认") })
+          void showNotification({ title: "见白", body: translate("工具正在等待你的确认") })
             .catch(error => console.warn("系统通知发送失败", error));
         }
       }
@@ -655,7 +656,7 @@ async function sendMessage(source?: AgentMessage) {
     emit("sent", mentionPlainText(prompt, mentions) || attachments[0]?.name || "新对话");
     if (accepted && ownsStream && !forwarded && !isSuperseded() && !props.initialSession?.parentFile && !stopping.value && !projectStops.value
       && !requestController.signal.aborted && !stoppedRunIds.has(requestRunId)) {
-      void showNotification({ title: "Toonflow", body: translate("Agent 已完成回复") })
+      void showNotification({ title: "见白", body: translate("Agent 已完成回复") })
         .catch(error => console.warn("系统通知发送失败", error));
     }
   } catch (error) {

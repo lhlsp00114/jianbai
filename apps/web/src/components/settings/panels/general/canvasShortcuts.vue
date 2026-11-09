@@ -42,6 +42,9 @@
       <div class="gestureRow"><span>触摸板缩放</span><span class="gestureValue"><icon-hand-two-fingers :size="16" />双指捏合</span></div>
       <div class="gestureRow"><span>触摸板双指滑动</span><span class="gestureValue"><icon-hand-two-fingers :size="16" />跟随滚轮配置</span></div>
       <div class="gestureRow"><span>鼠标平移</span><span class="gestureValue"><icon-mouse :size="16" />中键拖动</span></div>
+      <div class="gestureRow"><span>图片、视频放大预览</span><span class="gestureValue">左键双击节点图片或视频</span></div>
+      <div class="gestureRow"><span>聚焦图片、视频节点</span><span class="gestureValue">点击节点工具条最右侧按钮</span></div>
+      <div class="gestureRow"><span>收起提示词编辑窗口</span><span class="gestureValue">Esc</span></div>
     </el-form>
   </section>
 </template>

@@ -1,5 +1,5 @@
 diff --git a/dist/vue-flow-core.js b/dist/vue-flow-core.js
-index c8213e0..3cc6c59 100644
+index c8213e03660a104221374db063742750aa7e7e81..1025952581a9a2c5baee9eb8176e17e0b645c83b 100644
 --- a/dist/vue-flow-core.js
 +++ b/dist/vue-flow-core.js
 @@ -4739,6 +4739,7 @@ function updateEdgeAction(edge, newConnection, prevEdge, shouldReplaceId, trigge
@@ -22,7 +22,45 @@ index c8213e0..3cc6c59 100644
      if (node.parentNode && !parentNode) {
        triggerError(new VueFlowError(ErrorCode.NODE_MISSING_PARENT, node.id, node.parentNode));
      }
-@@ -8288,6 +8290,8 @@ const _sfc_main$a = /* @__PURE__ */ vue.defineComponent({
+@@ -5236,6 +5238,29 @@ function useHandle({
+           nodeLookup.value,
+           fromHandle
+         );
++        // Toonflow: 卡片命中时吸附到最近的兼容端口；仍复用原生校验、预览和松手提交。
++        const pointer = getEventPosition(event2);
++        const hit = doc.elementFromPoint(pointer.x, pointer.y);
++        const card = hit?.closest('[data-connection-snap="true"]');
++        const hoveredElement = card?.closest(".vue-flow__node");
++        if (hoveredElement && hoveredElement.closest(".vue-flow") === vueFlowRef.value) {
++          const hoveredNode = nodeLookup.value.get(hoveredElement.getAttribute("data-id"));
++          closestHandle = null;
++          if (hoveredNode && hoveredNode.id !== fromHandle.nodeId && !hoveredNode.hidden && hoveredNode.connectable !== false) {
++            const targetType = isTarget ? "source" : "target";
++            const position = pointToRendererPoint(connectionPosition, viewport.value, false, [1, 1]);
++            const candidates = (hoveredNode.handleBounds?.[targetType] ?? [])
++              .map(handle => getHandle(hoveredNode.id, targetType, handle.id, nodeLookup.value, connectionMode.value, true))
++              .filter(Boolean)
++              .sort((left, right) => Math.hypot(left.x - position.x, left.y - position.y) - Math.hypot(right.x - position.x, right.y - position.y));
++            closestHandle = candidates.find(handle => isValidHandle(event2, {
++              handle, connectionMode: connectionMode.value,
++              fromNodeId: fromHandle.nodeId, fromHandleId: fromHandle.id,
++              fromType: isTarget ? "target" : "source",
++              isValidConnection: isValidConnectionHandler, doc, lib: "vue", flowId
++            }, edges.value, nodes.value, findNode, nodeLookup.value).isValid) ?? null;
++          }
++        }
+         if (!autoPanStarted) {
+           autoPan();
+           autoPanStarted = true;
+@@ -5301,6 +5326,7 @@ function useHandle({
+         if ("touches" in event2 && event2.touches.length > 0) {
+           return;
+         }
++        if (isMouseEvent(event2) && clickedHandle.classList.contains("nodeHandle")) onPointerMove(event2);
+         if ((closestHandle || handleDomNode) && connection && isValid) {
+           if (!onEdgeUpdate) {
+             emits.connect(connection);
+@@ -8288,6 +8314,8 @@ const _sfc_main$a = /* @__PURE__ */ vue.defineComponent({
        selectionStarted = true;
        selectionInProgress = false;
        removeSelectedElements();
@@ -32,7 +70,7 @@ index c8213e0..3cc6c59 100644
          width: 0,
          height: 0,
 diff --git a/dist/vue-flow-core.mjs b/dist/vue-flow-core.mjs
-index 96b8e8d..4f1ce5d 100644
+index 96b8e8d31f311eac6890d610f9e69c5a9b84f1e5..66b6961c938662f58f596cbc46205b007c1855d6 100644
 --- a/dist/vue-flow-core.mjs
 +++ b/dist/vue-flow-core.mjs
 @@ -4737,6 +4737,7 @@ function updateEdgeAction(edge, newConnection, prevEdge, shouldReplaceId, trigge
@@ -55,7 +93,45 @@ index 96b8e8d..4f1ce5d 100644
      if (node.parentNode && !parentNode) {
        triggerError(new VueFlowError(ErrorCode.NODE_MISSING_PARENT, node.id, node.parentNode));
      }
-@@ -8286,6 +8288,8 @@ const _sfc_main$a = /* @__PURE__ */ defineComponent({
+@@ -5234,6 +5236,29 @@ function useHandle({
+           nodeLookup.value,
+           fromHandle
+         );
++        // Toonflow: 卡片命中时吸附到最近的兼容端口；仍复用原生校验、预览和松手提交。
++        const pointer = getEventPosition(event2);
++        const hit = doc.elementFromPoint(pointer.x, pointer.y);
++        const card = hit?.closest('[data-connection-snap="true"]');
++        const hoveredElement = card?.closest(".vue-flow__node");
++        if (hoveredElement && hoveredElement.closest(".vue-flow") === vueFlowRef.value) {
++          const hoveredNode = nodeLookup.value.get(hoveredElement.getAttribute("data-id"));
++          closestHandle = null;
++          if (hoveredNode && hoveredNode.id !== fromHandle.nodeId && !hoveredNode.hidden && hoveredNode.connectable !== false) {
++            const targetType = isTarget ? "source" : "target";
++            const position = pointToRendererPoint(connectionPosition, viewport.value, false, [1, 1]);
++            const candidates = (hoveredNode.handleBounds?.[targetType] ?? [])
++              .map(handle => getHandle(hoveredNode.id, targetType, handle.id, nodeLookup.value, connectionMode.value, true))
++              .filter(Boolean)
++              .sort((left, right) => Math.hypot(left.x - position.x, left.y - position.y) - Math.hypot(right.x - position.x, right.y - position.y));
++            closestHandle = candidates.find(handle => isValidHandle(event2, {
++              handle, connectionMode: connectionMode.value,
++              fromNodeId: fromHandle.nodeId, fromHandleId: fromHandle.id,
++              fromType: isTarget ? "target" : "source",
++              isValidConnection: isValidConnectionHandler, doc, lib: "vue", flowId
++            }, edges.value, nodes.value, findNode, nodeLookup.value).isValid) ?? null;
++          }
++        }
+         if (!autoPanStarted) {
+           autoPan();
+           autoPanStarted = true;
+@@ -5299,6 +5324,7 @@ function useHandle({
+         if ("touches" in event2 && event2.touches.length > 0) {
+           return;
+         }
++        if (isMouseEvent(event2) && clickedHandle.classList.contains("nodeHandle")) onPointerMove(event2);
+         if ((closestHandle || handleDomNode) && connection && isValid) {
+           if (!onEdgeUpdate) {
+             emits.connect(connection);
+@@ -8286,6 +8312,8 @@ const _sfc_main$a = /* @__PURE__ */ defineComponent({
        selectionStarted = true;
        selectionInProgress = false;
        removeSelectedElements();

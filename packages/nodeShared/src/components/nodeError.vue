@@ -95,6 +95,20 @@ async function explainError() {
 .nodeErrorNotification {
   width: min(440px, calc(100vw - 32px));
 
+  .el-notification__closeBtn {
+    top: 6px;
+    right: 6px;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    color: var(--el-text-color-regular);
+
+    svg { width: 18px; height: 18px; }
+    &:hover { background: var(--el-fill-color); color: var(--el-text-color-primary); }
+  }
+
+  .el-notification__title { padding-right: 28px; }
+
   .el-notification__group {
     min-width: 0;
     flex: 1;
