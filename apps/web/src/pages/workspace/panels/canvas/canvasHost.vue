@@ -48,7 +48,7 @@ const lifetime = new AbortController();
 const workspaceStore = useWorkspaceStore();
 const pendingUpload = providePluginUpload();
 const canvases = shallowRef<{ id: string; name: string }[]>([]);
-let fileActionBusy = false;
+const fileActionBusy = ref(false);
 provide("canvasList", canvases);
 provide("canvasFolders", shallowRef([]));
 provide("canvasLoadedDirectories", shallowRef<string[]>([]));
@@ -122,12 +122,12 @@ async function ensureCanvas(fileName: string, signal?: AbortSignal, activate = f
 }
 
 async function activateCanvas(fileName: string, signal?: AbortSignal) {
-  if (fileActionBusy) throw new Error("工作区文件正在操作，请稍后重试");
+  if (fileActionBusy.value) throw new Error("工作区文件正在操作，请稍后重试");
   await ensureCanvas(fileName, signal, true);
 }
 
 async function focusDocumentNode(directory: string, canvasPath: string, nodeId: string) {
-  if (fileActionBusy) throw new Error("工作区文件正在操作，请稍后重试");
+  if (fileActionBusy.value) throw new Error("工作区文件正在操作，请稍后重试");
   checkDirectory(directory);
   const panel = await ensureCanvas(canvasPath, undefined, true);
   checkDirectory(directory);
@@ -144,7 +144,7 @@ async function focusDocumentNode(directory: string, canvasPath: string, nodeId: 
 }
 
 async function mountDocumentNode(directory: string, canvasPath: string, nodeId: string, target: HTMLElement) {
-  if (fileActionBusy) throw new Error("工作区文件正在操作，请稍后重试");
+  if (fileActionBusy.value) throw new Error("工作区文件正在操作，请稍后重试");
   if (!directory || workspaceStore.project?.directory !== directory) throw new Error("工作目录已切换，请重新打开节点");
   const panel = await ensureCanvas(canvasPath);
   if (workspaceStore.project?.directory !== directory) throw new Error("工作目录已切换，请重新打开节点");
@@ -152,7 +152,7 @@ async function mountDocumentNode(directory: string, canvasPath: string, nodeId: 
 }
 
 async function observeDocumentNode(directory: string, canvasPath: string, nodeId: string, onState: (state: NodeDocumentState) => void) {
-  if (fileActionBusy) throw new Error("工作区文件正在操作，请稍后重试");
+  if (fileActionBusy.value) throw new Error("工作区文件正在操作，请稍后重试");
   checkDirectory(directory);
   const panel = await ensureCanvas(canvasPath);
   checkDirectory(directory);
@@ -256,7 +256,7 @@ function checkNodeResources(path: string) {
 
 async function performFileAction(directory: string, action: "copy" | "rename" | "move" | "mkdir" | "delete", path: string, target?: string, nodeId?: string) {
   checkDirectory(directory);
-  if (fileActionBusy) throw new Error("工作区文件正在操作，请稍后重试");
+  if (fileActionBusy.value) throw new Error("工作区文件正在操作，请稍后重试");
   path = relativePath(path);
   if (!["copy", "rename", "move", "mkdir", "delete"].includes(action)) throw new Error("不支持的文件操作");
   if (nodeId && action !== "delete") throw new Error("此操作不支持画布节点");
@@ -266,7 +266,7 @@ async function performFileAction(directory: string, action: "copy" | "rename" | 
     if (target === path) return;
   }
   if (target) target = relativePath(target);
-  fileActionBusy = true;
+  fileActionBusy.value = true;
   try {
     if (nodeId) {
       const panel = await ensureCanvas(path);
@@ -338,11 +338,11 @@ async function performFileAction(directory: string, action: "copy" | "rename" | 
         await nextTick();
       }
     });
-  } finally { fileActionBusy = false; }
+  } finally { fileActionBusy.value = false; }
 }
 
 async function readDocumentNode(...args: Parameters<CanvasInstance["readDocumentNode"]>) {
-  if (fileActionBusy) throw new Error("工作区文件正在操作，请稍后重试");
+  if (fileActionBusy.value) throw new Error("工作区文件正在操作，请稍后重试");
   checkDirectory(args[0]);
   const instance = await ensureCanvas(args[1]);
   checkDirectory(args[0]);
@@ -351,7 +351,7 @@ async function readDocumentNode(...args: Parameters<CanvasInstance["readDocument
 }
 
 async function saveDocumentNode(...args: Parameters<CanvasInstance["saveDocumentNode"]>) {
-  if (fileActionBusy) throw new Error("工作区文件正在操作，请稍后重试");
+  if (fileActionBusy.value) throw new Error("工作区文件正在操作，请稍后重试");
   checkDirectory(args[0]);
   const instance = await ensureCanvas(args[1]);
   checkDirectory(args[0]);
@@ -410,8 +410,14 @@ const mentionSource: MentionCanvasSource = {
 defineExpose({ canvasId, canvasReady, canvasListReady, getCanvasContext, readDocumentNode, readDocumentNodes, focusDocumentNode, saveDocumentNode, mountDocumentNode, observeDocumentNode, resolveDocumentNodeFile, performFileAction, flushSave, cancelSave,
   addNodeAtPointer: () => activeInstance.value?.addNodeAtPointer(),
   openNodeSearch: () => activeInstance.value?.openNodeSearch(),
+  get canUndo() { return !fileActionBusy.value && !!activeInstance.value?.canUndo; },
+  get canRedo() { return !fileActionBusy.value && !!activeInstance.value?.canRedo; },
+  changeHistory: (direction: "undo" | "redo") => {
+    if (!props.active || props.settingsVisible || fileActionBusy.value || !activeInstance.value?.canvasReady) return;
+    return activeInstance.value.changeHistory(direction);
+  },
   mentionSource,
-  get saveBusy() { return fileActionBusy || [...instances.values()].some(panel => panel.saveBusy); },
+  get saveBusy() { return fileActionBusy.value || [...instances.values()].some(panel => panel.saveBusy); },
 });
 </script>
 

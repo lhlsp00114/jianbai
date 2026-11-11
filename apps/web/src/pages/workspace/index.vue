@@ -59,6 +59,21 @@
                 <icon-search :size="18" aria-hidden="true" />
               </el-button>
             </el-tooltip>
+            <el-tooltip :content="appearanceLabel" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+              <el-button class="toolButton" text :aria-label="appearanceLabel" @click="updateUiSettings({ theme: appearanceDark ? 'light' : 'dark' })">
+                <component :is="appearanceDark ? IconMoon : IconSun" :size="18" aria-hidden="true" />
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="['撤销', shortcutLabel(generalSettings.canvasShortcuts.undo)].filter(Boolean).join(' · ')" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+              <el-button class="toolButton" text data-canvas-history :disabled="!canvasPanelRef?.canvasReady || (!textHistory && !canvasPanelRef?.canUndo) || historyBusy || settingsVisible" aria-label="撤销" @mousedown.prevent @click="changeHistory('undo')">
+                <icon-arrow-back-up :size="18" aria-hidden="true" />
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="['重做', shortcutLabel(generalSettings.canvasShortcuts.redo)].filter(Boolean).join(' · ')" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+              <el-button class="toolButton" text data-canvas-history :disabled="!canvasPanelRef?.canvasReady || (!textHistory && !canvasPanelRef?.canRedo) || historyBusy || settingsVisible" aria-label="重做" @mousedown.prevent @click="changeHistory('redo')">
+                <icon-arrow-forward-up :size="18" aria-hidden="true" />
+              </el-button>
+            </el-tooltip>
             <el-tooltip :showArrow="false" content="帮助" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]" :disabled="helpVisible">
               <span class="toolTrigger">
                 <el-popover v-model:visible="helpVisible" trigger="click" placement="top-end" :width="196">
@@ -134,12 +149,16 @@ import { translate } from "@toonflow/i18n/vue";
 import { computed, defineAsyncComponent, nextTick, onMounted, onScopeDispose, provide, ref, shallowRef, watch, type ComponentPublicInstance } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import axios from "axios";
-import { IconVector, IconFileText, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase } from "@tabler/icons-vue";
+import { IconVector, IconFileText, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase, IconSun, IconMoon, IconArrowBackUp, IconArrowForwardUp } from "@tabler/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { QRCode } from "tdesign-vue-next";
 import type { AgentMention } from "@toonflow/server/agent/types";
 import settings from "@/components/settings/index.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { generalSettings, updateUiSettings } from "@/stores/settings";
+import { shortcutLabel } from "@/lib/canvasShortcuts";
+import { appearanceDark } from "@/lib/appearance";
+import type { CanvasTextHistory } from "@toonflow/node-shared/canvasTextHistory";
 import { registerWorkspaceControl, waitForControlValue } from "@/lib/mcpControl";
 import anonymousData from "@/lib/anonymousData";
 import { useProviderBalances } from "@/lib/providerBilling";
@@ -152,6 +171,32 @@ const documentPanel = defineAsyncComponent(() => import("./panels/document/index
 
 const activePanel = ref<"canvas" | "document">("canvas");
 const selectedTool = ref<"move" | "hand">("move");
+const appearanceLabel = computed(() => appearanceDark.value ? "深色模式，点击切换为浅色模式" : "浅色模式，点击切换为深色模式");
+const textHistory = shallowRef<CanvasTextHistory>();
+const historyBusy = ref(false);
+provide("canvasTextHistory", textHistory);
+
+function clearTextHistory(event: Event) {
+  if (!(event.target instanceof Element) || event.target.closest("[data-canvas-history]")) return;
+  if (!textHistory.value?.element.contains(event.target)) textHistory.value = undefined;
+}
+
+async function changeHistory(direction: "undo" | "redo") {
+  if (historyBusy.value || settingsVisible.value || activePanel.value !== "canvas") return;
+  const editing = textHistory.value;
+  // 编辑器内部没有更多历史时也不回退到画布撤销，避免误移动或移除节点。
+  if (editing && (!editing.element.isConnected || !editing.element.getClientRects().length)) {
+    textHistory.value = undefined;
+    return;
+  }
+  historyBusy.value = true;
+  try {
+    if (editing) await editing.change(direction);
+    else await canvasPanelRef.value?.changeHistory(direction);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "恢复编辑内容失败");
+  } finally { historyBusy.value = false; }
+}
 const sideButtonEvents = ["mousedown", "mouseup", "auxclick"] as const;
 // 鼠标侧键会直接触发原生历史导航，需在 DOM 事件阶段拦截，避免生成中的工作区被误关闭。
 function preventSideButtonNavigation(event: MouseEvent) {
@@ -159,9 +204,13 @@ function preventSideButtonNavigation(event: MouseEvent) {
 }
 onMounted(() => {
   anonymousData.track("workspace.canvas");
+  document.addEventListener("pointerdown", clearTextHistory, true);
+  document.addEventListener("focusin", clearTextHistory, true);
   for (const eventName of sideButtonEvents) window.addEventListener(eventName, preventSideButtonNavigation, true);
 });
 onScopeDispose(() => {
+  document.removeEventListener("pointerdown", clearTextHistory, true);
+  document.removeEventListener("focusin", clearTextHistory, true);
   for (const eventName of sideButtonEvents) window.removeEventListener(eventName, preventSideButtonNavigation, true);
 });
 const workspaceStore = useWorkspaceStore();
@@ -197,6 +246,9 @@ function showContact(type: "community" | "business") {
 }
 const canvasPanelRef = ref<InstanceType<typeof canvasPanel>>();
 const floatingAgentRef = ref<InstanceType<typeof floatingAgent>>();
+watch([activePanel, () => workspaceStore.project?.directory, () => canvasPanelRef.value?.canvasId], () => {
+  textHistory.value = undefined;
+}, { flush: "sync" });
 watch(() => canvasPanelRef.value?.canvasListReady, ready => {
   workspaceStore.projectLoading = !ready;
 }, { immediate: true });
@@ -384,18 +436,6 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
   width: 100%;
   height: 100dvh;
   background-color: var(--el-bg-color);
-
-  :deep(.workspaceMenu > .el-card),
-  :deep(.canvasMenu),
-  :deep(.balanceCard),
-  :deep(.canvasControlsCard),
-  .panelSwitcher,
-  .toolMenu {
-    background: color-mix(in srgb, var(--el-bg-color-overlay) 70%, transparent);
-    backdrop-filter: blur(6px);
-    border-color: var(--el-border-color-light);
-    box-shadow: var(--el-box-shadow-light);
-  }
 
   .canvasPanel {
     position: absolute;

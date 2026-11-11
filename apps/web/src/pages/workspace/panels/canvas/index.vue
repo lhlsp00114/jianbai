@@ -64,7 +64,7 @@
           :error="nodeErrors[type]"
           :loading="nodeLoads.has(type) || (nodeListLoading && !nodeTypes[type] && !nodeErrors[type])" />
       </template>
-      <background v-if="canvasId" :gap="16" patternColor="var(--el-border-color)" />
+      <background v-if="canvasId" :gap="16" patternColor="var(--el-border-color)" :style="{ width: 'calc(100% + var(--agentWidth, 0px))' }" />
       <div v-if="!canvasId" class="canvasOverlay" role="status" @contextmenu.prevent @dragover.prevent @drop.prevent>
         从左上角打开一个画布，就可以开始创作啦
       </div>
@@ -515,6 +515,7 @@ provide("nodePersistence", () => {
   };
 });
 defineExpose({ canvasId, canvasReady, getCanvasContext, addNodeAtPointer, readDocumentNode, saveDocumentNode, mountDocumentNode, observeDocumentNode, prepareCanvasDelete, flushSave: flushCanvasSave, cancelSave: cancelCanvasSave,
+  canUndo, canRedo, changeHistory,
   openNodeSearch: () => nodeSearchRef.value?.open(),
   getCanvases: (signal?: AbortSignal) => {
     if (!canvasMenuRef.value) throw new Error("画布菜单尚未就绪");
@@ -1567,8 +1568,6 @@ const defaultEdgeOptions = markRaw({
     padding: 6px;
     border: 1px solid var(--el-border-color-light);
     border-radius: calc(var(--ui-radius) * 2.25);
-    background: color-mix(in srgb, var(--el-bg-color-overlay) 94%, transparent);
-    box-shadow: 0 4px 16px rgb(0 0 0 / 14%);
 
     &:not(:has(.sideToolButton)) { display: none; }
 
@@ -1621,6 +1620,15 @@ const defaultEdgeOptions = markRaw({
     }
 
     :deep(.menuEntries) { max-height: min(480px, calc(100dvh - 100px)); overflow-y: auto; }
+  }
+
+  // 仅延伸绘制层至停靠面板背后；保留 Vue Flow 容器宽度，让聚焦仍避开 Agent。
+  > :deep(.vue-flow) {
+    overflow: visible;
+
+    > .vue-flow__viewport {
+      width: calc(100% + var(--agentWidth, 0px));
+    }
   }
 
   &.canvasUnselected :deep(.vue-flow__viewport) {

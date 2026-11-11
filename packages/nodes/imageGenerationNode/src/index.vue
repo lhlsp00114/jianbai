@@ -4,6 +4,8 @@
     v-model:bottomVisible="node.selected"
     :topVisible="node.selected"
     topWidth="max-content"
+    contentPadding="2px"
+    selectionFrame
     toolbarAction="focus"
     :downloadUrl="previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
@@ -12,17 +14,18 @@
     :style="nodePreviewStyle">
     <template v-if="imageResolution" #titleMeta><span :title="`${imageResolution} 像素`" :aria-label="`图片分辨率：${imageResolution}`">{{ imageResolution }}</span></template>
     <template #contextActions><eagleMenuItem :file="outputFile" /></template>
-    <template v-if="editor?.mode" #top><div ref="paintToolbar" /></template>
+    <template v-if="editor?.mode && editor.mode !== 'smartEdit'" #top><div ref="paintToolbar" /></template>
     <template #topActions>
+      <el-button :icon="IconSparkles" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || panorama?.busy || !previewUrl" text title="智能改图" aria-label="智能改图" @click.stop="startEditor('smartEdit')">智能改图</el-button>
       <el-button class="panoramaButton" :icon="IconPanoramaHorizontal" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || panorama?.busy || !previewUrl" text title="全景图" aria-label="全景图" @click.stop="panorama?.open($event)">全景图<icon-chevron-down class="menuChevron" :size="14" /></el-button>
       <el-button :icon="IconBrush" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="局部重绘" aria-label="局部重绘" @click.stop="startEditor('inpaint')">局部重绘</el-button>
       <el-button :icon="IconSun" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="打光" aria-label="打光" @click.stop="openLighting">打光</el-button>
       <el-button :icon="IconCameraRotate" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="多角度" aria-label="多角度" @click.stop="openMultiAngle">多角度</el-button>
       <el-button :icon="IconLayoutGrid" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl" :loading="gridSplit?.splitting" text title="宫格切分" aria-label="宫格切分" @click.stop="gridSplit?.open($event)">宫格切分</el-button>
       <el-button :icon="IconTransfer" :loading="uploading" :disabled="generating || deleting || lighting?.generating || multiAngle?.generating || panorama?.busy" text title="替换图片" aria-label="替换图片" @click.stop="fileInput?.click()">替换图片</el-button>
+      <imageEditMenu :loading="creatingRotation" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" @rotate="createRotation(outputFile)" @crop="startEditor('crop')" @color="startEditor('color')" />
     </template>
     <template #topRightActions>
-      <el-button :icon="IconRotateClockwise" :loading="creatingRotation" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="旋转与镜像" aria-label="旋转与镜像" @click.stop="createRotation(outputFile)" />
       <el-button :icon="IconPencil" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="标记" aria-label="标记" @click.stop="startEditor('mark')" />
     </template>
     <div v-loading="generating || uploading" class="imageContent nopan" :aria-busy="generating || uploading">
@@ -31,7 +34,7 @@
         v-if="previewUrl"
         ref="editor"
         :src="previewUrl"
-        :toolbarTarget="paintToolbar"
+        :toolbarTarget="editor?.mode === 'smartEdit' ? smartEditToolbar : paintToolbar"
         :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy"
         alt="生成图片"
         @preview="previewVisible = true"
@@ -54,9 +57,13 @@
         @select="outputs.image = { dataType: 'IMAGE', value: $event }"
         @upload="fileInput?.click()" />
     </div>
-    <template v-if="editor?.mode !== 'mark'" #bottom>
+    <template v-if="editor?.mode !== 'mark' && editor?.mode !== 'crop' && editor?.mode !== 'color'" #bottom>
       <div v-if="lightingVisible" ref="lightingTarget" />
       <div v-else-if="multiAngleVisible" ref="multiAngleTarget" />
+      <div v-else-if="editor?.mode === 'smartEdit'" class="smartEditArea">
+        <div ref="smartEditToolbar" />
+        <imageSmartEdit :editor="editor" :settings="{ model: data.model ?? '', size: data.size ?? '', ratio: data.ratio ?? '' }" :disabled="generating || deleting || uploading" />
+      </div>
       <generationPromptPanel v-else>
         <el-card class="promptCard" shadow="never" :bodyStyle="{ padding: '14px 16px 12px' }">
           <referenceActions :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" :disabled="generating || deleting || uploading || editor?.busy" />
@@ -120,7 +127,7 @@
 import taskRecovery from "@toonflow/node-shared/taskRecovery";
 import { computed, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch } from "vue";
 import { ElButton, ElCard, ElLoading, ElImageViewer } from "element-plus";
-import { IconCheck, IconPhotoAi, IconPhoto, IconArrowUp, IconPlayerStop, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconRotateClockwise } from "@tabler/icons-vue";
+import { IconCheck, IconPhotoAi, IconPhoto, IconArrowUp, IconPlayerStop, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconSparkles } from "@tabler/icons-vue";
 import { findNodeModel, getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, z, type NodeMediaModel, type NodeImageRequest, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
 import { readLastNodeModel, rememberNodeModel } from "@toonflow/node-shared/modelPreference";
@@ -139,7 +146,9 @@ import mediaHistory from "@toonflow/node-shared/mediaHistory";
 import mediaPrice from "@toonflow/node-shared/mediaPrice";
 import imageGridSplit from "@toonflow/node-image/imageGridSplit";
 import imageEditor from "@toonflow/node-image/imageEditor";
+import imageSmartEdit from "@toonflow/node-image/imageSmartEdit";
 import { useImageRotation } from "@toonflow/node-image/useImageRotation";
+import imageEditMenu from "@toonflow/node-image/imageEditMenu";
 import { buildInpaintRequest, useImageInpaint, type ImageInpaint } from "@toonflow/node-image/imageInpaint";
 import imageLighting from "@toonflow/node-image/imageLighting";
 import imagePanorama from "@toonflow/node-image/imagePanorama";
@@ -190,6 +199,7 @@ let disposed = false;
 const deleting = ref(false);
 const previewVisible = ref(false);
 const inpaintPreviewVisible = ref(false);
+const smartEditToolbar = ref<HTMLElement>();
 const imageWidth = ref(0);
 const imageResolution = ref("");
 let generationController: AbortController | undefined;
@@ -247,16 +257,8 @@ const priceInput = computed(() => {
 });
 const outputFile = computed(() => outputs.value.image?.dataType === "IMAGE" ? outputs.value.image.value : undefined);
 watch([outputFile, () => data.value.inpaint?.guide], () => { imageResolution.value = ""; }, { flush: "sync" });
-const emptyPreviewSize = computed(() => {
-  const parts = data.value.ratio.split(":").map(Number);
-  const ratio = parts.length === 2 && parts.every(value => Number.isFinite(value) && value > 0) ? parts[0]! / parts[1]! : 16 / 9;
-  const width = Math.min(240 * Math.max(ratio, 1), 480);
-  const height = Math.min(width / ratio, 480);
-  return { width: height * ratio, height };
-});
 const nodePreviewStyle = computed(() => ({
-  width: outputFile.value || data.value.inpaint?.guide ? (imageWidth.value ? `${imageWidth.value + 18}px` : undefined) : `${emptyPreviewSize.value.width + 18}px`,
-  "--emptyImageHeight": `${emptyPreviewSize.value.height}px`,
+  width: outputFile.value || data.value.inpaint?.guide ? (imageWidth.value ? `${imageWidth.value + 6}px` : undefined) : undefined,
 }));
 watch(() => data.value.ratio, async () => {
   if (outputFile.value || data.value.inpaint?.guide) return;
@@ -365,6 +367,7 @@ async function startGeneration() {
   if (lightingVisible.value) throw new Error("请先退出打光，再启动图片生成");
   if (multiAngleVisible.value) throw new Error("请先退出多角度，再启动图片生成");
   if (editor.value?.busy || editor.value?.mode === "mark") throw new Error("请先完成图片标记");
+  if (editor.value?.mode === "crop") throw new Error("请先确认或退出图片裁剪");
   if (editor.value?.mode === "inpaint") throw new Error("请先确认局部重绘，再到子节点生成");
   if (pendingRecovery.value) {
     generation = generationState.resume().catch(error => showNodeError(error, "图片任务复查失败"));
@@ -401,9 +404,10 @@ async function startGeneration() {
 }
 
 nodeEvent.on("save", (reason) => {
-  if (reason === "reload" && (generating.value || uploading.value || deleting.value || editor.value?.busy || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy)) throw new Error("图片处理中，请完成后再刷新节点");
+  if (reason === "reload" && (editor.value?.mode === "smartEdit" || generating.value || uploading.value || deleting.value || editor.value?.busy || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy)) throw new Error("图片处理中，请完成后再刷新节点");
 });
 nodeEvent.on("delete", async () => {
+  if (editor.value?.mode === "smartEdit") throw new Error("请先退出智能改图，再删除图片生成节点");
   if (uploading.value || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy || (editor.value?.busy && !generating.value)) throw new Error("图片处理中，请稍后删除节点");
   deleting.value = true;
   try {
@@ -444,7 +448,7 @@ function openMultiAngle() {
   multiAngleVisible.value = true;
 }
 
-function startEditor(mode: "inpaint" | "mark") {
+function startEditor(mode: "inpaint" | "mark" | "smartEdit" | "crop" | "color") {
   if (generating.value || deleting.value || uploading.value || editor.value?.busy || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy || gridSplit.value?.splitting) return;
   lightingVisible.value = false;
   multiAngleVisible.value = false;
@@ -570,7 +574,7 @@ nodeTools.register({
     display: grid;
     place-items: center;
     width: 100%;
-    height: var(--emptyImageHeight, 144px);
+    height: 144px;
     min-height: 144px;
     color: var(--el-text-color-placeholder);
   }
@@ -641,4 +645,6 @@ nodeTools.register({
     }
   }
 }
+
+.smartEditArea { display: grid; justify-items: center; gap: 8px; }
 </style>

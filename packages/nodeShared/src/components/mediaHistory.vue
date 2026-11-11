@@ -5,7 +5,7 @@
     </template>
     <div class="replaceMenu nodrag nopan nowheel" role="group" aria-label="替换素材来源" @pointerdown.stop @mousedown.stop @click.stop @dblclick.stop @keydown.stop @wheel.stop>
       <el-button :icon="IconUpload" :disabled="disabled" text @click="replaceVisible = false; emit('upload')">本地上传</el-button>
-      <el-button :icon="IconPhoto" :disabled="disabled" text @click="replaceVisible = false; canvasVisible = true">画布图片</el-button>
+      <el-button :icon="IconPhoto" :disabled="disabled" text @click="replaceVisible = false; canvasVisible = true">画布{{ mediaLabel }}</el-button>
     </div>
   </el-popover>
   <el-popover v-if="inline" ref="historyPopover" v-model:visible="visible" trigger="click" placement="right-start" :appendTo="historyTarget" :width="280" :disabled="disabled" :showArrow="false" :persistent="false" :popperStyle="{ padding: '12px', maxWidth: 'calc(100vw - 24px)' }">
@@ -35,19 +35,20 @@
     </section>
   </el-popover>
   <el-button v-else :icon="IconHistory" :disabled="disabled" text title="历史记录" aria-label="历史记录" @click.stop="visible = true">历史记录</el-button>
-  <el-dialog v-if="inline && replaceable" v-model="canvasVisible" title="选择画布图片" width="min(620px, calc(100vw - 32px))" appendToBody destroyOnClose>
+  <el-dialog v-if="inline && replaceable" v-model="canvasVisible" :title="`选择画布${mediaLabel}`" width="min(620px, calc(100vw - 32px))" appendToBody destroyOnClose>
     <div class="canvasImagePicker nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @click.stop @dblclick.stop @keydown.stop>
       <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" />
-      <el-empty v-if="!canvasImages.length" description="画布中暂无其它可用图片" />
+      <el-empty v-if="!canvasMedia.length" :description="`画布中暂无其它可用${mediaLabel}`" />
       <div v-else class="canvasImageGrid">
-        <button v-for="item in canvasPageItems" :key="item.key" type="button" class="canvasImageItem" :disabled="disabled || (!!selected && !previewError)" :title="item.name" :aria-label="`使用画布图片：${item.name}`" @click="item.file.url === currentUrl ? canvasVisible = false : chooseMedia(item.file)">
-          <promptReferenceThumbnail class="canvasThumbnail" dataType="IMAGE" :media="item.file" />
+        <button v-for="item in canvasPageItems" :key="item.key" type="button" class="canvasImageItem" :disabled="disabled || (!!selected && !previewError)" :title="item.name" :aria-label="`使用画布${mediaLabel}：${item.name}`" @click="item.file.url === currentUrl ? canvasVisible = false : chooseMedia(item.file)">
+          <promptReferenceThumbnail class="canvasThumbnail" :dataType="mediaType === 'video' ? 'VIDEO' : 'IMAGE'" :media="item.file" />
           <span class="canvasImageName">{{ item.name }}</span>
-          <span v-if="item.file.url === currentUrl" class="canvasCurrent">当前图片</span>
+          <span v-if="item.file.url === currentUrl" class="canvasCurrent">当前{{ mediaLabel }}</span>
         </button>
       </div>
-      <el-pagination v-model:currentPage="canvasPage" :pageSize="pageSize" :total="canvasImages.length" layout="prev, pager, next" hideOnSinglePage />
-      <img v-if="mediaSrc && selected" class="pendingPreview" :src="mediaSrc" alt="" aria-hidden="true" @load="readPreview" @error="previewFailed" />
+      <el-pagination v-model:currentPage="canvasPage" :pageSize="pageSize" :total="canvasMedia.length" layout="prev, pager, next" hideOnSinglePage />
+      <img v-if="mediaSrc && selected && mediaType === 'image'" class="pendingPreview" :src="mediaSrc" alt="" aria-hidden="true" @load="readPreview" @error="previewFailed" />
+      <video v-else-if="mediaSrc && selected" class="pendingPreview" :src="mediaSrc" muted playsinline preload="auto" aria-hidden="true" @loadeddata="readPreview" @error="previewFailed" />
     </div>
   </el-dialog>
   <el-image-viewer v-if="mediaType === 'image' && viewerVisible && mediaSrc" :urlList="[mediaSrc]" teleported @close="viewerVisible = false; selected = undefined" />
@@ -136,10 +137,10 @@ const currentUrl = computed(() => props.current?.url.replaceAll("\\", "/"));
 const selected = ref<NodeMediaValue>();
 const page = ref(1);
 const pageSize = 20;
-const canvasImages = computed(() => !canvasVisible.value ? [] : getNodes.value.flatMap(source => source.id === id ? [] :
-  Object.entries(source.data.outputs ?? {}).flatMap(([handle, output]) => isNodeOutput(output) && output.dataType === "IMAGE"
-    ? [{ key: `${source.id}:${handle}`, name: String(source.data.label || "图片"), file: { ...output.value, url: output.value.url.replaceAll("\\", "/") } }] : [])));
-const canvasPageItems = computed(() => canvasImages.value.slice((canvasPage.value - 1) * pageSize, canvasPage.value * pageSize));
+const canvasMedia = computed(() => !canvasVisible.value ? [] : getNodes.value.flatMap(source => source.id === id ? [] :
+  Object.entries(source.data.outputs ?? {}).flatMap(([handle, output]) => isNodeOutput(output) && output.dataType === (props.mediaType === "video" ? "VIDEO" : "IMAGE")
+    ? [{ key: `${source.id}:${handle}`, name: String(source.data.label || mediaLabel.value), file: { ...output.value, url: output.value.url.replaceAll("\\", "/") } }] : [])));
+const canvasPageItems = computed(() => canvasMedia.value.slice((canvasPage.value - 1) * pageSize, canvasPage.value * pageSize));
 const pageItems = computed(() => items.value.slice((page.value - 1) * pageSize, page.value * pageSize));
 const previewFile = computed(() => visible.value || viewerVisible.value || canvasVisible.value ? selected.value : undefined);
 watch(previewFile, () => { previewReadError.value = ""; }, { flush: "sync" });
@@ -234,10 +235,11 @@ function selectOutput() {
   top: 6px;
   right: 6px;
   z-index: 2;
-  width: 28px;
-  height: 28px;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
   margin: 0;
-  padding: 6px;
+  padding: 3px;
   border-radius: 6px;
   --el-button-bg-color: rgb(20 22 27 / 78%);
   --el-button-border-color: rgb(255 255 255 / 20%);
@@ -246,8 +248,8 @@ function selectOutput() {
   --el-button-hover-border-color: rgb(255 255 255 / 45%);
   --el-button-hover-text-color: #fff;
 
-  &::before { content: ""; position: absolute; inset: -2px; border-radius: 8px; }
-  &.replaceTrigger { right: 40px; }
+  &::before { content: ""; position: absolute; inset: -3px; border-radius: 8px; }
+  &.replaceTrigger { right: 34px; }
 }
 
 .replaceMenu {

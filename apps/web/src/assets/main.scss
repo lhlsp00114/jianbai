@@ -46,6 +46,24 @@ body,
   box-sizing: border-box;
 }
 
+.workspacePage :is(
+  .workspaceMenu > .el-card,
+  .canvasMenu,
+  .balanceCard,
+  .canvasControlsCard,
+  .panelSwitcher,
+  .toolMenu,
+  .sideToolbar,
+  .selectionToolbar,
+  .nodeSkeleton:not(.documentNode) :is(.mediaToolbar, .paintToolbar, .cropToolbar, .rotationToolbar)
+),
+.floatingAgent {
+  background: color-mix(in srgb, var(--el-bg-color-overlay) 70%, transparent);
+  backdrop-filter: blur(6px);
+  border-color: var(--el-border-color-light);
+  box-shadow: var(--el-box-shadow-light);
+}
+
 .stream-markdown [data-stream-markdown="tooltip"] {
   z-index: var(--markdown-tooltip-z-index);
 }

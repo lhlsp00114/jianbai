@@ -25,7 +25,7 @@ if not exist "build\web\index.html" (
   echo No frontend build found. Run this launcher again and choose 2.
   goto failed
 )
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest 'http://localhost:3000/' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200 -and $r.Content.Contains('<title>Toonflow</title>')) { exit 0 } } catch {}; exit 1"
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest 'http://localhost:3000/' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200 -and $r.Content -match 'id=.app.' -and $r.Content.Contains('/assets/index-')) { exit 0 } } catch {}; exit 1"
 if not errorlevel 1 goto browser
 powershell -NoProfile -Command "$port = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; if ($port) { exit 1 }; exit 0"
 if errorlevel 1 (
@@ -34,7 +34,7 @@ if errorlevel 1 (
   goto failed
 )
 start "Toonflow Preview Backend" "%ComSpec%" /d /k "bun run dev:server"
-powershell -NoProfile -Command "$deadline = (Get-Date).AddSeconds(60); while ((Get-Date) -lt $deadline) { try { $r = Invoke-WebRequest 'http://localhost:3000/' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200 -and $r.Content.Contains('<title>Toonflow</title>')) { exit 0 } } catch {}; Start-Sleep -Seconds 1 }; exit 1"
+powershell -NoProfile -Command "$deadline = (Get-Date).AddSeconds(60); while ((Get-Date) -lt $deadline) { try { $r = Invoke-WebRequest 'http://localhost:3000/' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200 -and $r.Content -match 'id=.app.' -and $r.Content.Contains('/assets/index-')) { exit 0 } } catch {}; Start-Sleep -Seconds 1 }; exit 1"
 if errorlevel 1 goto failed
 
 :browser

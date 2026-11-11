@@ -2,17 +2,20 @@
   <nodeSkeleton
     v-bind="nodeProps"
     :topVisible="node.selected"
-    :bottomVisible="node.selected && (lightingVisible || multiAngleVisible || editor?.mode === 'inpaint')"
+    :bottomVisible="node.selected && (lightingVisible || multiAngleVisible || editor?.mode === 'inpaint' || editor?.mode === 'smartEdit')"
     :bottomWidth="660"
+    contentPadding="2px"
+    selectionFrame
     topWidth="max-content"
     toolbarAction="focus"
     :downloadUrl="previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
     @fullscreen="previewVisible = true"
-    :style="{ width: previewUrl && imageWidth ? `${imageWidth + 18}px` : undefined }">
+    :style="{ width: previewUrl && imageWidth ? `${imageWidth + 6}px` : undefined }">
     <template v-if="imageResolution" #titleMeta><span :title="`${imageResolution} 像素`" :aria-label="`图片分辨率：${imageResolution}`">{{ imageResolution }}</span></template>
-    <template v-if="editor?.mode || data.rotationDraft" #top><div ref="paintToolbar" /></template>
+    <template v-if="(editor?.mode && editor.mode !== 'smartEdit') || data.rotationDraft" #top><div ref="paintToolbar" /></template>
     <template #topActions>
+      <el-button :icon="IconSparkles" :disabled="uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting || inpaintPrompt?.creating" text title="智能改图" aria-label="智能改图" @click.stop="startEditor('smartEdit')">智能改图</el-button>
       <el-button class="panoramaButton" :icon="IconPanoramaHorizontal" :disabled="uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || inpaintPrompt?.creating || panorama?.busy || !previewUrl" text title="全景图" aria-label="全景图" @click.stop="panorama?.open($event)">全景图<icon-chevron-down class="menuChevron" :size="14" /></el-button>
       <el-button :icon="IconBrush" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="局部重绘" aria-label="局部重绘" @click.stop="startEditor('inpaint')">局部重绘</el-button>
       <el-button :icon="IconSun" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="打光" aria-label="打光" @click.stop="openLighting">打光</el-button>
@@ -26,9 +29,9 @@
         title="替换图片"
         aria-label="替换图片"
         @click.stop="fileInput?.click()">替换图片</el-button>
+      <imageEditMenu :loading="creatingRotation" :disabled="uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting || inpaintPrompt?.creating" @rotate="createRotation(outputFile)" @crop="startEditor('crop')" @color="startEditor('color')" />
     </template>
     <template #topRightActions>
-      <el-button :icon="IconRotateClockwise" :loading="creatingRotation" :disabled="uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting || inpaintPrompt?.creating" text title="旋转与镜像" aria-label="旋转与镜像" @click.stop="createRotation(outputFile)" />
       <el-button :icon="IconPencil" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="标记" aria-label="标记" @click.stop="startEditor('mark')" />
     </template>
     <div class="imageContent nopan" :class="{ empty: !outputFile }">
@@ -45,7 +48,7 @@
         v-else-if="previewUrl"
         ref="editor"
         :src="previewUrl"
-        :toolbarTarget="paintToolbar"
+        :toolbarTarget="editor?.mode === 'smartEdit' ? smartEditToolbar : paintToolbar"
         :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy"
         alt="节点图片"
         @preview="previewVisible = true"
@@ -63,9 +66,13 @@
         @dblclick.stop
         @click.stop="fileInput?.click()">上传</el-button>
     </div>
-    <template v-if="lightingVisible || multiAngleVisible || editor?.mode === 'inpaint'" #bottom>
+    <template v-if="lightingVisible || multiAngleVisible || editor?.mode === 'inpaint' || editor?.mode === 'smartEdit'" #bottom>
       <div v-if="lightingVisible" ref="lightingTarget" />
       <div v-else-if="multiAngleVisible" ref="multiAngleTarget" />
+      <div v-else-if="editor?.mode === 'smartEdit'" class="smartEditArea">
+        <div ref="smartEditToolbar" />
+        <imageSmartEdit :editor="editor" :settings="{ model: data.model ?? '', size: data.size ?? '', ratio: data.ratio ?? '' }" :disabled="uploading" />
+      </div>
       <div v-else ref="inpaintTarget" />
     </template>
   </nodeSkeleton>
@@ -83,18 +90,20 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { IconPhoto, IconUpload, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconRotateClockwise } from "@tabler/icons-vue";
+import { IconPhoto, IconUpload, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconSparkles } from "@tabler/icons-vue";
 import { ElButton, ElImageViewer, ElMessage } from "element-plus";
 import { nodeSkeleton, nodeTools, useNode, uploadNodeFile, z, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
 import imageGridSplit from "./components/imageGridSplit.vue";
 import imageEditor from "./components/imageEditor.vue";
+import imageEditMenu from "./components/imageEditMenu.vue";
 import imageInpaintPrompt from "./components/imageInpaintPrompt.vue";
 import imageLighting from "./components/imageLighting.vue";
 import imagePanorama from "./components/imagePanorama.vue";
 import imageMultiAngle from "./components/imageMultiAngle.vue";
 import type { InpaintDraftInput } from "./imageInpaint";
 import imageRotation from "./components/imageRotation.vue";
+import imageSmartEdit from "./components/imageSmartEdit.vue";
 import { useImageRotation, type ImageRotation } from "./useImageRotation";
 
 defineOptions({
@@ -109,7 +118,7 @@ const { node, nodeProps, outputs, nodeEvent, files, updateNodeInternals } = useN
   label: "图片",
 });
 const fileInput = ref<HTMLInputElement>();
-const data = computed(() => node.data as { rotationDraft?: ImageRotation });
+const data = computed(() => node.data as { rotationDraft?: ImageRotation; model?: string; size?: string; ratio?: string });
 const { createRotation, creatingRotation } = useImageRotation();
 const rotationEditor = ref<InstanceType<typeof imageRotation>>();
 const gridSplit = ref<InstanceType<typeof imageGridSplit>>();
@@ -126,6 +135,7 @@ const multiAngleVisible = ref(false);
 const panorama = ref<InstanceType<typeof imagePanorama>>();
 const uploading = ref(false);
 const previewVisible = ref(false);
+const smartEditToolbar = ref<HTMLElement>();
 const imageWidth = ref(0);
 const imageResolution = ref("");
 
@@ -139,10 +149,11 @@ const imagePreviewUrl = computed(() => editor.value?.previewSrc || previewUrl.va
 
 nodeEvent.on("save", reason => {
   // ACT: 普通保存不等待打光和多角度生成，后台任务继续由原画布实例承载。
-  if (uploading.value || editor.value?.busy || rotationEditor.value?.busy || inpaintPrompt.value?.creating || panorama.value?.busy
+  if ((reason === "reload" && editor.value?.mode === "smartEdit") || uploading.value || editor.value?.busy || rotationEditor.value?.busy || inpaintPrompt.value?.creating || panorama.value?.busy
     || (reason === "reload" && (lighting.value?.generating || multiAngle.value?.generating))) throw new Error("图片处理中，请完成后再切换或刷新节点");
 });
 nodeEvent.on("delete", () => {
+  if (editor.value?.mode === "smartEdit") throw new Error("请先退出智能改图，再删除图片节点");
   if (rotationEditor.value?.busy) throw new Error("图片正在保存，请稍后删除节点");
   if (uploading.value || editor.value?.busy || inpaintPrompt.value?.creating || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy) throw new Error("图片处理中，请稍后删除节点");
   uploading.value = true;
@@ -221,7 +232,7 @@ function openMultiAngle() {
   multiAngleVisible.value = true;
 }
 
-function startEditor(mode: "inpaint" | "mark") {
+function startEditor(mode: "inpaint" | "mark" | "smartEdit" | "crop" | "color") {
   if (uploading.value || editor.value?.busy || inpaintPrompt.value?.creating || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy || gridSplit.value?.splitting) return;
   lightingVisible.value = false;
   multiAngleVisible.value = false;
@@ -238,7 +249,7 @@ async function uploadImage(event: Event) {
   const file = input.files?.[0];
   input.value = "";
   if (data.value.rotationDraft) return;
-  if (!file || uploading.value || editor.value?.busy || inpaintPrompt.value?.creating || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy) return;
+  if (!file || editor.value?.mode === "smartEdit" || uploading.value || editor.value?.busy || inpaintPrompt.value?.creating || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy) return;
   const mimeType = getMediaMimeType(file);
   if (!mimeType.startsWith("image/")) return void ElMessage.error("请选择图片文件");
   if (!file.size || file.size > 100 * 1024 * 1024) return void ElMessage.error("图片不能为空且不能超过 100 MB");
@@ -283,4 +294,6 @@ function showError(error: unknown, fallback: string) {
     display: none;
   }
 }
+
+.smartEditArea { display: grid; justify-items: center; gap: 8px; }
 </style>

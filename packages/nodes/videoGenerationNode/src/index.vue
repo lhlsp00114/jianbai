@@ -3,6 +3,8 @@
     v-bind="nodeProps"
     v-model:bottomVisible="node.selected"
     :topVisible="node.selected"
+    contentPadding="2px"
+    selectionFrame
     topWidth="max-content"
     toolbarAction="focus"
     :downloadUrl="previewUrl"
@@ -10,6 +12,7 @@
     @fullscreen="player?.enterFullscreen()"
     :bottomWidth="660"
     :style="nodePreviewStyle">
+    <template v-if="videoResolution" #titleMeta><span :title="`${videoResolution} 像素`" :aria-label="`视频分辨率：${videoResolution}`">{{ videoResolution }}</span></template>
     <template #contextActions><eagleMenuItem :file="outputFile" /></template>
     <template #topActions>
       <el-button :icon="IconMusic" text :disabled="!outputFile || generating || deleting || uploading || actions?.processing" @click.stop="actions?.open('extractAudio')">提取音轨</el-button>
@@ -41,7 +44,7 @@
       <div v-else class="videoEmpty" role="img" aria-label="暂无生成视频">
         <icon-video :size="30" stroke="1.4" aria-hidden="true" />
       </div>
-      <mediaHistory v-if="node.selected" mediaType="video" inline :current="outputFile" :disabled="generating || deleting || uploading || player?.capturing || actions?.processing" @select="outputs.video = { dataType: 'VIDEO', value: $event }" />
+      <mediaHistory v-if="node.selected" mediaType="video" inline replaceable :current="outputFile" :disabled="generating || deleting || uploading || player?.capturing || actions?.processing" @select="outputs.video = { dataType: 'VIDEO', value: $event }" @upload="fileInput?.click()" />
     </div>
     <template #bottom>
       <generationPromptPanel>
@@ -157,6 +160,7 @@ const deleting = ref(false);
 const player = ref<InstanceType<typeof videoPlayer>>();
 const actions = ref<InstanceType<typeof videoActions>>();
 const videoWidth = ref(0);
+const videoResolution = ref("");
 let generationController: AbortController | undefined;
 const generationState = useNodeGeneration(outputs, () => generationController?.abort(), { ai });
 const { generating, pendingRecovery, cancelling } = generationState;
@@ -282,16 +286,9 @@ function getGenerationInput(prompt: string): Omit<NodeVideoRequest, "directory">
   };
 }
 const outputFile = computed(() => outputs.value.video?.dataType === "VIDEO" ? outputs.value.video.value : undefined);
-const emptyPreviewSize = computed(() => {
-  const parts = data.value.ratio.split(":").map(Number);
-  const ratio = parts.length === 2 && parts.every(value => Number.isFinite(value) && value > 0) ? parts[0]! / parts[1]! : 9 / 16;
-  const width = Math.min(240 * Math.max(ratio, 1), 480);
-  const height = Math.min(width / ratio, 480);
-  return { width: height * ratio, height };
-});
+watch(outputFile, () => { videoWidth.value = 0; videoResolution.value = ""; }, { flush: "sync" });
 const nodePreviewStyle = computed(() => ({
-  width: outputFile.value ? (videoWidth.value ? `${videoWidth.value + 18}px` : undefined) : `${emptyPreviewSize.value.width + 18}px`,
-  "--emptyVideoHeight": `${emptyPreviewSize.value.height}px`,
+  width: outputFile.value ? (videoWidth.value ? `${videoWidth.value + 6}px` : undefined) : undefined,
 }));
 watch(() => data.value.ratio, async () => {
   if (outputFile.value) return;
@@ -444,7 +441,13 @@ nodeEvent.on("delete", async () => {
 async function resizeVideo(event: Event) {
   const video = event.currentTarget as HTMLVideoElement;
   if (!video.videoWidth || !video.videoHeight) return;
-  videoWidth.value = Math.max(180, (240 * video.videoWidth) / video.videoHeight);
+  videoResolution.value = `${video.videoWidth} × ${video.videoHeight}`;
+  videoWidth.value = (240 * video.videoWidth) / video.videoHeight;
+  const nodeStyle = typeof node.style === "function" ? node.style(node) : node.style;
+  const nextStyle = { ...(nodeStyle ?? {}) };
+  delete nextStyle.width;
+  delete nextStyle.height;
+  node.style = { ...nextStyle, width: `${videoWidth.value + 6}px` };
   await nextTick();
   updateNodeInternals();
 }
@@ -569,7 +572,7 @@ nodeTools.register({
     display: grid;
     place-items: center;
     width: 100%;
-    height: var(--emptyVideoHeight, 144px);
+    height: 144px;
     min-height: 144px;
     color: var(--el-text-color-placeholder);
   }

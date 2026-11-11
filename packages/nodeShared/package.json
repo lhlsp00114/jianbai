@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./canvasTextHistory": "./src/canvasTextHistory.ts",
     "./mediaPreview": "./src/mediaPreview.ts",
     "./eagleMenuItem": "./src/components/eagleMenuItem.vue",
     "./mediaTypes": "./src/mediaTypes.ts",

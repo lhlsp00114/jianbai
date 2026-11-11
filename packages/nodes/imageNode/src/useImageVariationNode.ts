@@ -28,7 +28,7 @@ export function useImageVariationNode() {
     await batchHistory(async () => {
       signal?.throwIfAborted();
       try {
-        addNodes({ id: nodeId, type, position: { x, y }, data: { label: `${node.data.label || "图片"} · ${label}`, model, size, ratio, prompt, promptModel: prompt.split("\n").map(text => [{ type: "Write", text }]), ...(input.inpaint ? { inpaint: input.inpaint } : {}) } });
+        addNodes({ id: nodeId, type, position: { x, y }, data: { label: `${node.data.label || "图片"} · ${label}`, model, size, ratio, prompt, promptModel: prompt.split("\n").map(text => [{ type: "Write", text }]), ...(input.inpaint ? { inpaint: input.inpaint, inpaintPrompt: prompt, inpaintPromptModel: prompt.split("\n").map(text => [{ type: "Write", text }]) } : {}) } });
         addEdges({ id: edgeId, source: id, sourceHandle: "image", target: nodeId, targetHandle: "in" });
       } catch (error) {
         removeNodes(nodeId, true, false);

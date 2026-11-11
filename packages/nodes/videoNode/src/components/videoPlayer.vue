@@ -1,5 +1,5 @@
 <template>
-  <div class="videoPlayer" :aria-busy="preparingPreview" title="双击全屏预览" @dblclick.stop.prevent="!fullscreen && enterFullscreen()">
+  <div class="videoPlayer" :class="{ controlsVisible }" :aria-busy="preparingPreview" title="双击全屏预览" @pointermove="revealControls" @pointerleave="hideControls" @dblclick.stop.prevent="!fullscreen && enterFullscreen()">
     <video
       ref="video"
       class="videoPreview"
@@ -15,11 +15,24 @@
       @loadedmetadata="readMetadata"
       @loadeddata="readPreview"
       @timeupdate="currentTime = video?.currentTime ?? 0"
-      @play="playing = true"
-      @pause="playing = false"
-      @ended="playing = false"
+      @play="onPlaybackStarted"
+      @pause="onPlaybackPaused"
+      @ended="onPlaybackPaused"
       @volumechange="readVolume"
       @error="mediaError" />
+    <button
+      v-if="ready && !fullscreen"
+      class="centerPlaybackButton nodrag nopan nowheel"
+      :class="{ isPaused: !playing }"
+      type="button"
+      :aria-label="playing ? '暂停视频' : '播放视频'"
+      :title="playing ? '暂停' : '播放'"
+      @pointerdown.stop
+      @mousedown.stop
+      @dblclick.stop
+      @click.stop="togglePlayback">
+      <component :is="playing ? IconPlayerPause : IconPlayerPlay" :size="21" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </button>
     <div v-if="preparingPreview || previewError" class="previewStatus" role="status">
       {{ preparingPreview ? "正在生成兼容预览…" : previewError }}
     </div>
@@ -49,7 +62,6 @@
           </el-dropdown-menu>
         </template>
       </el-dropdown>
-      <el-button class="playerButton fullscreenButton" text circle :icon="IconMaximize" :disabled="!ready" aria-label="全屏视频" title="全屏" @click="enterFullscreen" />
     </div>
   </div>
 </template>
@@ -58,7 +70,7 @@
 import { inject, onBeforeUnmount, ref, watch } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
 import { ElButton, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage, ElPopover, ElSlider } from "element-plus";
-import { IconPlayerPlay, IconPlayerPause, IconVolume, IconVolumeOff, IconPhotoScan, IconPlayerSkipBack, IconPlayerSkipForward, IconMaximize } from "@tabler/icons-vue";
+import { IconPlayerPlay, IconPlayerPause, IconVolume, IconVolumeOff, IconPhotoScan, IconPlayerSkipBack, IconPlayerSkipForward } from "@tabler/icons-vue";
 import { useNodeFiles } from "@toonflow/nodes-scaffold/workspaceFiles";
 import { useMediaPreview } from "@toonflow/node-shared/mediaPreview";
 
@@ -76,6 +88,7 @@ const currentTime = ref(0);
 const duration = ref(0);
 const capturing = ref(false);
 const captureMenuVisible = ref(false);
+const controlsVisible = ref(false);
 const { src: playbackSrc, preparing: preparingPreview, error: previewError, handleError, handleLoaded } = useMediaPreview(() => src, "video");
 // ACT: 只读预览挂载时不连接节点和工作区；从只读切换到编辑模式时重新挂载播放器。
 const node = readOnly ? undefined : useNode().node;
@@ -83,6 +96,7 @@ const flow = readOnly ? undefined : useVueFlow();
 const files = readOnly ? undefined : useNodeFiles();
 const getCanvas = inject<(() => { id: string } | undefined) | undefined>("canvas", undefined);
 let captureController: AbortController | undefined;
+let controlsHideTimer: number | undefined;
 
 watch(() => getCanvas?.()?.id, () => captureController?.abort(), { flush: "sync" });
 watch(() => readOnly, value => { if (value) captureController?.abort(); }, { flush: "sync" });
@@ -94,7 +108,34 @@ watch(playbackSrc, () => {
   currentTime.value = 0;
   duration.value = 0;
 }, { flush: "sync" });
-onBeforeUnmount(() => captureController?.abort());
+onBeforeUnmount(() => {
+  captureController?.abort();
+  window.clearTimeout(controlsHideTimer);
+});
+
+function revealControls() {
+  controlsVisible.value = true;
+  window.clearTimeout(controlsHideTimer);
+  if (playing.value) controlsHideTimer = window.setTimeout(() => { controlsVisible.value = false; }, 900);
+}
+
+function hideControls() {
+  window.clearTimeout(controlsHideTimer);
+  controlsVisible.value = false;
+}
+
+function onPlaybackStarted() {
+  playing.value = true;
+  controlsVisible.value = true;
+  window.clearTimeout(controlsHideTimer);
+  controlsHideTimer = window.setTimeout(() => { controlsVisible.value = false; }, 900);
+}
+
+function onPlaybackPaused() {
+  playing.value = false;
+  window.clearTimeout(controlsHideTimer);
+  controlsVisible.value = true;
+}
 
 async function enterFullscreen() {
   if (!video.value || !ready.value) return;
@@ -299,6 +340,35 @@ async function captureFrame(command: "current" | "first" | "last") {
     text-align: center;
     overflow: auto;
   }
+  .centerPlaybackButton {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    left: 50%;
+    display: grid;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    place-items: center;
+    border: 1px solid rgb(255 255 255 / 48%);
+    border-radius: 50%;
+    background: rgb(20 20 20 / 58%);
+    color: #fff;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -50%) scale(.96);
+    transition: opacity 140ms ease, transform 140ms ease, background-color 140ms ease;
+    backdrop-filter: blur(6px);
+
+    &:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+    &:hover { background: rgb(20 20 20 / 76%); transform: translate(-50%, -50%) scale(1); }
+  }
+  &.controlsVisible .centerPlaybackButton, .centerPlaybackButton.isPaused, .centerPlaybackButton:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+  }
   .videoPreview {
     display: block;
     width: 100%;
@@ -323,13 +393,15 @@ async function captureFrame(command: "current" | "first" | "last") {
     left: 0;
     right: 0;
     display: grid;
-    grid-template-columns: 28px auto minmax(0, 1fr) 28px 28px 28px;
-    grid-template-areas: "progress progress progress progress progress progress" "play current duration volume capture fullscreen";
+    grid-template-columns: 24px auto auto minmax(0, 1fr) 24px 24px;
+    grid-template-rows: 12px 24px;
+    grid-template-areas: "progress progress progress progress progress progress" "play current duration spacer volume capture";
     align-items: center;
-    gap: 2px 3px;
-    padding: 8px 8px 4px;
+    column-gap: 4px;
+    row-gap: 2px;
+    padding: 5px 8px 6px;
     border-radius: 0 0 var(--el-border-radius-base) var(--el-border-radius-base);
-    background: linear-gradient(transparent, color-mix(in srgb, var(--el-bg-color-overlay) 85%, transparent));
+    background: linear-gradient(180deg, transparent 0%, rgb(12 12 12 / 12%) 24%, rgb(12 12 12 / 72%) 100%);
     color: var(--el-text-color-primary);
     cursor: default;
     opacity: 0;
@@ -337,11 +409,12 @@ async function captureFrame(command: "current" | "first" | "last") {
     transition: opacity 120ms ease;
 
     .playerButton {
-      width: 28px;
-      height: 28px;
+      box-sizing: border-box;
+      width: 24px;
+      height: 24px;
       margin: 0;
       padding: 0;
-      font-size: 15px;
+      font-size: 14px;
       &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
     }
     .playButton { grid-area: play; }
@@ -350,14 +423,13 @@ async function captureFrame(command: "current" | "first" | "last") {
       .volumeButton { color: var(--el-text-color-regular); }
     }
     .captureMenu { grid-area: capture; }
-    .fullscreenButton { grid-area: fullscreen; }
     .currentTime, .durationLabel {
       white-space: nowrap;
       font-size: 10px;
       line-height: 16px;
       font-variant-numeric: tabular-nums;
     }
-    .currentTime { grid-area: current; text-align: right; }
+    .currentTime { grid-area: current; text-align: left; }
     .durationLabel {
       grid-area: duration;
       color: var(--el-text-color-secondary);
@@ -366,11 +438,11 @@ async function captureFrame(command: "current" | "first" | "last") {
     .progressSlider {
       grid-area: progress;
       min-width: 0;
-      width: calc(100% - 8px);
-      justify-self: center;
-      height: 16px;
-      --el-slider-height: 2px;
-      --el-slider-button-size: 8px;
+      width: 100%;
+      margin: 0;
+      height: 12px;
+      --el-slider-height: 3px;
+      --el-slider-button-size: 10px;
       --el-slider-button-wrapper-size: 22px;
 
       :deep(.el-slider__button-wrapper) {
@@ -381,25 +453,29 @@ async function captureFrame(command: "current" | "first" | "last") {
 
         &::after { display: none; }
       }
+      :deep(.el-slider__runway) { height: 3px; margin: 0; border-radius: 999px; background: rgb(255 255 255 / 48%) !important; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 12%); opacity: 1 !important; }
+      :deep(.el-slider__bar) { height: 3px; border-radius: 999px; background-color: var(--el-color-primary) !important; opacity: 1 !important; }
+      :deep(.el-slider__button) { width: 9px; height: 9px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
     }
 
-    @container (max-width: 230px) {
-      grid-template-columns: 28px minmax(0, 1fr) 28px 28px 28px;
-      grid-template-areas: "progress progress progress progress progress" "current current duration duration duration" "play . volume capture fullscreen";
-      .currentTime { text-align: left; }
-      .durationLabel { text-align: right; }
+    @container (max-width: 420px) {
+      grid-template-columns: 22px auto auto minmax(0, 1fr) 22px 22px;
+      column-gap: 3px;
+      padding: 5px 6px 5px;
+      .playerButton { width: 22px; height: 22px; min-width: 22px; font-size: 13px; }
+      .currentTime, .durationLabel { font-size: 9px; line-height: 14px; }
     }
-    @container (min-width: 320px) {
-      grid-template-columns: 28px auto minmax(32px, 1fr) auto 28px 28px 28px;
-      grid-template-areas: "play current progress duration volume capture fullscreen";
-      gap: 6px;
-      padding: 8px 8px 4px;
-      .currentTime, .durationLabel { font-size: 11px; }
-      .durationLabel .timeSeparator { display: none; }
+    @container (max-width: 230px) {
+      grid-template-columns: 20px auto auto minmax(0, 1fr) 20px 20px;
+      column-gap: 2px;
+      padding-right: 5px;
+      padding-left: 5px;
+      .playerButton { width: 20px; height: 20px; min-width: 20px; font-size: 12px; }
+      .currentTime, .durationLabel { font-size: 8px; }
     }
     @media (prefers-reduced-motion: reduce) { transition: none; }
   }
-  &:hover .playerControls, .playerControls:has(:focus-visible) {
+  &.controlsVisible .playerControls, .playerControls:has(:focus-visible) {
     opacity: 1;
     pointer-events: auto;
   }

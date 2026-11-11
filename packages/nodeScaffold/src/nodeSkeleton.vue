@@ -1,7 +1,7 @@
 <template>
   <div v-if="documentTarget" class="nodeDocumentPlaceholder" :style="canvasSize" aria-hidden="true" />
   <teleport :to="documentTarget ?? 'body'" :disabled="!documentTarget">
-  <div ref="skeletonElement" v-bind="$attrs" class="nodeSkeleton" :class="{ documentNode: documentTarget, resized: !!resizedStyle.height, resizing: !!resize }" :style="resizedStyle" @wheel.capture="zoomCanvas" @dblclick.stop="focusNode" @contextmenu="openMenu($event)">
+  <div ref="skeletonElement" v-bind="$attrs" class="nodeSkeleton" :class="{ documentNode: documentTarget, resized: !!resizedStyle.height, resizing: !!resize, hasTitleMeta: !!$slots.titleMeta }" :style="resizedStyle" @wheel.capture="zoomCanvas" @dblclick.stop="focusNode" @contextmenu="openMenu($event)">
     <el-dropdown
       v-if="!readOnly"
       ref="menu"
@@ -38,13 +38,6 @@
       @contextmenu.stop>
       <slot name="top">
         <el-card class="mediaToolbar" shadow="never" :bodyStyle="{ padding: '6px' }">
-          <el-button
-            :icon="IconFolderPlus"
-            :disabled="!assetOutputs.length || !saveNodeToAssets"
-            text
-            title="添加到素材库"
-            aria-label="添加到素材库"
-            @click.stop="handleCommand('saveAsset')">添加到素材库</el-button>
           <slot name="topActions" />
           <el-divider direction="vertical" />
           <slot name="topRightActions" />
@@ -107,26 +100,28 @@
         @keydown.enter.stop.prevent="editLabel">
         {{ label }}
       </span>
-      <div v-if="$slots.titleMeta" class="titleMeta"><slot name="titleMeta" /></div>
-      <div v-if="!readOnly" class="nodeActions nodrag nopan" @pointerdown.stop @mousedown.stop @dblclick.stop>
-        <el-button
-          :icon="IconRefresh"
-          :loading="loading || reloading"
-          :disabled="loading || !reloadRemoteNode"
-          text
-          title="刷新节点"
-          aria-label="刷新节点"
-          @click.stop="reloadNode" />
-        <el-button :icon="IconTrash" text title="移除节点" aria-label="移除节点" @click.stop="deleteNode" :loading="deleting" />
+      <div v-if="$slots.titleMeta || !readOnly" class="titleControls">
+        <div v-if="$slots.titleMeta" class="titleMeta"><slot name="titleMeta" /></div>
+        <div v-if="!readOnly" class="nodeActions nodrag nopan" @pointerdown.stop @mousedown.stop @dblclick.stop>
+          <el-button
+            :icon="IconRefresh"
+            :loading="loading || reloading"
+            :disabled="loading || !reloadRemoteNode"
+            text
+            title="刷新节点"
+            aria-label="刷新节点"
+            @click.stop="reloadNode" />
+          <el-button :icon="IconTrash" text title="移除节点" aria-label="移除节点" @click.stop="deleteNode" :loading="deleting" />
+        </div>
       </div>
     </div>
     <div class="cardContainer">
       <el-card
         class="contentCard"
         :data-connection-snap="!readOnly && !loading && !documentTarget ? 'true' : undefined"
-        :class="{ selected: node.selected }"
+        :class="{ selected: node.selected, selectionFrame }"
         shadow="never"
-        :bodyStyle="{ padding: '8px' }"
+        :bodyStyle="{ padding: contentPadding }"
         :style="{ minHeight: `${cardHeight}px` }">
         <div v-if="loading" class="loadingContent" role="status" aria-label="节点加载中">
           <icon-loader2 class="loadingIcon" :size="24" aria-hidden="true" />
@@ -213,6 +208,8 @@ const props = withDefaults(
       loading?: boolean;
       readOnly?: boolean;
       previewReady?: boolean;
+      contentPadding?: string | number;
+      selectionFrame?: boolean;
       topWidth?: string | number;
       bottomWidth?: string | number;
       downloadUrl?: string;
@@ -226,6 +223,8 @@ const props = withDefaults(
     handles: () => [],
     outputs: () => ({}),
     previewReady: true,
+    contentPadding: '8px',
+    selectionFrame: false,
     readOnly: false,
     fullscreenVisible: true,
     toolbarAction: "fullscreen",
@@ -713,8 +712,12 @@ watch(
     opacity: 1;
   }
 
-  &:hover .titleBar .nodeActions {
+  &:hover .titleBar .titleControls {
     visibility: visible;
+  }
+
+  &.hasTitleMeta:hover .titleBar .labelText {
+    visibility: hidden;
   }
 
   &:hover,
@@ -729,7 +732,7 @@ watch(
     transform: translateX(-50%);
 
     &.topSlot {
-      bottom: calc(100% + 12px);
+      bottom: calc(100% + 1px);
     }
     &.bottomSlot {
       top: calc(100% + 12px);
@@ -750,16 +753,24 @@ watch(
   .titleBar {
     position: relative;
     display: flex;
+    min-height: 32px;
+    box-sizing: border-box;
     align-items: center;
-    gap: 6px;
-    padding: 0 4px 8px;
+    gap: 4px;
+    padding: 3px 0 5px 4px;
     font-size: 14px;
     line-height: 20px;
 
-    &:has(.titleMeta) { padding-top: 20px; }
+    .titleControls {
+      position: absolute;
+      inset: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
 
     .titleIcon {
       flex-shrink: 0;
+      color: var(--el-text-color-secondary);
     }
 
     .labelText {
@@ -768,6 +779,7 @@ watch(
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      color: var(--el-text-color-secondary);
       cursor: grab;
       user-select: none;
 
@@ -792,33 +804,33 @@ watch(
 
     .titleMeta {
       position: absolute;
-      top: 0;
-      right: 4px;
+      top: 10px;
+      right: 50px;
       color: var(--el-text-color-secondary);
-      font-size: 11px;
-      line-height: 14px;
+      font-size: 9px;
+      line-height: 12px;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
 
     .nodeActions {
-      visibility: hidden;
+      position: absolute;
+      top: 4px;
+      right: -4px;
       display: flex;
-      flex-shrink: 0;
       gap: 2px;
+      pointer-events: auto;
 
       .el-button {
         width: 24px;
         height: 24px;
         margin: 0;
         padding: 0;
+        color: var(--el-text-color-secondary);
+
+        &:hover { color: var(--el-text-color-primary); }
       }
     }
-  }
-
-  &:has(> .titleBar > .titleMeta) {
-    > .el-dropdown { position: absolute; }
-    > .topSlot { bottom: calc(100% + 8px); }
   }
 
   .cardContainer {
@@ -850,7 +862,11 @@ watch(
       &:focus-visible { opacity: 1; }
     }
 
-    .contentCard.selected {
+    .contentCard.selectionFrame {
+      border-color: transparent;
+    }
+
+    .contentCard.selectionFrame.selected {
       border-color: color-mix(in srgb, var(--el-color-primary) 50%, var(--el-border-color-light));
     }
 

@@ -2,12 +2,15 @@
   <nodeSkeleton
     v-bind="nodeProps"
     :topVisible="node.selected"
+    contentPadding="2px"
+    selectionFrame
     topWidth="max-content"
     toolbarAction="focus"
     :downloadUrl="exporting ? '' : previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
-    :style="{ width: previewUrl && videoWidth ? `${videoWidth + 18}px` : undefined }"
+    :style="{ width: previewUrl && videoWidth ? `${videoWidth + 6}px` : undefined }"
     @fullscreen="player?.enterFullscreen()">
+    <template v-if="videoResolution" #titleMeta><span :title="`${videoResolution} 像素`" :aria-label="`视频分辨率：${videoResolution}`">{{ videoResolution }}</span></template>
     <template #topActions>
       <el-button :icon="IconMusic" text :disabled="!outputFile || uploading || exporting || actions?.processing" @click.stop="actions?.open('extractAudio')">提取音轨</el-button>
       <el-button :icon="IconLayersSubtract" text :disabled="!outputFile || uploading || exporting || actions?.processing" @click.stop="actions?.open('separate')">分离音视频</el-button>
@@ -55,19 +58,29 @@
         aria-label="上传视频"
         @dblclick.stop
         @click.stop="fileInput?.click()">上传</el-button>
+      <mediaHistory
+        v-if="node.selected"
+        mediaType="video"
+        inline
+        replaceable
+        :current="outputFile"
+        :disabled="uploading || exporting || player?.capturing || actions?.processing"
+        @select="outputs.video = { dataType: 'VIDEO', value: $event }"
+        @upload="fileInput?.click()" />
     </div>
   </nodeSkeleton>
   <videoActions ref="actions" :file="outputFile" :src="previewUrl" :disabled="uploading || exporting" />
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { IconVideo, IconUpload, IconTransfer, IconMusic, IconLayersSubtract, IconScissors, IconMovie, IconPhotoScan, IconPlayerSkipBack, IconPlayerSkipForward } from "@tabler/icons-vue";
 import { ElButton, ElMessage, ElProgress, ElDropdown, ElDropdownMenu, ElDropdownItem } from "element-plus";
 import { nodeSkeleton, nodeTools, useNode, z, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import videoPlayer from "./components/videoPlayer.vue";
 import videoActions from "./components/videoActions.vue";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
+import mediaHistory from "@toonflow/node-shared/mediaHistory";
 
 defineOptions({
   inheritAttrs: false,
@@ -84,8 +97,10 @@ const actions = ref<InstanceType<typeof videoActions>>();
 const exportProgress = computed(() => (node.data as typeof node.data & { exportProgress?: number }).exportProgress);
 const exporting = computed(() => typeof exportProgress.value === "number");
 const videoWidth = ref(0);
+const videoResolution = ref("");
 
 const outputFile = computed(() => outputs.value.video?.dataType === "VIDEO" ? outputs.value.video.value : undefined);
+watch(outputFile, () => { videoWidth.value = 0; videoResolution.value = ""; }, { flush: "sync" });
 const previewUrl = files.useFileUrl(
   outputFile,
   (error) => showError(error, "视频读取失败")
@@ -129,7 +144,13 @@ nodeTools.register({
 async function resizeVideo(event: Event) {
   const video = event.currentTarget as HTMLVideoElement;
   if (!video.videoWidth || !video.videoHeight) return;
-  videoWidth.value = Math.max(180, (240 * video.videoWidth) / video.videoHeight);
+  videoResolution.value = `${video.videoWidth} × ${video.videoHeight}`;
+  videoWidth.value = (240 * video.videoWidth) / video.videoHeight;
+  const nodeStyle = typeof node.style === "function" ? node.style(node) : node.style;
+  const nextStyle = { ...(nodeStyle ?? {}) };
+  delete nextStyle.width;
+  delete nextStyle.height;
+  node.style = { ...nextStyle, width: `${videoWidth.value + 6}px` };
   await nextTick();
   updateNodeInternals();
 }

@@ -206,15 +206,11 @@ defineExpose({ insertMentions: (mentions: AgentMention[]) => agentRef.value?.ins
   max-height: 100dvh;
   border: 1px solid var(--el-border-color-light);
   border-radius: calc(var(--ui-radius) * 2);
-  background: color-mix(in srgb, var(--el-bg-color-overlay) 70%, transparent);
-  backdrop-filter: blur(6px);
-  box-shadow: var(--el-box-shadow-light);
+  backdrop-filter: blur(30px);
 
   &.docked {
     border-width: 1px;
     border-radius: calc(var(--ui-radius) * 2);
-    background: var(--el-bg-color-overlay);
-    box-shadow: none;
   }
 
   :deep(.agent) {
@@ -241,8 +237,23 @@ defineExpose({ insertMentions: (mentions: AgentMention[]) => agentRef.value?.ins
     &.right {
       top: 0;
       bottom: 5px;
-      width: 5px;
+      width: 12px;
       cursor: ew-resize;
+
+      &::after {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 2px;
+        height: 32px;
+        border-radius: 2px;
+        background: var(--el-border-color);
+        content: "";
+        opacity: 0;
+        transform: translate(-50%, -50%);
+        transition: opacity 120ms ease, background-color 120ms ease;
+        pointer-events: none;
+      }
     }
 
     &.left {
@@ -259,9 +270,15 @@ defineExpose({ insertMentions: (mentions: AgentMention[]) => agentRef.value?.ins
       cursor: ns-resize;
     }
 
-    &:hover,
+    &:hover::after,
+    &:focus-visible::after {
+      background: var(--el-text-color-placeholder);
+      opacity: 0.8;
+    }
+
     &:focus-visible {
-      background: var(--el-color-primary-light-5);
+      outline: 1px solid var(--el-border-color);
+      outline-offset: -2px;
     }
   }
 }

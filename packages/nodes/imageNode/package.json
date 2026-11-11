@@ -10,6 +10,8 @@
     "./imageLighting": "./src/components/imageLighting.vue",
     "./imageMultiAngle": "./src/components/imageMultiAngle.vue",
     "./imageEditor": "./src/components/imageEditor.vue",
+    "./imageEditMenu": "./src/components/imageEditMenu.vue",
+    "./imageSmartEdit": "./src/components/imageSmartEdit.vue",
     "./imageGridSplit": "./src/components/imageGridSplit.vue",
     "./imageInpaintPrompt": "./src/components/imageInpaintPrompt.vue"
   },

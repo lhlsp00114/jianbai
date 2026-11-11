@@ -1,14 +1,17 @@
-import { ref, watchEffect } from "vue";
+import { computed, ref, watchEffect } from "vue";
 import { uiSettings } from "@/stores/settings";
+
+const systemDark = ref(false);
+export const appearanceDark = computed(() => uiSettings.value.theme === "system" ? systemDark.value : uiSettings.value.theme === "dark");
 
 export function registerAppearance() {
   const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
-  const systemDark = ref(systemTheme.matches);
+  systemDark.value = systemTheme.matches;
   const updateSystemTheme = (event: MediaQueryListEvent) => { systemDark.value = event.matches; };
   systemTheme.addEventListener("change", updateSystemTheme);
   const stop = watchEffect(() => {
-    const { theme, primaryColor, fontScale, radius } = uiSettings.value;
-    const dark = theme === "system" ? systemDark.value : theme === "dark";
+    const { primaryColor, fontScale, radius } = uiSettings.value;
+    const dark = appearanceDark.value;
     const root = document.documentElement;
     root.classList.toggle("dark", dark);
     root.setAttribute("theme-mode", dark ? "dark" : "light");

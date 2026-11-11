@@ -63,14 +63,14 @@
             <el-button text :icon="IconX" aria-label="关闭预览" title="关闭" @click="previewVisible = false" />
           </div>
         </header>
-        <main class="viewerStage">
+        <main ref="viewerStage" class="viewerStage" :class="{ panning: isPanning }" :style="viewerMediaStyle" @wheel.prevent.stop="zoomAtPointer" @pointerdown="startImagePan" @pointermove="moveImagePan" @pointerup="endImagePan" @pointercancel="endImagePan" @auxclick.prevent>
           <div class="viewerZoom">
-            <el-button :icon="IconMinus" aria-label="缩小" title="缩小" :disabled="viewerZoom <= 20" @click="viewerZoom = Math.max(20, viewerZoom - 10)" />
-            <button type="button" class="zoomReset" title="重置缩放" @click="viewerZoom = 100">{{ viewerZoom }}%</button>
-            <el-button :icon="IconPlus" aria-label="放大" title="放大" :disabled="viewerZoom >= 400" @click="viewerZoom = Math.min(400, viewerZoom + 10)" />
+            <el-button :icon="IconMinus" aria-label="缩小" title="缩小" :disabled="viewerZoom <= 20" @click="adjustViewerZoom(-10)" />
+            <button type="button" class="zoomReset" title="重置缩放" @click="resetViewerTransform">{{ Math.round(viewerZoom) }}%</button>
+            <el-button :icon="IconPlus" aria-label="放大" title="放大" :disabled="viewerZoom >= 400" @click="adjustViewerZoom(10)" />
           </div>
           <div class="viewerMedia" :class="`media${previewItem.mediaType}`">
-            <img v-if="previewItem.mediaType === 'image'" :src="mediaUrl(previewItem)" alt="历史图片预览" :style="{ transform: `scale(${viewerZoom / 100})` }" @load="updateMediaDimensions" />
+            <img v-if="previewItem.mediaType === 'image'" :src="mediaUrl(previewItem)" alt="历史图片预览" @load="updateMediaDimensions" />
             <video v-else-if="previewItem.mediaType === 'video'" :src="mediaUrl(previewItem)" controls autoplay playsinline :style="{ transform: `scale(${viewerZoom / 100})` }" @loadedmetadata="updateMediaDimensions" />
             <audio v-else :src="mediaUrl(previewItem)" controls autoplay @loadedmetadata="updateMediaDimensions" />
           </div>
@@ -119,7 +119,12 @@ const previewItem = ref<HistoryItem>();
 const previewPrompt = ref("");
 const previewDimensions = ref<{ width: number; height: number }>();
 const viewerZoom = ref(100);
+const viewerOffset = ref({ x: 0, y: 0 });
+const viewerStage = ref<HTMLElement>();
+const isPanning = ref(false);
 const promptExpanded = ref(false);
+let panStart: { pointerId: number; x: number; y: number; offsetX: number; offsetY: number } | undefined;
+const viewerMediaStyle = computed(() => ({ "--viewerZoom": viewerZoom.value / 100, "--viewerOffsetX": viewerOffset.value.x + "px", "--viewerOffsetY": viewerOffset.value.y + "px" }));
 const imageItems = computed(() => entries.value.filter(item => item.mediaType === "image"));
 const videoItems = computed(() => entries.value.filter(item => item.mediaType === "video"));
 const audioItems = computed(() => entries.value.filter(item => item.mediaType === "audio"));
@@ -256,7 +261,7 @@ function openPreview(item: HistoryItem) {
   previewPrompt.value = "";
   void readPrompt(item).then(prompt => { if (previewItem.value?.path === item.path) previewPrompt.value = prompt; });
   previewDimensions.value = undefined;
-  viewerZoom.value = 100;
+  resetViewerTransform();
   promptExpanded.value = false;
   previewVisible.value = true;
 }
@@ -268,7 +273,7 @@ function movePreview(direction: number) {
   previewPrompt.value = "";
   void readPrompt(next).then(prompt => { if (previewItem.value?.path === next.path) previewPrompt.value = prompt; });
   previewDimensions.value = undefined;
-  viewerZoom.value = 100;
+  resetViewerTransform();
   promptExpanded.value = false;
 }
 
@@ -276,6 +281,55 @@ function updateMediaDimensions(event: Event) {
   const media = event.currentTarget;
   if (media instanceof HTMLImageElement) previewDimensions.value = { width: media.naturalWidth, height: media.naturalHeight };
   else if (media instanceof HTMLVideoElement) previewDimensions.value = { width: media.videoWidth, height: media.videoHeight };
+}
+
+function resetViewerTransform() {
+  viewerZoom.value = 100;
+  viewerOffset.value = { x: 0, y: 0 };
+}
+
+function setViewerZoom(nextZoom: number, clientX?: number, clientY?: number) {
+  const zoom = Math.min(400, Math.max(20, nextZoom));
+  if (zoom === viewerZoom.value) return;
+  if (clientX !== undefined && clientY !== undefined && viewerStage.value) {
+    const bounds = viewerStage.value.getBoundingClientRect();
+    const anchorX = clientX - bounds.left - bounds.width / 2;
+    const anchorY = clientY - bounds.top - bounds.height / 2;
+    const ratio = zoom / viewerZoom.value;
+    viewerOffset.value = {
+      x: anchorX - (anchorX - viewerOffset.value.x) * ratio,
+      y: anchorY - (anchorY - viewerOffset.value.y) * ratio,
+    };
+  }
+  viewerZoom.value = zoom;
+}
+
+function adjustViewerZoom(amount: number) {
+  setViewerZoom(viewerZoom.value + amount);
+}
+
+function zoomAtPointer(event: WheelEvent) {
+  if (previewItem.value?.mediaType !== "image" || !(event.target instanceof HTMLImageElement)) return;
+  setViewerZoom(viewerZoom.value * Math.exp(-event.deltaY * 0.0015), event.clientX, event.clientY);
+}
+
+function startImagePan(event: PointerEvent) {
+  if (previewItem.value?.mediaType !== "image" || event.button !== 1 || !(event.target instanceof HTMLImageElement)) return;
+  event.preventDefault();
+  panStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, offsetX: viewerOffset.value.x, offsetY: viewerOffset.value.y };
+  isPanning.value = true;
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+}
+
+function moveImagePan(event: PointerEvent) {
+  if (!panStart || panStart.pointerId !== event.pointerId) return;
+  viewerOffset.value = { x: panStart.offsetX + event.clientX - panStart.x, y: panStart.offsetY + event.clientY - panStart.y };
+}
+
+function endImagePan(event: PointerEvent) {
+  if (!panStart || panStart.pointerId !== event.pointerId) return;
+  panStart = undefined;
+  isPanning.value = false;
 }
 
 function handleViewerKeydown(event: KeyboardEvent) {
@@ -420,16 +474,31 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
   :deep(.el-button:hover) { background: #303338; }
 }
 
-.viewerStage { position: relative; display: grid; flex: 1; min-height: 0; place-items: center; overflow: hidden; background: #0c0d0e; }
+.viewerStage { position: relative; display: grid; flex: 1; min-height: 0; place-items: center; overflow: hidden; background: #0c0d0e; touch-action: none; }
+.viewerStage.panning { cursor: grabbing; }
 
-.viewerMedia { display: grid; width: 100%; height: 100%; place-items: center; overflow: auto; }
-.viewerMedia img, .viewerMedia video { display: block; max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; transition: transform 100ms ease; }
+.viewerMedia { position: absolute; inset: 0; display: grid; width: 100%; height: 100%; place-items: center; overflow: hidden; }
+.viewerMedia img, .viewerMedia video { display: block; max-width: calc(100% - 32px); max-height: calc(100% - 32px); object-fit: contain; transform-origin: center; transition: transform 100ms ease; }
+.viewerMedia {
+  img {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: auto;
+    height: auto;
+    -webkit-user-drag: none;
+    transform: translate(-50%, -50%) translate(var(--viewerOffsetX), var(--viewerOffsetY)) scale(var(--viewerZoom));
+  }
+}
+.viewerStage.panning {
+  .viewerMedia img { transition: none; }
+}
 .viewerMedia video { width: 100%; }
 .viewerMedia audio { width: min(80%, 720px); }
 
 .viewerZoom { position: absolute; top: 16px; right: 18px; z-index: 2; display: flex; align-items: center; gap: 6px; }
 .viewerZoom :deep(.el-button), .zoomReset { width: 38px; height: 38px; border: 1px solid #3b3e43; border-radius: 8px; color: #f2f3f4; background: #1b1d20; }
-.zoomReset { width: 54px; font-size: 12px; font-variant-numeric: tabular-nums; cursor: pointer; }
+.zoomReset { width: 54px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; }
 
 .viewerInfo { position: absolute; top: 68px; right: 18px; z-index: 2; display: grid; gap: 18px; width: 220px; max-height: calc(100% - 90px); overflow: auto; padding: 16px; border: 1px solid #373a3f; border-radius: 12px; background: rgb(29 31 34 / 94%); box-shadow: 0 8px 24px rgb(0 0 0 / 22%); }
 .infoField { display: grid; gap: 5px; min-width: 0; }

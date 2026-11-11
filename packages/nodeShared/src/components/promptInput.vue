@@ -35,6 +35,7 @@ import xSender, { type AnyTagProps, type MentionItem } from "x-sender";
 import "x-sender/lib/XSender.css";
 import type { MaterialMention, ReferenceMention } from "../useNodeReferences";
 import { getPromptText } from "../promptText";
+import { useCanvasTextHistory } from "../canvasTextHistory";
 import promptReferenceMenu from "./promptReferenceMenu.vue";
 
 type Reference = ReferenceMention;
@@ -49,6 +50,7 @@ const props = defineProps<{
 const model = defineModel<AnyTagProps[][]>({ required: true });
 const text = defineModel<string>("text", { default: "" });
 const senderElement = ref<HTMLElement>();
+const registerTextHistory = useCanvasTextHistory();
 const expanded = ref(false);
 const panelExpanded = inject<Ref<boolean> | undefined>("expandedGenerationPrompt", undefined);
 const editorExpanded = computed(() => expanded.value || panelExpanded?.value === true);
@@ -310,6 +312,14 @@ watch(senderElement, (element, _previous, onCleanup) => {
     popup.style.zIndex = String(nextZIndex());
   }, { immediate: true });
   const editor = instance.chatElement.richText;
+  const releaseTextHistory = registerTextHistory({
+    element: editor,
+    async change(direction) {
+      if (resetTask) await resetTask;
+      if (sender !== instance || !editor.isConnected || instance.chatEditor.isComposition) return;
+      await instance[direction]();
+    },
+  });
   // ACT: 1.4.6 未检查卸载节点和空 Range 矩形；只适配当前实例，升级到库内修复后可移除。
   const chatEditor = instance.chatEditor as typeof instance.chatEditor & {
     focusFirst(): void;
@@ -379,6 +389,7 @@ watch(senderElement, (element, _previous, onCleanup) => {
   popup.addEventListener("click", selectReference, true);
   document.addEventListener("pointerdown", closeOutside, true);
   onCleanup(() => {
+    releaseTextHistory();
     stopExpandedWatch();
     updateModel(instance.getModel());
     releaseNodeFocus(instance);
