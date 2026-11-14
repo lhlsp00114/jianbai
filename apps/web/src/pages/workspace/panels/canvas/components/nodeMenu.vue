@@ -65,6 +65,8 @@
           <el-dropdown-item command="paste" :icon="IconClipboard" :disabled="!pasteNode || pasting">
             {{ pasting ? "粘贴中…" : "粘贴" }}
           </el-dropdown-item>
+          <el-divider />
+          <el-dropdown-item command="fitView" :icon="IconFocusCentered">适应视图</el-dropdown-item>
         </template>
         <template v-else>
           <el-dropdown-item v-if="!directNodes" command="actions" :icon="IconChevronLeft">返回操作菜单</el-dropdown-item>
@@ -115,6 +117,7 @@ import {
   IconLayoutColumns,
   IconLayoutRows,
   IconLayoutGrid,
+  IconFocusCentered,
 } from "@tabler/icons-vue";
 
 const { remoteNodes = [], disabled = false, pasteNode, uploadFiles, canUndo = false, canRedo = false, selectionBusy = false, batchHistory } = defineProps<{
@@ -255,7 +258,7 @@ async function openMenu(event: MouseEvent | TouchEvent, nodesOnly = false, selec
   const point = "changedTouches" in event ? event.changedTouches[0] : event;
   if (!point) return;
   const { clientX, clientY } = point;
-  nodePosition = screenToFlowCoordinate({ x: clientX, y: clientY });
+  nodePosition = snapPosition(screenToFlowCoordinate({ x: clientX, y: clientY }));
   menuAnchor.value = { getBoundingClientRect: () => new DOMRect(clientX, clientY, 0, 0) };
   if (handle) {
     const bounds = flow.vueFlowRef.value!.getBoundingClientRect();
@@ -279,8 +282,15 @@ defineExpose({ openMenu, deleteSelection, addNode });
 async function addNode(type: string, position: { x: number; y: number }) {
   clearConnection();
   emit("history");
-  nodePosition = { ...position };
+  nodePosition = snapPosition(position);
   await handleCommand(type);
+}
+
+function snapPosition(position: { x: number; y: number }) {
+  if (!flow.snapToGrid.value) return position;
+  const [gridX, gridY] = flow.snapGrid.value;
+  if (!(gridX > 0) || !(gridY > 0)) return position;
+  return { x: Math.round(position.x / gridX) * gridX, y: Math.round(position.y / gridY) * gridY };
 }
 
 async function handleCommand(command: unknown) {

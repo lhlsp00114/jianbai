@@ -69,6 +69,11 @@ body,
 }
 
 .el-image-viewer__wrapper {
+  .el-image-viewer__mask {
+    background-color: #000;
+    opacity: 0.8;
+  }
+
   .el-image-viewer__close,
   .el-image-viewer__actions {
     color: #fff;

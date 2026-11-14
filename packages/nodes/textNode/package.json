@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./markdownPreview": "./src/markdownPreview.vue"
+    "./markdownPreview": "./src/markdownPreview.vue",
+    "./imagePromptInstruction": "./src/imagePromptInstruction.ts"
   },
   "scripts": {
     "build": "vite build",

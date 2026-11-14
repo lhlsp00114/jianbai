@@ -116,18 +116,19 @@
   <imageMultiAngle v-if="multiAngleVisible" ref="multiAngle" :src="imagePreviewUrl" :source="outputFile" :target="multiAngleTarget" :disabled="generating || deleting || uploading || gridSplit?.splitting" @close="multiAngleVisible = false" />
   <imagePanorama ref="panorama" :src="imagePreviewUrl" :source="outputFile" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting" @open="openPanorama" />
   <imageGridSplit ref="gridSplit" :src="imagePreviewUrl" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy" :active="node.selected" />
-  <el-image-viewer v-if="inpaintPreviewVisible && inpaintGuideUrl" :urlList="[inpaintGuideUrl]" teleported @close="inpaintPreviewVisible = false" />
-  <el-image-viewer
+  <imageViewer v-if="inpaintPreviewVisible && inpaintGuideUrl" :urlList="[inpaintGuideUrl]" :downloadUrl="inpaintGuideUrl" downloadName="inpaint-guide.png" @close="inpaintPreviewVisible = false" />
+  <imageViewer
     v-if="previewVisible && previewUrl"
     :urlList="[imagePreviewUrl]"
-    teleported
+    :downloadUrl="imagePreviewUrl"
+    :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
     @close="previewVisible = false" />
 </template>
 
 <script setup lang="ts">
 import taskRecovery from "@toonflow/node-shared/taskRecovery";
 import { computed, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch } from "vue";
-import { ElButton, ElCard, ElLoading, ElImageViewer } from "element-plus";
+import { ElButton, ElCard, ElLoading } from "element-plus";
 import { IconCheck, IconPhotoAi, IconPhoto, IconArrowUp, IconPlayerStop, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconSparkles } from "@tabler/icons-vue";
 import { findNodeModel, getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, z, type NodeMediaModel, type NodeImageRequest, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
@@ -155,6 +156,7 @@ import imageLighting from "@toonflow/node-image/imageLighting";
 import imagePanorama from "@toonflow/node-image/imagePanorama";
 import imageMultiAngle from "@toonflow/node-image/imageMultiAngle";
 import imageGenerationSettings from "@toonflow/node-shared/imageGenerationSettings";
+import imageViewer from "@toonflow/node-shared/imageViewer";
 
 defineOptions({
   inheritAttrs: false,

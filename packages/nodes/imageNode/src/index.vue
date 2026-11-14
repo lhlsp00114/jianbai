@@ -82,17 +82,18 @@
   <imageMultiAngle v-if="multiAngleVisible" ref="multiAngle" :src="imagePreviewUrl" :source="outputFile" :target="multiAngleTarget" :disabled="uploading || gridSplit?.splitting" @close="multiAngleVisible = false" />
   <imagePanorama ref="panorama" :src="imagePreviewUrl" :source="outputFile" :disabled="uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || inpaintPrompt?.creating" @open="openPanorama" />
   <imageGridSplit ref="gridSplit" :src="imagePreviewUrl" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy" :active="node.selected" />
-  <el-image-viewer
+  <imageViewer
     v-if="previewVisible && previewUrl"
     :urlList="[imagePreviewUrl]"
-    teleported
+    :downloadUrl="imagePreviewUrl"
+    :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
     @close="previewVisible = false" />
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { IconPhoto, IconUpload, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconSparkles } from "@tabler/icons-vue";
-import { ElButton, ElImageViewer, ElMessage } from "element-plus";
+import { ElButton, ElMessage } from "element-plus";
 import { nodeSkeleton, nodeTools, useNode, uploadNodeFile, z, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
 import imageGridSplit from "./components/imageGridSplit.vue";
@@ -106,6 +107,7 @@ import type { InpaintDraftInput } from "./imageInpaint";
 import imageRotation from "./components/imageRotation.vue";
 import imageSmartEdit from "./components/imageSmartEdit.vue";
 import { useImageRotation, type ImageRotation } from "./useImageRotation";
+import imageViewer from "@toonflow/node-shared/imageViewer";
 
 defineOptions({
   inheritAttrs: false,

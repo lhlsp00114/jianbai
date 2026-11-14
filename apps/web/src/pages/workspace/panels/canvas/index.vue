@@ -109,6 +109,10 @@
         :directory="project?.directory" />
       <nodeSearch ref="nodeSearchRef" :disabled="!active || settingsVisible || !canvasId || !project?.directory" />
     </vue-flow>
+    <div v-if="snapGuideStyle" class="snapGuides" aria-hidden="true">
+      <span class="snapGuide snapGuideVertical" :style="{ left: `${snapGuideStyle.left}px` }" />
+      <span class="snapGuide snapGuideHorizontal" :style="{ top: `${snapGuideStyle.top}px` }" />
+    </div>
     <div
       v-if="active && canvasId"
       class="sideToolbar nodrag nopan nowheel"
@@ -125,6 +129,20 @@
         <el-button class="sideToolButton addNodeButton" :class="{ active: nodePanelVisible }" text :aria-pressed="nodePanelVisible" aria-label="添加节点" @click="nodePanelVisible = !nodePanelVisible">
           <icon-x v-if="nodePanelVisible" :size="22" aria-hidden="true" />
           <icon-plus v-else :size="22" aria-hidden="true" />
+        </el-button>
+      </el-tooltip>
+      <el-tooltip :showArrow="false" content="上传文件" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+        <el-button class="sideToolButton" text :disabled="!project?.directory || !canvasReady || settingsVisible" aria-label="上传文件" @click="uploadFromPanel">
+          <icon-upload :size="22" aria-hidden="true" />
+        </el-button>
+      </el-tooltip>
+      <el-tooltip :showArrow="false" content="创作收藏" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+        <el-button class="sideToolButton" :class="{ active: libraryVisible }" text :aria-pressed="libraryVisible" aria-label="创作收藏" @click="libraryVisible = true">
+          <svg class="creationLibraryIcon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M7 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1" />
+            <rect x="7" y="3" width="14" height="15" rx="2" />
+            <path d="m14 6 1 2 2 1-2 1-1 2-1-2-2-1 2-1Z M11 15h6" />
+          </svg>
         </el-button>
       </el-tooltip>
       <el-tooltip v-if="currentUser?.role !== 'user'" :showArrow="false" :content="assetsVisible ? '关闭素材库' : '打开素材库'" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
@@ -153,6 +171,7 @@
         @fitView="fitViewFromPanel" />
     </section>
     <generationHistory v-model="historyVisible" :directory="project?.directory" :nodeIds="canvasNodeIds" :nodes="generationHistoryNodes" @send="sendHistoryToCanvas" />
+    <creationLibrary v-model="libraryVisible" />
     <el-dialog v-if="currentUser?.role !== 'user'" :modelValue="!!assetSelection" class="referenceAssetDialog" title="全局素材库" width="min(1200px, 88vw)" alignCenter appendToBody destroyOnClose @update:modelValue="finishAssetSelection()">
       <assetLibrary :modelValue="!!assetSelection" expanded :canSelect="canSelectAsset" :selecting="assetSelecting" @select="selectAsset" />
     </el-dialog>
@@ -184,7 +203,7 @@ import { debounce } from "lodash-es";
 import { ElMessage } from "element-plus";
 import { actualPlatform, isMobile } from "@/lib/platform";
 import { storeToRefs } from "pinia";
-import { IconUnlink, IconFolder, IconHistory, IconPlus, IconX, IconBox } from "@tabler/icons-vue";
+import { IconUnlink, IconFolder, IconHistory, IconPlus, IconX, IconBox, IconUpload } from "@tabler/icons-vue";
 import * as vueRuntime from "vue";
 import * as vueFlowRuntime from "@vue-flow/core";
 import * as elementPlusRuntime from "element-plus";
@@ -224,6 +243,7 @@ import canvasEmpty from "./components/canvasEmpty.vue";
 import canvasViewportHint from "./components/canvasViewportHint.vue";
 import assetLibrary from "./components/assetLibrary.vue";
 import generationHistory from "./components/generationHistory.vue";
+import creationLibrary from "./components/creationLibrary.vue";
 import nodeMenuItems from "./components/nodeMenuItems.vue";
 import groupNode from "./components/groupNode.vue";
 import selectionToolbar from "./components/selectionToolbar.vue";
@@ -236,7 +256,8 @@ import type { NodeDocumentContext, NodeDocumentState } from "@toonflow/nodes-sca
 import { useNodeToolsContext } from "@toonflow/nodes-scaffold/nodeTools";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { currentUser } from "@/stores/multiTenant";
-import { generalSettings } from "@/stores/settings";
+import { generalSettings, settings } from "@/stores/settings";
+import { readImagePromptInstruction } from "@toonflow/node-text/imagePromptInstruction";
 import { filterNodeMenu, resolveNodeMenu } from "@toonflow/server/nodeMenu";
 import { getShortcutBindings, shortcutLabel, shortcutMatches, shortcutPressed } from "@/lib/canvasShortcuts";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
@@ -256,6 +277,7 @@ const props = withDefaults(defineProps<{
   flushCanvases?: (action?: () => Promise<void>) => Promise<void>;
 }>(), { active: true, settingsVisible: false });
 const { project } = storeToRefs(useWorkspaceStore());
+provide("textImagePromptInstruction", () => readImagePromptInstruction(settings.value.stores));
 
 const canvasElement = ref<HTMLElement>();
 const flowData = ref<(Node | Edge)[]>([]);
@@ -303,10 +325,12 @@ let copyingNodes = false;
 const showEdges = ref(true);
 const assetsVisible = ref(false);
 const historyVisible = ref(false);
+const libraryVisible = ref(false);
 const nodePanelVisible = ref(false);
 const assetLibraryRef = ref<InstanceType<typeof assetLibrary>>();
 const edgeDisconnect = ref<{ id: string; x: number; y: number }>();
 const flow = useVueFlow(props.runtimeKey);
+const snapGuideStyle = ref<{ left: number; top: number }>();
 const canvasNodeIds = computed(() => flow.getNodes.value.map(node => node.id));
 const generationHistoryNodes = computed(() => flow.getNodes.value.map(node => ({
   id: node.id,
@@ -326,8 +350,72 @@ onScopeDispose(anonymousData.observeCanvas(() => props.active && canvasId.value
   ? { nodes: flow.nodes.value, edgeCount: flow.edges.value.length }
   : undefined));
 let dragCopy: ReturnType<InstanceType<typeof selectionToolbar>["startDragCopy"]>;
+let snapGuideFrame: number | undefined;
+let snapGuideRequest = 0;
+function clearSnapGuide() {
+  snapGuideRequest++;
+  if (snapGuideFrame !== undefined) cancelAnimationFrame(snapGuideFrame);
+  snapGuideFrame = undefined;
+  snapGuideStyle.value = undefined;
+}
+
+function snapPosition(position: XYPosition) {
+  if (!snapEnabled.value) return position;
+  const [gridX, gridY] = flow.snapGrid.value;
+  if (!(gridX > 0) || !(gridY > 0)) return position;
+  return { x: Math.round(position.x / gridX) * gridX, y: Math.round(position.y / gridY) * gridY };
+}
+
+function updateSnapGuide(nodes: GraphNode[]) {
+  if (!snapEnabled.value || !nodes.length) {
+    clearSnapGuide();
+    return;
+  }
+  const [gridX, gridY] = flow.snapGrid.value;
+  if (!(gridX > 0) || !(gridY > 0)) {
+    clearSnapGuide();
+    return;
+  }
+  const request = ++snapGuideRequest;
+  if (snapGuideFrame !== undefined) cancelAnimationFrame(snapGuideFrame);
+  snapGuideFrame = requestAnimationFrame(() => {
+    snapGuideFrame = undefined;
+    if (request !== snapGuideRequest) return;
+    const canvasRect = canvasElement.value?.getBoundingClientRect();
+    const flowElement = flow.vueFlowRef.value;
+    if (!canvasRect || !flowElement) return;
+    const nodeElements = new Map(
+      [...flowElement.querySelectorAll<HTMLElement>(".vue-flow__node")]
+        .map(element => [element.dataset.id, element] as const)
+        .filter((entry): entry is [string, HTMLElement] => !!entry[0]),
+    );
+    const cardRects = nodes
+      .map(node => nodeElements.get(node.id)?.querySelector<HTMLElement>(".cardContainer")?.getBoundingClientRect())
+      .filter((rect): rect is DOMRect => !!rect && rect.width > 0 && rect.height > 0);
+    if (!cardRects.length) return;
+    snapGuideStyle.value = {
+      left: Math.min(...cardRects.map(rect => rect.left)) - canvasRect.left,
+      top: Math.min(...cardRects.map(rect => rect.top)) - canvasRect.top,
+    };
+  });
+}
+
+function snapDraggedNodes(nodes: GraphNode[]) {
+  if (!snapEnabled.value) return;
+  nodes.forEach(node => {
+    const position = snapPosition(node.position);
+    if (position.x !== node.position.x || position.y !== node.position.y) flow.updateNode(node.id, { position });
+  });
+}
+
+watch(snapEnabled, enabled => {
+  if (!enabled) clearSnapGuide();
+});
+onScopeDispose(clearSnapGuide);
+
 flow.onNodeDragStart(({ event, nodes }) => {
   dragCopy = undefined;
+  updateSnapGuide(nodes);
   if (!props.active || props.settingsVisible) return;
   const shortcuts = generalSettings.value.canvasShortcuts;
   const withEdges = shortcutPressed(event, shortcuts.duplicateOnDrag, pressedCodes);
@@ -336,8 +424,13 @@ flow.onNodeDragStart(({ event, nodes }) => {
     dragCopy = selectionToolbarRef.value?.startDragCopy(nodes, withEdges);
   }
 });
-flow.onNodeDrag(() => dragCopy?.update());
+flow.onNodeDrag(({ nodes }) => {
+  updateSnapGuide(nodes);
+  dragCopy?.update();
+});
 flow.onNodeDragStop(({ nodes }) => {
+  snapDraggedNodes(nodes);
+  clearSnapGuide();
   const copy = dragCopy;
   dragCopy = undefined;
   if (copy) copy.finish();
@@ -362,7 +455,7 @@ function sendHistoryToCanvas(item: { name: string; path: string; mediaType: "ima
     addNodes({
       id: crypto.randomUUID(),
       type,
-      position: { x: center.x - 180, y: center.y - 140 },
+      position: snapPosition({ x: center.x - 180, y: center.y - 140 }),
       data: { label: item.name, outputs: { [item.mediaType]: { dataType, value: { url: item.path, mimeType: item.mimeType } } } },
     });
   }).then(() => { historyVisible.value = false; }).catch(error => ElMessage.error(error instanceof Error ? error.message : "发送到画布失败"));
@@ -727,6 +820,7 @@ async function dropFiles(event: DragEvent) {
 function selectFiles(position: { x: number; y: number }) {
   const directory = project.value?.directory;
   if (!props.active || props.settingsVisible || !canvasId.value || !directory) return;
+  position = snapPosition(position);
   const context = { directory, availableNodes: availableNodes.value, signal: canvasController.signal, flow };
   const input = document.createElement("input");
   input.type = "file";
@@ -751,7 +845,7 @@ function addNodeFromPanel(type: string) {
   const center = getCanvasCenterPosition();
   if (!props.active || props.settingsVisible || !canvasId.value || !project.value?.directory || !canvasReady.value || !center) return;
   nodePanelVisible.value = false;
-  void nodeMenuRef.value?.addNode(type, { x: center.x - 180, y: center.y - 140 });
+  void nodeMenuRef.value?.addNode(type, snapPosition({ x: center.x - 180, y: center.y - 140 }));
 }
 
 function getCanvasCenterPosition() {
@@ -1170,7 +1264,7 @@ async function importCanvasContent(files: File[], position: { x: number; y: numb
   if (!directory) return false;
   const canvasSignal = canvasController.signal;
   try {
-    await canvasHistory.batch(async () => { await importCanvasFiles(files, position, { directory, availableNodes: availableNodes.value, signal: canvasSignal, flow }); });
+    await canvasHistory.batch(async () => { await importCanvasFiles(files, snapPosition(position), { directory, availableNodes: availableNodes.value, signal: canvasSignal, flow }); });
     return true;
   } catch (error) {
     if (!canvasSignal.aborted) ElMessage.error(error instanceof Error ? error.message : "剪贴板内容导入失败");
@@ -1183,6 +1277,7 @@ async function pasteClipboardNode(position: { x: number; y: number }, command?: 
   const canvasSignal = canvasController.signal;
   try {
     const directory = project.value.directory;
+    position = snapPosition(position);
     const text = command ?? (await readClipboardText());
     const snapshot = await readClipboardNodes(text, directory);
     if (canvasSignal.aborted) return false;
@@ -1589,6 +1684,7 @@ const defaultEdgeOptions = markRaw({
 }
 
 .canvas {
+  position: relative;
   width: 100%;
   height: 100%;
 
@@ -1691,6 +1787,34 @@ const defaultEdgeOptions = markRaw({
     line-height: 1.6;
     text-align: center;
     cursor: default;
+  }
+
+  .snapGuides {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+
+    .snapGuide {
+      position: absolute;
+      opacity: .58;
+      filter: drop-shadow(0 0 2px rgb(58 153 255 / 30%));
+    }
+
+    .snapGuideVertical {
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: repeating-linear-gradient(to bottom, #4da3ff 0 5px, transparent 5px 10px);
+    }
+
+    .snapGuideHorizontal {
+      right: 0;
+      left: 0;
+      height: 1px;
+      background: repeating-linear-gradient(to right, #4da3ff 0 5px, transparent 5px 10px);
+    }
   }
 
   &.compositingEnabled :deep(.vue-flow__transformationpane) {

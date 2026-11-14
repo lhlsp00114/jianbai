@@ -27,7 +27,8 @@
     "./useNodeGeneration": "./src/useNodeGeneration.ts",
     "./useModelForm": "./src/useModelForm.ts",
     "./useAudioTranscription": "./src/useAudioTranscription.ts",
-    "./groupNodeModels": "./src/groupNodeModels.ts"
+    "./groupNodeModels": "./src/groupNodeModels.ts",
+    "./imageViewer": "./src/components/imageViewer.vue"
   },
   "scripts": {
     "typecheck": "vue-tsc --noEmit"

@@ -14,7 +14,8 @@
       </div>
       <nav class="sidebarNav" aria-label="首页导航">
         <button v-for="section in homeSections" :key="section.id" class="sidebarItem" :class="{ active: activeSection === section.id }" type="button" :aria-current="activeSection === section.id ? 'location' : undefined" :aria-label="translate(section.label)" :title="translate(section.label)" @click="scrollToSection(section.id)">
-          <component :is="section.icon" :size="18" aria-hidden="true" />
+          <span v-if="section.id === 'photoCraft'" class="psIcon" aria-hidden="true">Ps</span>
+          <component v-else :is="section.icon" :size="18" aria-hidden="true" />
           <span class="sidebarText">{{ translate(section.label) }}</span>
         </button>
         <hr v-if="currentUser?.role !== 'user'" class="sidebarDivider" />
@@ -46,7 +47,8 @@
       </div>
     </aside>
     <main v-if="activeSection === 'tools'" class="pageScroll" aria-label="工具" />
-    <el-scrollbar v-show="activeSection !== 'tools'" ref="pageScroll" class="pageScroll" @scroll="updateActiveSection">
+    <photoCraft v-if="photoCraftOpened" :class="{ backgroundEditor: activeSection !== 'photoCraft' }" :inert="activeSection !== 'photoCraft'" :aria-hidden="activeSection !== 'photoCraft'" />
+    <el-scrollbar v-show="activeSection !== 'tools' && activeSection !== 'photoCraft'" ref="pageScroll" class="pageScroll" @scroll="updateActiveSection">
       <div class="pageBody">
         <el-main class="pageContent">
           <section class="creationPanel" data-home-section="home" aria-label="创建项目">
@@ -126,7 +128,7 @@ import { locale, translate } from "@toonflow/i18n/vue";
 import axios from "axios";
 import { storeToRefs } from "pinia";
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { onBeforeRouteLeave, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox, type InputInstance, type ScrollbarInstance } from "element-plus";
 import { getReadableFileMimeType, readableFileAccept } from "@toonflow/server/documentFormats";
 import {
@@ -155,6 +157,7 @@ import explore from "./explore.vue";
 import projectCard from "./projectCard.vue";
 import workspacePicker from "./workspacePicker.vue";
 import homeAdvertisementCarousel from "./homeAdvertisementCarousel.vue";
+import photoCraft from "./photoCraft.vue";
 
 const settingsVisible = ref(false);
 const settingsDialog = ref<InstanceType<typeof settings>>();
@@ -164,16 +167,36 @@ const mobileConnectVisible = ref(false);
 const sidebarCollapsed = ref(false);
 const pageScroll = ref<ScrollbarInstance>();
 const activeSection = ref("home");
+const photoCraftOpened = ref(false);
 const projectType = ref<"local" | "team">("local");
 const homeSections = [
   { id: "home", label: "首页", icon: IconHome },
   { id: "projects", label: "项目", icon: IconFolder },
   { id: "tools", label: "工具", icon: IconTools },
+  { id: "photoCraft", label: "PS图像编辑" },
   { id: "explore", label: "探索", icon: IconCompass },
 ];
 const mobileConnect = defineAsyncComponent(() => import("@/components/mobileConnect.vue"));
 const router = useRouter();
 const pageLifetime = new AbortController();
+async function confirmPhotoCraftLeave() {
+  if (!photoCraftOpened.value) return true;
+  try {
+    await ElMessageBox.confirm("离开首页会关闭 PhotoCraft。请确认图片已经保存或导出。", "离开图片编辑器", {
+      confirmButtonText: "已保存，离开", cancelButtonText: "继续编辑", type: "warning",
+    });
+    return true;
+  } catch { return false; }
+}
+onBeforeRouteLeave(() => creating.value || opening.value || confirmPhotoCraftLeave());
+
+function confirmEditorUnload(event: BeforeUnloadEvent) {
+  if (!photoCraftOpened.value) return;
+  event.preventDefault();
+  event.returnValue = "";
+}
+onMounted(() => window.addEventListener("beforeunload", confirmEditorUnload));
+onUnmounted(() => window.removeEventListener("beforeunload", confirmEditorUnload));
 const creating = ref(false);
 const opening = ref(false);
 const exportingDirectory = ref("");
@@ -371,6 +394,10 @@ async function activateAdvertisement(advertisement: HomeAdvertisement) {
 
 async function scrollToSection(section: string) {
   activeSection.value = section;
+  if (section === "photoCraft") {
+    photoCraftOpened.value = true;
+    return;
+  }
   if (section === "tools") return;
   await nextTick();
   const wrap = pageScroll.value?.wrapRef;
@@ -384,7 +411,7 @@ async function scrollToSection(section: string) {
 }
 
 function updateActiveSection() {
-  if (activeSection.value === "tools") return;
+  if (activeSection.value === "tools" || activeSection.value === "photoCraft") return;
   const wrap = pageScroll.value?.wrapRef;
   if (!wrap) return;
   if (wrap.scrollTop > 0 && wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 2) {
@@ -515,6 +542,7 @@ async function enterWorkspace() {
 
 async function openProject(project: Project) {
   if (creating.value || opening.value) return;
+  if (!await confirmPhotoCraftLeave()) return;
   opening.value = true;
   try {
     const directory = project.directory;
@@ -568,6 +596,7 @@ async function renameProject(project: Project) {
 
 async function createProject(fromPrompt = true) {
   if (creating.value || opening.value || (fromPrompt && !workspaceDirectory.value)) return;
+  if (!await confirmPhotoCraftLeave()) return;
   const path = fromPrompt ? workspaceDirectory.value : await relocationPicker.value?.chooseDirectory();
   if (!path || creating.value || opening.value || pageLifetime.signal.aborted) return;
   creating.value = true;
@@ -738,6 +767,21 @@ async function createProject(fromPrompt = true) {
       transition: gap var(--sidebarMotion) ease, padding var(--sidebarMotion) ease;
 
       > svg { flex-shrink: 0; }
+      .psIcon {
+        display: grid;
+        flex-shrink: 0;
+        place-items: center;
+        width: 18px;
+        height: 18px;
+        border: 1px solid rgb(49 168 255 / 35%);
+        border-radius: 4px;
+        background: #001e36;
+        color: #31a8ff;
+        font-family: Arial, sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+      }
       .sidebarText {
         min-width: 0;
         max-width: 180px;

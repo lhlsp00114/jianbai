@@ -64,10 +64,20 @@ export function resolveNodeMenu(saved: NodeMenuItem[], nodes: { type: string; la
     }
   }
   updateLabels(items);
-  const order: Record<string, number> = { "remote-textNode": 0, "remote-imageNode": 1, "remote-videoNode": 2, "remote-audioNode": 3 };
-  for (const node of [...nodes].sort((left, right) => (order[left.type] ?? 4) - (order[right.type] ?? 4) || left.type.localeCompare(right.type))) {
+  const order: Record<string, number> = {
+    "remote-textNode": 0, "remote-imageGenerationNode": 1, "remote-videoGenerationNode": 2,
+    "remote-scriptGeneratorNode": 3, "remote-imageNode": 4, "remote-videoNode": 5,
+    "remote-audioNode": 6, "remote-audioGenerationNode": 7, "remote-director3dNode": 8, "remote-frameAnalysisNode": 9,
+  };
+  function insertScript(items: NodeMenuItem[], script: NodeMenuItem): boolean {
+    const index = items.findIndex(item => item.type === "remote-videoGenerationNode");
+    if (index >= 0) { items.splice(index + 1, 0, script); return true; }
+    return items.some(item => item.children && insertScript(item.children, script));
+  }
+  for (const node of [...nodes].sort((left, right) => (order[left.type] ?? 10) - (order[right.type] ?? 10) || left.type.localeCompare(right.type))) {
     if (existing.has(node.type)) continue;
     existing.add(node.type);
+    if (node.type === "remote-scriptGeneratorNode" && insertScript(items, { id: "node:" + node.type, type: node.type, label: node.label, hidden: false })) continue;
     items.push({ id: `node:${node.type}`, type: node.type, label: node.label, hidden: false });
   }
   return items;

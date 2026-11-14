@@ -1,48 +1,53 @@
 <template>
   <nodeSkeleton
     v-bind="nodeProps"
-    v-model:bottomVisible="node.selected"
-    :topVisible="node.selected"
+    :bottomVisible="node.selected && (!manualWriting || musicPromptMode)"
+    :topVisible="manualWriting && node.selected"
     topWidth="max-content"
     :downloadUrl="downloadUrl"
     :downloadName="`${nodeProps.label || '文本'}.md`"
     :bottomWidth="660"
-    @fullscreen="fullscreen = true; editing = true">
-    <div class="textContent" :class="{ empty: !outputs.text.value.trim(), resized }">
+    :style="{ width: '350px', '--textNodeBackground': textBackground || undefined }"
+    @fullscreen="editing = true">
+    <template v-if="manualWriting" #top><div ref="manualToolbar" /></template>
+    <div ref="textContentElement" class="textContent" :class="{ empty: !manualWriting && !outputs.text.value.trim(), resized, manualWriting }" :style="{ backgroundColor: textBackground || undefined }">
       <el-alert v-if="documentState.error" :title="documentState.error" type="error" :closable="false" showIcon>
         <el-button text size="small" :disabled="generating || textReloading" @click="editing = true">查看并复制当前正文</el-button>
         <el-button text size="small" :disabled="generating" :loading="textReloading" @click="reloadText">重新读取磁盘</el-button>
       </el-alert>
-      <div v-if="!outputs.text.value.trim() && textReady" class="emptyState">
+      <div v-if="manualWriting && textReady" class="inlineEditor nowheel" :class="{ nodrag: inlineEditing, nopan: inlineEditing }" @pointerdown="handleInlinePointerdown" @mousedown="handleInlineMousedown" @dblclick.stop="enterInlineEditing" @keydown="handleInlineKeydown">
+        <markdownEditor ref="inlineEditor" v-model="outputs.text.value" v-model:backgroundColor="textBackground" compact expandable :contentEditable="inlineEditing" :toolbarTarget="manualToolbar" :toolbarVisible="!!manualToolbar && !editing" :downloadUrl="downloadUrl" :downloadName="`${nodeProps.label || '文本'}.md`" :files="textFiles" :path="textPath" :active="!editing" :disabled="generating || textReloading" :readonly="!!documentState.error" ariaLabel="编写文本内容" @expand="editing = true" />
+      </div>
+      <div v-else-if="!outputs.text.value.trim() && textReady" class="emptyState">
         <div class="emptyIcon">
-          <icon-align-left :size="34" stroke="1.5" />
+          <icon-menu-2 :size="34" />
         </div>
-        <div class="emptyLabel">尝试:</div>
+        <div class="emptyLabel">尝试：</div>
         <div class="quickActions">
-          <button class="quickAction nodrag nopan" @pointerdown.stop @mousedown.stop @click.stop="useQuickAction('write')">
-            <icon-pencil :size="14" />
+          <button class="quickAction nodrag nopan" :disabled="quickActionBusy || generating || textReloading || !!documentState.error" @pointerdown.stop @mousedown.stop @dblclick.stop @click.stop="useQuickAction('write')">
+            <icon-pencil :size="18" />
             <span>自己编写内容</span>
           </button>
-          <button class="quickAction nodrag nopan" @pointerdown.stop @mousedown.stop @click.stop="useQuickAction('text2video')">
-            <icon-video :size="14" />
+          <button class="quickAction nodrag nopan" :disabled="quickActionBusy || generating || textReloading || !!documentState.error" @pointerdown.stop @mousedown.stop @dblclick.stop @click.stop="useQuickAction('text2video')">
+            <icon-video :size="18" />
             <span>文生视频</span>
           </button>
-          <button class="quickAction nodrag nopan" @pointerdown.stop @mousedown.stop @click.stop="useQuickAction('image2prompt')">
-            <icon-photo :size="14" />
+          <button class="quickAction nodrag nopan" :disabled="quickActionBusy || generating || textReloading || !!documentState.error" @pointerdown.stop @mousedown.stop @dblclick.stop @click.stop="useQuickAction('image2prompt')">
+            <icon-photo :size="18" />
             <span>图片反推提示词</span>
           </button>
-          <button class="quickAction nodrag nopan" @pointerdown.stop @mousedown.stop @click.stop="useQuickAction('text2music')">
-            <icon-music :size="14" />
+          <button class="quickAction nodrag nopan" :disabled="quickActionBusy || generating || textReloading || !!documentState.error" @pointerdown.stop @mousedown.stop @dblclick.stop @click.stop="useQuickAction('text2music')">
+            <icon-music :size="18" />
             <span>文字生音乐</span>
           </button>
         </div>
       </div>
-      <div v-if="outputs.text.value.trim() && previewReady" class="textPreview nopan nowheel" aria-label="文本内容">
+      <div v-if="!manualWriting && outputs.text.value.trim() && previewReady" class="textPreview nopan nowheel" aria-label="文本内容">
         <markdownPreview :modelValue="outputs.text.value" :files="textReady ? textFiles : undefined" :path="textPath" :active="previewReady" />
       </div>
-      <el-button v-if="outputs.text.value.trim()" class="editButton nodrag nopan" :icon="IconEdit" :disabled="generating || !textReady" text @dblclick.stop @click.stop="editing = true">编辑</el-button>
+      <el-button v-if="!manualWriting && outputs.text.value.trim()" class="editButton nodrag nopan" :icon="IconEdit" :disabled="generating || !textReady" text @dblclick.stop @click.stop="editing = true">编辑</el-button>
     </div>
-    <template #bottom>
+    <template v-if="!manualWriting || musicPromptMode" #bottom>
       <el-card class="promptCard" shadow="never" :bodyStyle="{ padding: '14px 16px 12px' }">
         <div class="promptHeader" v-if="refList.length">
           <referenceItem
@@ -62,24 +67,25 @@
             </el-option-group>
           </el-select>
           <div class="promptActions">
-            <el-button class="sendButton" :icon="IconArrowUp" :loading="generating" :disabled="!prompt.trim() || !selectedModel || generating || !textReady" title="生成" aria-label="生成" @click="generateText" />
+            <el-button class="sendButton" :icon="IconArrowUp" :loading="generating" :disabled="!prompt.trim() || !selectedModel || generating || !textReady || textReloading || !!documentState.error" title="生成" aria-label="生成" @click="generateText" />
           </div>
         </div>
       </el-card>
     </template>
   </nodeSkeleton>
-  <el-dialog v-model="editing" title="编辑文本" width="min(860px, calc(100vw - 32px))" :fullscreen="fullscreen" alignCenter appendToBody @closed="fullscreen = false">
-    <div class="textEditor" :class="{ fullscreen }">
-      <markdownEditor v-model="outputs.text.value" :files="textReady ? textFiles : undefined" :path="textPath" :active="editing" :disabled="generating || textReloading" :readonly="!!documentState.error" ariaLabel="编辑文本内容" />
+  <el-dialog v-model="editing" class="textEditDialog" title="编辑文本" width="min(760px, calc(100vw - 48px))" alignCenter appendToBody>
+    <div class="textEditor">
+      <markdownEditor v-model="outputs.text.value" v-model:backgroundColor="textBackground" :compact="manualWriting" :files="textReady ? textFiles : undefined" :path="textPath" :active="editing" :disabled="generating || textReloading || !textReady" :readonly="!!documentState.error" ariaLabel="编辑文本内容" />
     </div>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
 import { ElAlert, ElButton, ElCard, ElSelect, ElDialog, ElOption, ElOptionGroup, ElMessage, ElMessageBox } from "element-plus";
-import { IconEdit, IconFileText, IconSparkles, IconArrowUp, IconAlignLeft, IconPencil, IconVideo, IconPhoto, IconMusic } from "@tabler/icons-vue";
-import { getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, z, type NodeAiModel, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
+import { IconEdit, IconFileText, IconSparkles, IconArrowUp, IconMenu2, IconPencil, IconVideo, IconPhoto, IconMusic } from "@tabler/icons-vue";
+import { getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, validateConnection, z, type NodeAiModel, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
+import { useVueFlow } from "@vue-flow/core";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
 import modelLabel from "@toonflow/node-shared/modelLabel";
 import { useNodeReferences } from "@toonflow/node-shared/useNodeReferences";
@@ -88,6 +94,7 @@ import markdownPreview from "./markdownPreview.vue";
 import referenceItem from "@toonflow/node-shared/referenceItem";
 import promptInput from "@toonflow/node-shared/promptInput";
 import { useNodeDocumentState, type NodeDocumentContext } from "@toonflow/nodes-scaffold/nodeDocument";
+import { defaultImagePromptInstruction, imagePromptRequest, legacyImagePrompt } from "./imagePromptInstruction";
 
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
 
@@ -106,9 +113,14 @@ const { node, nodeProps, outputs, ai, files, nodeEvent, previewReady } = useNode
 });
 const { refList, referenceMentions, setReferencePreview, removeReference } = useNodeReferences();
 const editing = ref(false);
-const fullscreen = ref(false);
+const inlineEditing = ref(false);
+const textContentElement = ref<HTMLElement>();
+const manualToolbar = ref<HTMLElement>();
+const inlineEditor = ref<InstanceType<typeof markdownEditor>>();
 const downloadUrl = ref("");
 const documentContext = inject<NodeDocumentContext | undefined>("nodeDocument", undefined);
+const flow = useVueFlow();
+const batchHistory = inject<(action: () => Promise<void>) => Promise<void>>("batchCanvasHistory", action => action());
 const resized = computed(() => !documentContext?.targets.has(node.id) && typeof node.style === "object" && !!node.style.height);
 watch([() => outputs.value.text.value, () => node.selected || !!documentContext?.targets.has(node.id)], ([text, visible], _previous, onCleanup) => {
   downloadUrl.value = "";
@@ -117,12 +129,27 @@ watch([() => outputs.value.text.value, () => node.selected || !!documentContext?
   downloadUrl.value = url;
   onCleanup(() => URL.revokeObjectURL(url));
 }, { immediate: true });
-const data = computed(() => node.data as typeof node.data & { prompt?: string; promptModel?: PromptModel; model?: string; textPath?: string; textSnapshot?: string });
+const data = computed(() => node.data as typeof node.data & { prompt?: string; promptModel?: PromptModel; model?: string; textPath?: string; textSnapshot?: string; manualWriting?: boolean; promptAction?: string; textBackground?: string });
+const manualWriting = computed(() => data.value.manualWriting === true);
+const musicPromptMode = computed(() => data.value.promptAction === "text2music");
+const readImageInstruction = inject<() => string>("textImagePromptInstruction", () => defaultImagePromptInstruction);
+const imagePromptMode = computed(() => data.value.promptAction === "image2prompt"
+  || !data.value.promptAction && data.value.prompt === legacyImagePrompt);
+const legacyBackgroundColors: Record<string, string> = {
+  "#35211f": "#382124", "#35281b": "#46301c", "#332f1a": "#453b1b",
+  "#1f3026": "#1d3a2a", "#1d3034": "#1b3b43", "#1e2938": "#24385d",
+  "#2b2238": "#38264f", "#351f2b": "#48233b", "#343434": "#3d3d3d",
+  "#4a2425": "#382124", "#49301c": "#46301c", "#453c1a": "#453b1b",
+  "#1c3d2c": "#1d3a2a", "#183e46": "#1b3b43", "#203c64": "#24385d",
+  "#362052": "#38264f", "#4d1e3c": "#48233b", "#424242": "#3d3d3d",
+};
+const textBackground = computed({ get: () => legacyBackgroundColors[data.value.textBackground ?? ""] ?? data.value.textBackground ?? "", set: (value: string) => { data.value.textBackground = value; } });
 const prompt = computed({ get: () => data.value.prompt ?? "", set: (value: string) => { data.value.prompt = value; } });
 const model = computed({ get: () => data.value.model ?? "", set: (value: string) => { data.value.model = value; } });
 const models = ref<NodeAiModel[]>([]);
 const modelsLoading = ref(false);
 const generating = ref(false);
+const quickActionBusy = ref(false);
 const selectedModel = useNodeModelSelection(models, model);
 const modelGroups = computed(() => groupNodeModels(models.value));
 const textReady = ref(false);
@@ -134,6 +161,8 @@ let textSaving = Promise.resolve();
 let textSnapshot: Awaited<ReturnType<typeof textFiles.readTextSnapshot>> | undefined;
 let textRevision = 0;
 const documentState = useNodeDocumentState();
+watch(() => node.selected, selected => { if (!selected) inlineEditing.value = false; });
+watch(editing, value => { if (value) inlineEditing.value = false; });
 function saveText(value: string) {
   const revision = ++textRevision;
   documentState.dirty = true;
@@ -255,31 +284,146 @@ async function loadModels() {
 const quickActionPrompts: Record<string, { placeholder: string; autoOpen?: boolean }> = {
   write: { placeholder: "写下你想讲的故事、场景或角色设定。例如：一个来自未来的机器人，在城市屋顶看星星。", autoOpen: true },
   text2video: { placeholder: "描述你想生成的视频内容。例如：夕阳下的海边，海浪轻轻拍打岸边，一个女孩坐在礁石上看日落。" },
-  image2prompt: { placeholder: "上传图片后，AI 将自动分析并生成对应的绘图提示词，连接图片节点后点击生成即可。" },
+  image2prompt: { placeholder: imagePromptRequest },
   text2music: { placeholder: "描述你想生成的音乐风格和情绪。例如：轻快欢乐的流行音乐，适合夏日海边场景，BPM 约 120。" },
 };
 
-function useQuickAction(type: string) {
+async function useQuickAction(type: string) {
   const action = quickActionPrompts[type];
-  if (!action) return;
-  if (action.autoOpen) {
-    editing.value = true;
-    return;
+  if (!action || quickActionBusy.value || !textReady.value || textReloading.value || generating.value || documentState.error) return;
+  quickActionBusy.value = true;
+  try {
+    if (type === "text2video") {
+      if (await createVideoGenerationNode()) activateManualWriting("text2video");
+      return;
+    }
+    if (type === "image2prompt" && !await createImageReferenceNode()) return;
+    if (type === "image2prompt") data.value.promptAction = type;
+    if (action.autoOpen) {
+      activateManualWriting("write");
+      return;
+    }
+    if (!prompt.value.trim() || type === "image2prompt" && prompt.value === legacyImagePrompt) {
+      data.value.prompt = action.placeholder;
+      data.value.promptModel = [[{ type: "Write", text: action.placeholder }]];
+    }
+    if (type === "text2music") activateManualWriting("text2music");
+    node.selected = true;
+  } finally { quickActionBusy.value = false; }
+}
+
+async function enterInlineEditing() {
+  if (!manualWriting.value || !textReady.value || generating.value || textReloading.value || documentState.error) return;
+  inlineEditing.value = true;
+  node.selected = true;
+  await nextTick();
+  inlineEditor.value?.focus();
+}
+
+function handleInlinePointerdown(event: PointerEvent) {
+  if (inlineEditing.value) event.stopPropagation();
+}
+
+function handleInlineMousedown(event: MouseEvent) {
+  if (inlineEditing.value) event.stopPropagation();
+}
+
+function handleInlineKeydown(event: KeyboardEvent) {
+  if (!inlineEditing.value) return;
+  event.stopPropagation();
+  if (event.key === "Escape" && !event.isComposing) {
+    event.preventDefault();
+    inlineEditing.value = false;
+    inlineEditor.value?.blur();
   }
-  // 把提示文字填入 prompt 输入框，让用户知道怎么使用
-  if (!prompt.value.trim()) {
-    data.value.prompt = action.placeholder;
-    data.value.promptModel = [[{ type: "Write", text: action.placeholder }]];
+}
+
+function activateManualWriting(action: string) {
+  if (!textReady.value || generating.value || documentState.error) return;
+  const skeleton = textContentElement.value?.closest<HTMLElement>(".nodeSkeleton");
+  if (skeleton && !documentContext?.targets.has(node.id)) {
+    const style = typeof node.style === "function" ? node.style(node) : node.style;
+    node.style = { ...style, width: `${skeleton.offsetWidth}px`, height: `${skeleton.offsetHeight}px` };
   }
-  // 展开底部输入面板（通过选中节点触发 bottomVisible）
-  if (!node.selected) {
-    // 滚动到输入框
+  data.value.manualWriting = true;
+  data.value.promptAction = action;
+  node.selected = true;
+}
+
+async function createVideoGenerationNode() {
+  const type = "remote-videoGenerationNode";
+  if (!flow.nodeTypes?.value?.[type]) { ElMessage.error("请先启用视频生成节点插件"); return false; }
+  if (flow.findNode(node.id) !== node) { ElMessage.error("文本节点已变化，请重新操作"); return false; }
+  const nodeId = crypto.randomUUID();
+  const width = 360;
+  const x = node.computedPosition.x + (node.dimensions.width || 350) + 100;
+  let y = node.computedPosition.y;
+  for (const other of [...flow.getNodes.value].sort((left, right) => left.computedPosition.y - right.computedPosition.y)) {
+    const position = other.computedPosition;
+    if (other.id !== node.id && position.x < x + width && position.x + (other.dimensions.width || 320) > x
+      && position.y < y + 420 && position.y + (other.dimensions.height || 300) > y) y = position.y + (other.dimensions.height || 300) + 40;
   }
+  return batchHistory(async () => {
+    if (flow.findNode(node.id) !== node || !flow.nodeTypes?.value?.[type]) throw new Error("画布或视频生成节点已变化，请重新操作");
+    try {
+      flow.addNodes({ id: nodeId, type, position: { x, y }, data: { label: "视频生成", ...(outputs.value.text.value.trim() ? { prompt: outputs.value.text.value.trim(), promptModel: [[{ type: "Write", text: outputs.value.text.value.trim() }]] } : {}) } });
+      await nextTick();
+      const sourceNode = flow.findNode(node.id);
+      const targetNode = flow.findNode(nodeId);
+      const edge = { id: crypto.randomUUID(), source: node.id, sourceHandle: "text", target: nodeId, targetHandle: "in" };
+      if (!sourceNode || !targetNode || !validateConnection(edge, { sourceNode, targetNode, nodes: flow.getNodes.value, edges: flow.getEdges.value })) throw new Error("文本无法连接到视频生成节点");
+      flow.addEdges(edge);
+      if (!flow.findEdge(edge.id)) throw new Error("视频生成节点连接失败");
+      // 保留文本节点选中状态，让创建完成后仍显示文本工具栏；这里只更新选中标记，不删除任何节点。
+      flow.setNodes(flow.getNodes.value.map(item => ({ ...item, selected: item.id === node.id })));
+      flow.nodesSelectionActive.value = false;
+    } catch (error) {
+      flow.removeNodes(nodeId, true, false);
+      throw error;
+    }
+  }).then(() => true, error => {
+    ElMessage.error(error instanceof Error ? error.message : "创建视频生成节点失败");
+    return false;
+  });
+}
+
+async function createImageReferenceNode() {
+  const type = "remote-imageNode";
+  if (!flow.nodeTypes?.value?.[type]) { ElMessage.error("请先启用图片节点插件"); return false; }
+  if (flow.findNode(node.id) !== node) { ElMessage.error("文本节点已变化，请重新操作"); return false; }
+  const nodeId = crypto.randomUUID();
+  const width = 300;
+  const x = node.computedPosition.x - width - 100;
+  let y = node.computedPosition.y;
+  for (const other of [...flow.getNodes.value].sort((left, right) => left.computedPosition.y - right.computedPosition.y)) {
+    const position = other.computedPosition;
+    if (other.id !== node.id && position.x < node.computedPosition.x && position.x + (other.dimensions.width || 320) > x
+      && position.y < y + 300 && position.y + (other.dimensions.height || 300) > y) y = position.y + (other.dimensions.height || 300) + 40;
+  }
+  return batchHistory(async () => {
+    if (flow.findNode(node.id) !== node || !flow.nodeTypes?.value?.[type]) throw new Error("画布或图片节点已变化，请重新操作");
+    try {
+      flow.addNodes({ id: nodeId, type, position: { x, y }, data: { label: "图片" } });
+      await nextTick();
+      const sourceNode = flow.findNode(nodeId);
+      const targetNode = flow.findNode(node.id);
+      const edge = { id: crypto.randomUUID(), source: nodeId, sourceHandle: "image", target: node.id, targetHandle: "in" };
+      if (!sourceNode || !targetNode || !validateConnection(edge, { sourceNode, targetNode, nodes: flow.getNodes.value, edges: flow.getEdges.value })) throw new Error("图片节点无法连接到文本节点");
+      flow.addEdges(edge);
+      if (!flow.findEdge(edge.id)) throw new Error("图片节点连接失败");
+    } catch (error) {
+      flow.removeNodes(nodeId, true, false);
+      throw error;
+    }
+  }).then(() => true, error => {
+    ElMessage.error(error instanceof Error ? error.message : "创建图片节点失败");
+    return false;
+  });
 }
 
 async function generateText() {
   const choice = selectedModel.value;
-  if (!textReady.value || generating.value || !choice || !prompt.value.trim()) return;
+  if (!textReady.value || textReloading.value || documentState.error || generating.value || !choice || !prompt.value.trim()) return;
   generating.value = true;
   let text = "";
   try {
@@ -287,7 +431,15 @@ async function generateText() {
     const references = refList.value
       .filter(item => item.value !== undefined && (item.dataType === "STRING" || item.dataType === "IMAGE" || item.dataType === "VIDEO" || item.dataType === "FILE"))
       .map(item => item.dataType === "STRING" ? { dataType: item.dataType, value: item.value } : { dataType: item.dataType, value: { ...item.value } });
-    const input = { ...getNodeModelIdentity(choice), prompt: prompt.value.trim(), references };
+    if (imagePromptMode.value && !references.some(item => item.dataType === "IMAGE")) {
+      throw new Error("请先上传并连接参考图片，再生成反推提示词");
+    }
+    const input = {
+      ...getNodeModelIdentity(choice),
+      prompt: imagePromptMode.value && prompt.value === legacyImagePrompt ? imagePromptRequest : prompt.value.trim(),
+      ...(imagePromptMode.value ? { systemPrompt: readImageInstruction() } : {}),
+      references,
+    };
     const directory = references.some(item => item.dataType !== "STRING") ? (await textFiles.list()).directory : undefined;
     const result = await ai.generate({
       ...input,
@@ -314,6 +466,8 @@ nodeTools.register({
   parameters: z.strictObject({ text: z.string() }),
   async execute({ text }) {
     if (!textReady.value) throw new Error("文本尚未加载");
+    if (textReloading.value) throw new Error("文本正在重新读取，请稍后修改");
+    if (documentState.error) throw new Error(documentState.error);
     if (generating.value) throw new Error("文本生成中，请稍后修改");
     if (outputs.value.text.value === text) await saveText(text);
     else { outputs.value.text.value = text; await textSaving; }
@@ -323,17 +477,31 @@ nodeTools.register({
 </script>
 
 <style lang="scss" scoped>
+:deep(.contentCard), :deep(.contentCard > .el-card__body) { background-color: var(--textNodeBackground, var(--el-bg-color-overlay)) !important; }
 .textEditor {
-  height: min(560px, calc(100dvh - 144px));
+  height: min(760px, calc(100dvh - 160px));
   min-height: 0;
+}
 
-  &.fullscreen {
-    height: calc(100dvh - 112px);
-  }
+:deep(.textEditDialog.el-dialog) {
+  max-width: calc(100vw - 48px);
+  max-height: calc(100dvh - 96px);
+  overflow: hidden;
+}
+
+:deep(.textEditDialog .el-dialog__body) {
+  height: min(800px, calc(100dvh - 112px));
+  box-sizing: border-box;
+  padding: 0 16px 16px;
+  overflow: hidden;
 }
 
 .textContent {
   min-height: 110px;
+  border-radius: 8px;
+  background-color: var(--textNodeBackground, transparent) !important;
+
+  &.manualWriting { display: flex; flex-direction: column; height: 100%; min-height: 0; .inlineEditor { flex: 1; min-height: 0; } .el-alert { flex-shrink: 0; } }
 
   &.resized {
     display: flex;
@@ -353,62 +521,74 @@ nodeTools.register({
   &.empty {
     min-height: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+
+    &.resized {
+      justify-content: flex-start;
+      overflow: auto;
+      .emptyState { flex: 1; min-height: min-content; }
+    }
 
     .emptyState {
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
+      align-items: stretch;
       justify-content: center;
-      gap: 12px;
-      padding: 20px 20px 20px 20px;
+      min-height: 290px;
+      padding: 24px 20px;
       user-select: none;
       width: 100%;
+      box-sizing: border-box;
+      text-align: left;
 
       .emptyIcon {
         display: grid;
         place-items: center;
         width: 100%;
-        height: 60px;
-        margin-bottom: 4px;
+        height: 80px;
+        flex-shrink: 0;
+        margin-bottom: 8px;
         color: var(--el-text-color-secondary);
-        opacity: 0.4;
+        opacity: .45;
       }
 
       .emptyLabel {
         color: var(--el-text-color-secondary);
         font-size: 13px;
-        margin-bottom: 2px;
+        margin-bottom: 16px;
       }
 
       .quickActions {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 4px;
         width: 100%;
 
         .quickAction {
           display: inline-flex;
           align-items: center;
           gap: 10px;
-          padding: 2px 6px;
+          min-height: 26px;
+          padding: 2px 8px;
           background: transparent;
           border: 0;
           border-radius: 4px;
-          color: var(--el-color-primary);
+          color: var(--el-text-color-primary);
           font: inherit;
           font-size: 14px;
           text-align: left;
           cursor: pointer;
-          transition: all 0.12s;
+          transition: background-color 0.12s, color 0.12s;
 
           &:hover {
             background: var(--el-fill-color-light);
-            color: var(--el-color-primary-light-3);
+            color: var(--el-color-primary);
           }
 
-          &:active { transform: scale(0.97); }
+          &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
+          &:disabled { opacity: .45; cursor: default; }
         }
       }
     }

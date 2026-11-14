@@ -205,7 +205,7 @@ function releaseNodeFocus(instance: xSender) {
   }
 }
 
-function syncModel(value = sender?.getModel() ?? model.value) {
+function syncModel(value = sender?.getModel() ?? model.value, clearHistory = false) {
   // 输入法组字时只同步文本，等 compositionend 后再替换参考标签，保留正在编辑的 DOM。
   const next = sender?.chatEditor.isComposition ? value : normalizeModel(value);
   if (sender && JSON.stringify(sender.getModel()) !== JSON.stringify(next)) {
@@ -225,7 +225,7 @@ function syncModel(value = sender?.getModel() ?? model.value) {
       };
     }) : [];
     releaseNodeFocus(instance);
-    const task = instance.reset({ chatNode: next, clearHistory: false });
+    const task = instance.reset({ chatNode: next, clearHistory });
     resetTask = task;
     void task.finally(() => { if (resetTask === task) resetTask = undefined; });
     // ACT: reset 同步重建 DOM，但下一帧会强制移到末尾；在此恢复选区，并在 reset 完成前抑制该次聚焦。
@@ -315,6 +315,7 @@ watch(senderElement, (element, _previous, onCleanup) => {
   const releaseTextHistory = registerTextHistory({
     element: editor,
     async change(direction) {
+      await instance.nextTick();
       if (resetTask) await resetTask;
       if (sender !== instance || !editor.isConnected || instance.chatEditor.isComposition) return;
       await instance[direction]();
@@ -357,7 +358,7 @@ watch(senderElement, (element, _previous, onCleanup) => {
     syncModel();
     updateMentionMenu();
   });
-  syncModel(initialModel);
+  syncModel(initialModel, true);
   // ACT: XSender 1.4.6 默认复制标签名称；复用库截取的选区模型，仅覆盖纯文本，保留富文本粘贴。
   const copyText = (event: ClipboardEvent) => {
     const copied = event.clipboardData?.getData("application/chat-nodes");

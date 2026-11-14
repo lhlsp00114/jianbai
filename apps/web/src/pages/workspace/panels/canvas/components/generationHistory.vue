@@ -350,14 +350,25 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
 :global(.generationHistoryDialog) {
   display: flex;
   flex-direction: column;
+  height: min(800px, 85dvh);
   max-height: calc(100dvh - 32px);
   overflow: hidden;
+}
 
-  :deep(.el-dialog__body) { min-height: 0; overflow: auto; }
+:global(.generationHistoryDialog > .el-dialog__body) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .generationHistoryTabs {
-  :deep(.el-tabs__header) { margin-bottom: 16px; }
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  :deep(.el-tabs__header) { flex-shrink: 0; margin-bottom: 16px; }
+  :deep(.el-tabs__content) { flex: 1; min-height: 0; overflow: hidden; }
+  :deep(.el-tab-pane) { display: flex; flex-direction: column; height: 100%; gap: 12px; }
+  :deep(.el-alert) { flex-shrink: 0; }
   :deep(.el-tabs__nav-wrap::after) { height: 1px; }
 }
 
@@ -365,8 +376,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;
-  min-height: 220px;
-  max-height: min(68vh, 680px);
+  flex: 1;
+  min-height: 0;
+  align-content: start;
   overflow: auto;
 
   .historyMedia {
@@ -411,9 +423,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
 .audioHistoryList {
   display: grid;
   gap: 10px;
-  max-height: min(68vh, 680px);
+  flex: 1;
   overflow: auto;
-  min-height: 220px;
+  min-height: 0;
   align-content: start;
 
   .audioHistoryItem {
