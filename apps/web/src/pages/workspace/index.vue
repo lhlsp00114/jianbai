@@ -74,6 +74,23 @@
                 <icon-arrow-forward-up :size="18" aria-hidden="true" />
               </el-button>
             </el-tooltip>
+            <el-tooltip :showArrow="false" content="快捷键" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]" :disabled="shortcutsVisible">
+              <span class="toolTrigger">
+                <el-popover v-model:visible="shortcutsVisible" trigger="click" placement="top-end" :width="520">
+                  <template #reference>
+                    <el-button class="toolButton" text aria-label="快捷键">
+                      <icon-keyboard :size="18" />
+                    </el-button>
+                  </template>
+                  <div class="shortcutsMenu">
+                    <div v-for="field in canvasShortcutFields" :key="field.id" class="shortcutItem">
+                      <span class="shortcutLabel">{{ field.label }}</span>
+                      <span class="shortcutKeys">{{ shortcutLabel(generalSettings.canvasShortcuts[field.id]) || '未绑定' }}</span>
+                    </div>
+                  </div>
+                </el-popover>
+              </span>
+            </el-tooltip>
             <el-tooltip :showArrow="false" content="帮助" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]" :disabled="helpVisible">
               <span class="toolTrigger">
                 <el-popover v-model:visible="helpVisible" trigger="click" placement="top-end" :width="196">
@@ -149,14 +166,14 @@ import { translate } from "@toonflow/i18n/vue";
 import { computed, defineAsyncComponent, nextTick, onMounted, onScopeDispose, provide, ref, shallowRef, watch, type ComponentPublicInstance } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import axios from "axios";
-import { IconVector, IconFileText, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase, IconSun, IconMoon, IconArrowBackUp, IconArrowForwardUp } from "@tabler/icons-vue";
+import { IconVector, IconFileText, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase, IconSun, IconMoon, IconArrowBackUp, IconArrowForwardUp, IconKeyboard } from "@tabler/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { QRCode } from "tdesign-vue-next";
 import type { AgentMention } from "@toonflow/server/agent/types";
 import settings from "@/components/settings/index.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { generalSettings, updateUiSettings } from "@/stores/settings";
-import { shortcutLabel } from "@/lib/canvasShortcuts";
+import { shortcutLabel, canvasShortcutFields } from "@/lib/canvasShortcuts";
 import { appearanceDark } from "@/lib/appearance";
 import type { CanvasTextHistory } from "@toonflow/node-shared/canvasTextHistory";
 import { registerWorkspaceControl, waitForControlValue } from "@/lib/mcpControl";
@@ -223,6 +240,7 @@ const agentVisible = ref(false);
 const agentWidth = ref(0);
 const settingsVisible = ref(false);
 const helpVisible = ref(false);
+const shortcutsVisible = ref(false);
 const contactVisible = ref(false);
 const contactType = ref<"community" | "business">("community");
 const contacts = {
@@ -686,6 +704,40 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
   .helpAction {
     justify-content: flex-start;
     margin-left: 0;
+  }
+}
+
+.shortcutsMenu {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 20px;
+  max-height: min(72vh, 480px);
+  overflow: auto;
+  padding: 2px 0;
+
+  .shortcutItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 2px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+
+    &:nth-last-child(-n+2) { border-bottom: 0; }
+
+    .shortcutLabel {
+      flex-shrink: 0;
+      color: var(--el-text-color-secondary);
+      font-size: 12px;
+    }
+
+    .shortcutKeys {
+      color: var(--el-text-color-primary);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      text-align: right;
+    }
   }
 }
 

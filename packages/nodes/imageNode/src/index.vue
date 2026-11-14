@@ -5,6 +5,7 @@
     :bottomVisible="node.selected && (lightingVisible || multiAngleVisible || editor?.mode === 'inpaint' || editor?.mode === 'smartEdit')"
     :bottomWidth="660"
     contentPadding="2px"
+    :resizeAspectRatio="previewUrl && imageWidth ? imageWidth / 240 : undefined"
     selectionFrame
     topWidth="max-content"
     toolbarAction="focus"

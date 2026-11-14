@@ -57,10 +57,12 @@ export async function copyNodesToClipboard(nodes: Node[], edges: Edge[], directo
   await writeClipboardText(command);
 }
 
-export async function readClipboardNodes(command: string, directory: string) {
-  if (!nodeClipboardCommand.test(command)) return;
+export async function readClipboardNodes(command: string | undefined, directory: string) {
+  if (command !== undefined && !nodeClipboardCommand.test(command)) return;
   const entry = await accessClipboard();
-  if (!entry || entry.command !== command) throw new Error("节点剪贴数据已失效，请重新复制");
+  if (!entry) return;
+  if (command !== undefined && entry.command !== command) throw new Error("节点剪贴数据已失效，请重新复制");
+  if (command === undefined && !nodeClipboardCommand.test(entry.command)) return;
   const nodes = entry.nodes ?? (entry.node ? [{ ...entry.node, id: "clipboardNode", position: { x: 0, y: 0 } }] : undefined);
   const edges = entry.edges ?? [];
   if (!Array.isArray(nodes) || !nodes.length || !Array.isArray(edges) || nodes.some(node => !node

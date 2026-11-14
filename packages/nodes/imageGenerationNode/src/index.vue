@@ -5,6 +5,7 @@
     :topVisible="node.selected"
     topWidth="max-content"
     contentPadding="2px"
+    :resizeAspectRatio="(previewUrl || inpaintGuideUrl) && imageWidth ? imageWidth / 240 : undefined"
     selectionFrame
     toolbarAction="focus"
     :downloadUrl="previewUrl"
@@ -635,6 +636,7 @@ nodeTools.register({
         height: 40px;
         margin-left: 0;
         padding: 0;
+        border-radius: 12px;
         --el-button-bg-color: var(--el-text-color-primary);
         --el-button-border-color: transparent;
         --el-button-text-color: var(--el-bg-color);

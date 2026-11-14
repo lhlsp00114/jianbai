@@ -42,6 +42,14 @@
           <el-divider direction="vertical" />
           <slot name="topRightActions" />
           <el-button
+            v-if="fullscreenVisible"
+            :icon="focusOnToolbar ? IconFocus2 : IconMaximize"
+            :disabled="!focusOnToolbar && !downloadUrl"
+            text
+            :title="focusOnToolbar ? '聚焦节点' : '全屏'"
+            :aria-label="focusOnToolbar ? '聚焦节点' : '全屏'"
+            @click.stop="focusOnToolbar ? focusNode() : emit('fullscreen')" />
+          <el-button
             :tag="downloadUrl ? 'a' : 'button'"
             :href="downloadUrl || undefined"
             :download="downloadName"
@@ -54,14 +62,6 @@
             aria-label="下载"
             @downloadstate="downloading = $event.detail"
             @click.stop />
-          <el-button
-            v-if="fullscreenVisible"
-            :icon="focusOnToolbar ? IconFocus2 : IconMaximize"
-            :disabled="!focusOnToolbar && !downloadUrl"
-            text
-            :title="focusOnToolbar ? '聚焦节点' : '全屏'"
-            :aria-label="focusOnToolbar ? '聚焦节点' : '全屏'"
-            @click.stop="focusOnToolbar ? focusNode() : emit('fullscreen')" />
         </el-card>
       </slot>
     </div>
@@ -156,7 +156,8 @@
         v-if="!readOnly && !loading && !documentTarget"
         class="resizeCorner nodrag nopan"
         type="button"
-        aria-label="调整节点大小（方向键微调）"
+        aria-label="调整节点大小（方向键微调，双击恢复默认尺寸）"
+        title="拖动调整大小，双击恢复默认尺寸"
         @pointerdown.stop.prevent="startResize"
         @pointermove.stop="moveResize"
         @pointerup.stop="finishResize"
@@ -165,7 +166,7 @@
         @keydown.stop="resizeWithKeyboard"
         @mousedown.stop
         @click.stop
-        @dblclick.stop />
+        @dblclick.stop.prevent="resetNodeSize" />
     </div>
   </div>
   </teleport>
@@ -209,6 +210,7 @@ const props = withDefaults(
       readOnly?: boolean;
       previewReady?: boolean;
       contentPadding?: string | number;
+      resizeAspectRatio?: number;
       selectionFrame?: boolean;
       topWidth?: string | number;
       bottomWidth?: string | number;
@@ -353,9 +355,24 @@ function startResize(event: PointerEvent) {
   });
 }
 
-function setNodeSize(width: number, height: number) {
+function setNodeSize(width: number, height: number, primary: "width" | "height" = "width") {
   const titleHeight = skeletonElement.value?.querySelector<HTMLElement>(".titleBar")?.offsetHeight ?? 32;
   const style = typeof node.style === "function" ? node.style(node) : node.style;
+  const ratio = props.resizeAspectRatio;
+  const body = skeletonElement.value?.querySelector<HTMLElement>(".cardContainer > .contentCard > .el-card__body");
+  if (ratio && Number.isFinite(ratio) && ratio > 0 && body && skeletonElement.value) {
+    const padding = getComputedStyle(body);
+    const horizontalInset = skeletonElement.value.offsetWidth - body.clientWidth + parseFloat(padding.paddingLeft) + parseFloat(padding.paddingRight);
+    const verticalInset = skeletonElement.value.offsetHeight - body.clientHeight + parseFloat(padding.paddingTop) + parseFloat(padding.paddingBottom);
+    // 内容按媒体比例联动，标题、边框和内边距不参与等比缩放。
+    const minContentHeight = cardHeight.value + titleHeight - verticalInset;
+    const contentHeight = primary === "width"
+      ? Math.max((width - horizontalInset) / ratio, minContentHeight)
+      : Math.max(height - verticalInset, minContentHeight);
+    const contentWidth = Math.max(contentHeight * ratio, 160 - horizontalInset);
+    width = contentWidth + horizontalInset;
+    height = contentWidth / ratio + verticalInset;
+  }
   node.style = { ...style, width: `${Math.max(160, width)}px`, height: `${Math.max(cardHeight.value + titleHeight, height)}px` };
 }
 
@@ -364,7 +381,11 @@ function moveResize(event: PointerEvent) {
   if (!state || event.pointerId !== state.pointerId) return;
   if (props.readOnly || props.loading || documentTarget.value || findNode(nodeId) !== node) return finishResize();
   const point = screenToFlowCoordinate({ x: event.clientX, y: event.clientY });
-  setNodeSize(state.width + point.x - state.point.x, state.height + point.y - state.point.y);
+  const deltaX = point.x - state.point.x;
+  const deltaY = point.y - state.point.y;
+  const ratio = props.resizeAspectRatio;
+  const horizontalChange = ratio && Number.isFinite(ratio) && ratio > 0 ? deltaX / ratio : deltaX;
+  setNodeSize(state.width + deltaX, state.height + deltaY, Math.abs(horizontalChange) >= Math.abs(deltaY) ? "width" : "height");
 }
 
 function finishResize(event?: PointerEvent) {
@@ -383,7 +404,25 @@ function resizeWithKeyboard(event: KeyboardEvent) {
   event.preventDefault();
   const dx = event.key === "ArrowLeft" ? -10 : event.key === "ArrowRight" ? 10 : 0;
   const dy = event.key === "ArrowUp" ? -10 : event.key === "ArrowDown" ? 10 : 0;
-  setNodeSize(skeleton.offsetWidth + dx, skeleton.offsetHeight + dy);
+  setNodeSize(skeleton.offsetWidth + dx, skeleton.offsetHeight + dy, dx ? "width" : "height");
+}
+
+async function resetNodeSize() {
+  if (props.readOnly || props.loading || documentTarget.value || resize.value) return;
+  const action = async () => {
+    if (props.readOnly || props.loading || documentTarget.value || findNode(nodeId) !== node) return;
+    const style = typeof node.style === "function" ? node.style(node) : node.style;
+    if (style?.width === undefined && style?.height === undefined) return;
+    const { width, height, ...rest } = style;
+    node.style = rest;
+    await nextTick();
+    updateNodeInternals([nodeId]);
+  };
+  try {
+    await (batchHistory ? batchHistory(action) : action());
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "恢复节点尺寸失败");
+  }
 }
 
 onScopeDispose(() => finishResize());
@@ -722,7 +761,7 @@ watch(
 
   &:hover,
   &.resizing {
-    .cardContainer .resizeCorner { opacity: 0.55; }
+    .cardContainer .resizeCorner { opacity: 1; }
   }
 
   .floatingSlot {
@@ -811,6 +850,7 @@ watch(
       line-height: 12px;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
+      pointer-events: auto;
     }
 
     .nodeActions {
@@ -838,17 +878,15 @@ watch(
 
     .resizeCorner {
       position: absolute;
-      /* 拖柄内侧角轻贴圆角边框，主体留在边框外。 */
-      right: calc(var(--ui-radius-large, var(--el-border-radius-base)) * 0.293 - 2px);
-      bottom: calc(var(--ui-radius-large, var(--el-border-radius-base)) * 0.293 - 2px);
-      transform: translate(50%, 50%);
+      right: -8px;
+      bottom: -8px;
       box-sizing: border-box;
-      width: 4px;
-      height: 4px;
+      width: 24px;
+      height: 24px;
       padding: 0;
-      border: 1px solid var(--el-border-color);
-      border-radius: 1px;
-      background: var(--el-bg-color);
+      border: 0;
+      border-radius: 0;
+      background: transparent;
       opacity: 0;
       cursor: nwse-resize;
       touch-action: none;
@@ -856,10 +894,15 @@ watch(
       &::before {
         content: "";
         position: absolute;
-        inset: -4px;
+        inset: 2px;
+        border-right: 2px solid var(--el-text-color-secondary);
+        border-bottom: 2px solid var(--el-text-color-secondary);
+        border-bottom-right-radius: 16px;
+        transition: border-color 120ms ease-out;
       }
 
-      &:focus-visible { opacity: 1; }
+      &:hover::before { border-color: var(--el-color-primary); }
+      &:focus-visible { opacity: 1; outline: 2px solid var(--el-color-primary); outline-offset: 1px; }
     }
 
     .contentCard.selectionFrame {
@@ -923,7 +966,7 @@ watch(
         border: 1.5px solid currentColor;
         border-radius: 50%;
         background: var(--el-bg-color);
-        opacity: 0.75;
+        opacity: 0;
         transition: opacity 120ms ease-out, box-shadow 120ms ease-out;
 
         .handlePlus {
@@ -937,7 +980,6 @@ watch(
         }
       }
 
-      &.connected .handleIcon,
       &.linking .handleIcon,
       &.connecting .handleIcon,
       &[data-connection-status] .handleIcon {

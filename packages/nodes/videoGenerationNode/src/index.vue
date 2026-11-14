@@ -4,6 +4,7 @@
     v-model:bottomVisible="node.selected"
     :topVisible="node.selected"
     contentPadding="2px"
+    :resizeAspectRatio="previewUrl && videoWidth ? videoWidth / 240 : undefined"
     selectionFrame
     topWidth="max-content"
     toolbarAction="focus"
@@ -286,7 +287,14 @@ function getGenerationInput(prompt: string): Omit<NodeVideoRequest, "directory">
   };
 }
 const outputFile = computed(() => outputs.value.video?.dataType === "VIDEO" ? outputs.value.video.value : undefined);
-watch(outputFile, () => { videoWidth.value = 0; videoResolution.value = ""; }, { flush: "sync" });
+watch(outputFile, () => {
+  videoWidth.value = 0;
+  videoResolution.value = "";
+  const style = typeof node.style === "function" ? node.style(node) : node.style;
+  if (style?.width === undefined && style?.height === undefined) return;
+  const { width, height, ...rest } = style;
+  node.style = rest;
+}, { flush: "sync" });
 const nodePreviewStyle = computed(() => ({
   width: outputFile.value ? (videoWidth.value ? `${videoWidth.value + 6}px` : undefined) : undefined,
 }));
@@ -443,11 +451,6 @@ async function resizeVideo(event: Event) {
   if (!video.videoWidth || !video.videoHeight) return;
   videoResolution.value = `${video.videoWidth} × ${video.videoHeight}`;
   videoWidth.value = (240 * video.videoWidth) / video.videoHeight;
-  const nodeStyle = typeof node.style === "function" ? node.style(node) : node.style;
-  const nextStyle = { ...(nodeStyle ?? {}) };
-  delete nextStyle.width;
-  delete nextStyle.height;
-  node.style = { ...nextStyle, width: `${videoWidth.value + 6}px` };
   await nextTick();
   updateNodeInternals();
 }

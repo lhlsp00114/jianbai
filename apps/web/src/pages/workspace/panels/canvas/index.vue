@@ -105,7 +105,8 @@
         ref="selectionToolbarRef"
         :batchHistory="canvasHistory.batch"
         :getSignal="() => canvasController.signal"
-        :disabled="!canvasId || !project?.directory" />
+        :disabled="!canvasId || !project?.directory"
+        :directory="project?.directory" />
       <nodeSearch ref="nodeSearchRef" :disabled="!active || settingsVisible || !canvasId || !project?.directory" />
     </vue-flow>
     <div
@@ -1024,8 +1025,7 @@ function canUseCanvasClipboard(event: Event) {
   const target = event.target;
   return props.active && !event.defaultPrevented && !props.settingsVisible && !!canvasId.value && !!project.value?.directory
     && target instanceof Element
-    && !target.closest("input, textarea, select, button, [contenteditable]:not([contenteditable='false']), [role='textbox'], [role='slider'], [role='dialog'], #agentPanel")
-    && (target === document.body || target === document.documentElement || canvasElement.value?.contains(target));
+    && !target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='textbox'], [role='slider'], [role='dialog'], #agentPanel");
 }
 
 function beforeClipboard(event: Event) {
@@ -1085,6 +1085,46 @@ async function copySelectedNodes() {
     await copyNodesToClipboard(copies, edges, directory);
   } catch (error) {
     if (!signal.aborted) ElMessage.error(error instanceof Error ? error.message : "节点复制失败");
+  } finally {
+    copyingNodes = false;
+  }
+}
+
+async function cutSelectedNodes() {
+  if (copyingNodes || !project.value?.directory) return;
+  const nodes = getSelectionTree(flow.getSelectedNodes.value, flow.getNodes.value);
+  if (!nodes.length) return;
+  const menu = nodeMenuRef.value;
+  if (!menu || !nodes.some(node => node.deletable !== false)) {
+    // 有节点不可删除时仍复制但不删
+  }
+  const directory = project.value.directory;
+  const signal = canvasController.signal;
+  copyingNodes = true;
+  try {
+    const ids = new Set(nodes.map(node => node.id));
+    const snapshot = toObject();
+    const savedNodes = new Map(snapshot.nodes.map(node => [node.id, node]));
+    const copies = await Promise.all(nodes.map(async node => {
+      const patch = await useNodeEvent(node.id, flow).emit("copy");
+      const saved = savedNodes.get(node.id)!;
+      const parentNode = ids.has(saved.parentNode ?? "") ? saved.parentNode : undefined;
+      return { ...saved, data: { ...saved.data, ...patch }, parentNode,
+        ...(saved.parentNode && !parentNode ? { extent: undefined, expandParent: false } : {}),
+        position: parentNode ? { ...saved.position } : { x: node.computedPosition.x, y: node.computedPosition.y } };
+    }));
+    signal.throwIfAborted();
+    if (nodes.some(node => findNode(node.id) !== node)) throw new Error("节点已变化，请重新剪切");
+    const edges = snapshot.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target));
+    await copyNodesToClipboard(copies, edges, directory);
+    signal.throwIfAborted();
+    // 只删除可删除的节点
+    const deletable = nodes.filter(node => node.deletable !== false);
+    if (deletable.length && menu) {
+      await canvasHistory.batch(() => menu.deleteSelection(deletable));
+    }
+  } catch (error) {
+    if (!signal.aborted) ElMessage.error(error instanceof Error ? error.message : "节点剪切失败");
   } finally {
     copyingNodes = false;
   }
@@ -1309,18 +1349,19 @@ function updateCanvasKeys(event: KeyboardEvent) {
   if (event.type === "keyup" || event.defaultPrevented || event.isComposing || !inCanvas || editing) return;
   const action = ([
     "group", "mergeGroup", "ungroup", "addNode", "moveTool", "handTool", "arrange", "search",
-    "delete", "copy", "paste", "undo", "redo", "zoomIn", "zoomOut", "fitView",
+    "delete", "copy", "cut", "paste", "undo", "redo", "zoomIn", "zoomOut", "fitView",
   ] as const).find((action) =>
     shortcutMatches(event, shortcuts[action])
   );
   if (!action) {
     const nativeClipboardKey = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
-      && (event.code === "KeyV" || event.code === "KeyC" && flow.getSelectedNodes.value.length && !window.getSelection()?.toString());
+      && (event.code === "KeyV" || event.code === "KeyX" && flow.getSelectedNodes.value.length && !window.getSelection()?.toString()
+        || event.code === "KeyC" && flow.getSelectedNodes.value.length && !window.getSelection()?.toString());
     if (panKeyPressed.value || nativeClipboardKey) event.preventDefault();
     return;
   }
   if (!canvasId.value || !project.value?.directory) return;
-  if (action === "copy" && (!flow.getSelectedNodes.value.length || window.getSelection()?.toString())) return;
+  if ((action === "copy" || action === "cut") && (!flow.getSelectedNodes.value.length || window.getSelection()?.toString())) return;
   // 桌面快捷键直接复用原生剪贴板桥接；浏览器 Ctrl/Cmd+V 保留原生事件，避免额外读取权限。
   if (!actualPlatform.isDesktop && action === "paste" && event.code === "KeyV" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) return;
   event.preventDefault();
@@ -1337,6 +1378,7 @@ function updateCanvasKeys(event: KeyboardEvent) {
     return;
   }
   if (action === "copy") void copySelectedNodes();
+  else if (action === "cut") void cutSelectedNodes();
   else if (action === "paste") void pasteNodeAtCenter();
   else if (action === "undo" || action === "redo") void changeHistory(action);
   else if (action === "group" || action === "mergeGroup" || action === "ungroup") {

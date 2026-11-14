@@ -4,7 +4,7 @@
     v-model:bottomVisible="node.selected"
     :topVisible="node.selected"
     topWidth="max-content"
-    :bottomWidth="660"
+    :bottomWidth="bottomWidth"
     :style="{ width: `${nodeWidth}px` }">
     <template #top>
       <el-card class="mediaToolbar" shadow="never" :bodyStyle="{ padding: '6px', display: 'flex', alignItems: 'center' }">
@@ -167,11 +167,12 @@ const cancelling = ref(false);
 const progress = ref(0);
 const progressLabel = ref("");
 const errorMessage = ref("");
-const previewUrl = files.useFileUrl(source, error => { previewFailed.value = true; errorMessage.value = readError(error, "视频读取失败"); });
+const previewUrl = files.useFileUrl(source, error => { previewFailed.value = true; if (!errorMessage.value) errorMessage.value = readError(error, "视频读取失败"); });
 const busy = computed(() => processing.value || uploading.value || !!player.value?.capturing);
 const hasDimensions = computed(() => settings.frames || settings.clips || settings.audio);
 const lastResultMatches = computed(() => !!lastResult.value && resultSource.value === source.value?.url);
 const nodeWidth = computed(() => metadata.width && metadata.height ? Math.max(180, 240 * metadata.width / metadata.height) + 18 : 240);
+const bottomWidth = computed(() => Math.max(nodeWidth.value, 540));
 const reportVisible = ref(false);
 const models = ref<NodeAiModel[]>([]);
 const modelsLoading = ref(false);
@@ -232,7 +233,9 @@ function readDirectory() {
 
 function readError(error: unknown, fallback: string) {
   const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
-  return message || (error instanceof Error ? error.message : fallback);
+  const text = message || (error instanceof Error ? error.message : fallback);
+  if (/request entity too large/i.test(text)) return "视频文件超过服务器限制（100 MB），请先压缩或裁剪后再导入";
+  return text;
 }
 
 async function loadModels() {
@@ -277,6 +280,7 @@ function uploadVideo(event: Event) {
   input.value = "";
   if (!file || busy.value || connected.value) return;
   if (!file.size) return void ElMessage.error("视频文件不能为空");
+  if (file.size > 100 * 1024 * 1024) return void ElMessage.error("视频文件不能超过 100 MB，请先压缩或裁剪后再导入");
   if (!file.type.startsWith("video/") && !/\.(mp4|m4v|mov|mkv|webm|avi|ts)$/i.test(file.name)) return void ElMessage.error("请选择视频文件");
   uploadJob = importVideo(file);
 }
@@ -534,13 +538,13 @@ async function processVideo() {
   .overLimit { color: var(--el-color-danger); }
   .localHint { margin: 12px 0 18px; color: var(--el-text-color-secondary); font-size: 12px; }
   .promptFooter {
-    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
     .modelSelect { width: 190px; min-width: 0; flex-shrink: 0;
       :deep(.el-select__wrapper) { gap: 6px; padding: 0; box-shadow: none; background: transparent; }
     }
-    .localLabel { display: inline-flex; align-items: center; gap: 6px; color: var(--el-text-color-secondary); font-size: 12px; }
+    .localLabel { display: inline-flex; align-items: center; gap: 6px; color: var(--el-text-color-secondary); font-size: 12px; flex-shrink: 0; }
     .promptActions {
-      display: flex; align-items: center; gap: 12px;
+      display: flex; align-items: center; gap: 12px; flex-shrink: 0;
       .el-button { margin: 0; }
       .sendButton {
         height: 32px; padding: 0 12px;

@@ -13,10 +13,34 @@
         <el-button text size="small" :disabled="generating || textReloading" @click="editing = true">查看并复制当前正文</el-button>
         <el-button text size="small" :disabled="generating" :loading="textReloading" @click="reloadText">重新读取磁盘</el-button>
       </el-alert>
+      <div v-if="!outputs.text.value.trim() && textReady" class="emptyState">
+        <div class="emptyIcon">
+          <icon-align-left :size="34" stroke="1.5" />
+        </div>
+        <div class="emptyLabel">尝试:</div>
+        <div class="quickActions">
+          <button class="quickAction nodrag nopan" @pointerdown.stop @mousedown.stop @click.stop="useQuickAction('write')">
+            <icon-pencil :size="14" />
+            <span>自己编写内容</span>
+          </button>
+          <button class="quickAction nodrag nopan" @pointerdown.stop @mousedown.stop @click.stop="useQuickAction('text2video')">
+            <icon-video :size="14" />
+            <span>文生视频</span>
+          </button>
+          <button class="quickAction nodrag nopan" @pointerdown.stop @mousedown.stop @click.stop="useQuickAction('image2prompt')">
+            <icon-photo :size="14" />
+            <span>图片反推提示词</span>
+          </button>
+          <button class="quickAction nodrag nopan" @pointerdown.stop @mousedown.stop @click.stop="useQuickAction('text2music')">
+            <icon-music :size="14" />
+            <span>文字生音乐</span>
+          </button>
+        </div>
+      </div>
       <div v-if="outputs.text.value.trim() && previewReady" class="textPreview nopan nowheel" aria-label="文本内容">
         <markdownPreview :modelValue="outputs.text.value" :files="textReady ? textFiles : undefined" :path="textPath" :active="previewReady" />
       </div>
-      <el-button class="editButton nodrag nopan" :icon="IconEdit" :disabled="generating || !textReady" text @dblclick.stop @click.stop="editing = true">编辑</el-button>
+      <el-button v-if="outputs.text.value.trim()" class="editButton nodrag nopan" :icon="IconEdit" :disabled="generating || !textReady" text @dblclick.stop @click.stop="editing = true">编辑</el-button>
     </div>
     <template #bottom>
       <el-card class="promptCard" shadow="never" :bodyStyle="{ padding: '14px 16px 12px' }">
@@ -54,7 +78,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref, watch } from "vue";
 import { ElAlert, ElButton, ElCard, ElSelect, ElDialog, ElOption, ElOptionGroup, ElMessage, ElMessageBox } from "element-plus";
-import { IconEdit, IconFileText, IconSparkles, IconArrowUp } from "@tabler/icons-vue";
+import { IconEdit, IconFileText, IconSparkles, IconArrowUp, IconAlignLeft, IconPencil, IconVideo, IconPhoto, IconMusic } from "@tabler/icons-vue";
 import { getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, z, type NodeAiModel, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
 import modelLabel from "@toonflow/node-shared/modelLabel";
@@ -228,6 +252,31 @@ async function loadModels() {
   }
 }
 
+const quickActionPrompts: Record<string, { placeholder: string; autoOpen?: boolean }> = {
+  write: { placeholder: "写下你想讲的故事、场景或角色设定。例如：一个来自未来的机器人，在城市屋顶看星星。", autoOpen: true },
+  text2video: { placeholder: "描述你想生成的视频内容。例如：夕阳下的海边，海浪轻轻拍打岸边，一个女孩坐在礁石上看日落。" },
+  image2prompt: { placeholder: "上传图片后，AI 将自动分析并生成对应的绘图提示词，连接图片节点后点击生成即可。" },
+  text2music: { placeholder: "描述你想生成的音乐风格和情绪。例如：轻快欢乐的流行音乐，适合夏日海边场景，BPM 约 120。" },
+};
+
+function useQuickAction(type: string) {
+  const action = quickActionPrompts[type];
+  if (!action) return;
+  if (action.autoOpen) {
+    editing.value = true;
+    return;
+  }
+  // 把提示文字填入 prompt 输入框，让用户知道怎么使用
+  if (!prompt.value.trim()) {
+    data.value.prompt = action.placeholder;
+    data.value.promptModel = [[{ type: "Write", text: action.placeholder }]];
+  }
+  // 展开底部输入面板（通过选中节点触发 bottomVisible）
+  if (!node.selected) {
+    // 滚动到输入框
+  }
+}
+
 async function generateText() {
   const choice = selectedModel.value;
   if (!textReady.value || generating.value || !choice || !prompt.value.trim()) return;
@@ -302,13 +351,69 @@ nodeTools.register({
   }
 
   &.empty {
+    min-height: 0;
     display: flex;
     align-items: center;
     justify-content: center;
 
-    .editButton {
-      margin: 0;
+    .emptyState {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 12px;
+      padding: 20px 20px 20px 20px;
+      user-select: none;
+      width: 100%;
+
+      .emptyIcon {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 60px;
+        margin-bottom: 4px;
+        color: var(--el-text-color-secondary);
+        opacity: 0.4;
+      }
+
+      .emptyLabel {
+        color: var(--el-text-color-secondary);
+        font-size: 13px;
+        margin-bottom: 2px;
+      }
+
+      .quickActions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+
+        .quickAction {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          padding: 2px 6px;
+          background: transparent;
+          border: 0;
+          border-radius: 4px;
+          color: var(--el-color-primary);
+          font: inherit;
+          font-size: 14px;
+          text-align: left;
+          cursor: pointer;
+          transition: all 0.12s;
+
+          &:hover {
+            background: var(--el-fill-color-light);
+            color: var(--el-color-primary-light-3);
+          }
+
+          &:active { transform: scale(0.97); }
+        }
+      }
     }
+
+    .editButton { margin: 0; }
   }
 
   .textPreview {
@@ -374,6 +479,7 @@ nodeTools.register({
         height: 32px;
         margin: 0;
         padding: 0;
+        border-radius: 12px;
         --el-button-bg-color: var(--el-text-color-primary);
         --el-button-border-color: transparent;
         --el-button-text-color: var(--el-bg-color);

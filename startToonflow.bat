@@ -33,6 +33,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo Starting Node Watch (auto-rebuild on change)...
+start "Toonflow Node Watch" "%ComSpec%" /k ""%bunExe%" run --filter './packages/nodes/*' dev"
+
 echo Starting Toonflow Server...
 start "Toonflow Server" "%ComSpec%" /k ""%bunExe%" run dev:server"
 
