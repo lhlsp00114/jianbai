@@ -28,26 +28,31 @@ export function loadNodeComponent(name: string, url: string, force = false): Pro
     if (!response.ok) throw new Error(`节点脚本加载失败（HTTP ${response.status}）`);
     const code = await response.text();
     if (code.includes("toonflowTiptapHost")) await import("@/lib/tiptapHost");
-    return new Promise<NodeComponent>((resolve, reject) => {
-      delete nodeWindow.toonflowNodes?.[name];
-      const script = document.createElement("script");
-      script.src = scriptUrl;
-      script.onload = () => {
-        script.remove();
-        const component = nodeWindow.toonflowNodes?.[name];
-        if (!Object.hasOwn(nodeWindow.toonflowNodes ?? {}, name) || !component || (typeof component !== "object" && typeof component !== "function")) {
-          reject(new Error(`节点脚本未导出 ${name} 组件`));
-          return;
-        }
-        resolve(component);
-      };
-      script.onerror = () => {
-        script.remove();
+    // 节点为单文件 UMD，直接执行已下载的内容，避免再次请求相同脚本。
+    const objectUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+    const script = document.createElement("script");
+    try {
+      return await new Promise<NodeComponent>((resolve, reject) => {
         delete nodeWindow.toonflowNodes?.[name];
-        reject(new Error("节点脚本加载失败"));
-      };
-      document.head.append(script);
-    });
+        script.src = objectUrl;
+        script.onload = () => {
+          const component = nodeWindow.toonflowNodes?.[name];
+          if (!Object.hasOwn(nodeWindow.toonflowNodes ?? {}, name) || !component || (typeof component !== "object" && typeof component !== "function")) {
+            reject(new Error(`节点脚本未导出 ${name} 组件`));
+            return;
+          }
+          resolve(component);
+        };
+        script.onerror = () => {
+          delete nodeWindow.toonflowNodes?.[name];
+          reject(new Error("节点脚本加载失败"));
+        };
+        document.head.append(script);
+      });
+    } finally {
+      script.remove();
+      URL.revokeObjectURL(objectUrl);
+    }
   })().then(component => {
     components.set(name, component);
     return component;

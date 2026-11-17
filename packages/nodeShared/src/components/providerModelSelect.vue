@@ -1,20 +1,23 @@
 <template>
-  <div class="providerModelSelect nodrag nopan">
-    <el-select
-      :modelValue="selectedProvider?.id ?? ''"
-      class="providerSelect"
-      :loading="loading"
-      :disabled="disabled"
-      :title="selectedProvider?.label ?? '选择 API 供应商'"
-      :aria-label="`API 供应商：${selectedProvider?.label ?? '未选择'}`"
-      placeholder="API"
-      :noDataText="noDataText"
-      placement="top-start"
-      @update:modelValue="selectProvider"
-      @visible-change="visible => visible && emit('open')">
-      <template #label>API</template>
-      <el-option v-for="provider in providers" :key="provider.id" :label="provider.label" :value="provider.id" />
-    </el-select>
+  <div class="providerModelSelect nodrag nopan" :class="{ detachedProviderModel: !!providerTarget }">
+    <teleport :to="providerTarget || 'body'" :disabled="!providerTarget">
+      <el-select
+        :modelValue="selectedProvider?.id ?? ''"
+        class="providerSelect"
+        :class="{ detachedProviderSelect: !!providerTarget }"
+        :loading="loading"
+        :disabled="disabled"
+        :title="selectedProvider?.label ?? '选择 API 供应商'"
+        :aria-label="`API 供应商：${selectedProvider?.label ?? '未选择'}`"
+        placeholder="API"
+        :noDataText="noDataText"
+        :placement="providerTarget ? 'bottom-end' : 'top-start'"
+        @update:modelValue="selectProvider"
+        @visible-change="visible => visible && emit('open')">
+        <template #label>API</template>
+        <el-option v-for="provider in providers" :key="provider.id" :label="provider.label" :value="provider.id" />
+      </el-select>
+    </teleport>
     <el-select
       :modelValue="selectedModel ? model : ''"
       class="modelSelect"
@@ -45,7 +48,7 @@ import { groupNodeModels } from "../groupNodeModels";
 import { rememberNodeModel } from "../modelPreference";
 import modelLabel from "./modelLabel.vue";
 
-const props = defineProps<{ models: NodeMediaModel[]; loading?: boolean; disabled?: boolean; noDataText: string }>();
+const props = defineProps<{ models: NodeMediaModel[]; loading?: boolean; disabled?: boolean; noDataText: string; providerTarget?: HTMLElement }>();
 const model = defineModel<string>({ required: true });
 const emit = defineEmits<{ open: [] }>();
 const providers = computed(() => groupNodeModels(props.models));
@@ -80,19 +83,10 @@ function selectProvider(id: string) {
   width: 280px;
   min-width: 0;
 
-  .providerSelect {
-    width: 64px;
-    flex-shrink: 0;
-
-    :deep(.el-select__wrapper) {
-      padding: 0 6px;
-      border: 1px solid var(--el-border-color-lighter);
-      border-radius: 6px;
-      box-shadow: none;
-      background: transparent;
-    }
-
-    :deep(.el-select__wrapper.is-focused) { border-color: var(--el-color-primary); }
+  &.detachedProviderModel {
+    flex: 0 1 240px;
+    width: 240px;
+    max-width: 240px;
   }
 
   .modelSelect {
@@ -108,6 +102,25 @@ function selectProvider(id: string) {
       box-shadow: none;
       background: transparent;
     }
+  }
+}
+
+.providerSelect {
+  width: 64px;
+  flex-shrink: 0;
+
+  :deep(.el-select__wrapper) {
+    padding: 0 6px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 6px;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  :deep(.el-select__wrapper.is-focused) { border-color: var(--el-color-primary); }
+
+  &.detachedProviderSelect {
+    :deep(.el-select__wrapper) { min-height: 30px; font-size: 12px; }
   }
 }
 </style>

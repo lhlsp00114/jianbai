@@ -45,7 +45,10 @@
       <div v-if="!manualWriting && outputs.text.value.trim() && previewReady" class="textPreview nopan nowheel" aria-label="文本内容">
         <markdownPreview :modelValue="outputs.text.value" :files="textReady ? textFiles : undefined" :path="textPath" :active="previewReady" />
       </div>
-      <el-button v-if="!manualWriting && outputs.text.value.trim()" class="editButton nodrag nopan" :icon="IconEdit" :disabled="generating || !textReady" text @dblclick.stop @click.stop="editing = true">编辑</el-button>
+      <div v-if="!manualWriting && outputs.text.value.trim()" class="textActions nodrag nopan" @pointerdown.stop @mousedown.stop @dblclick.stop>
+        <el-button :icon="IconCopy" :disabled="generating || !textReady || textReloading" text title="复制正文" aria-label="复制正文" @click.stop="copyText">复制</el-button>
+        <el-button :icon="IconEdit" :disabled="generating || !textReady" text @click.stop="editing = true">编辑</el-button>
+      </div>
     </div>
     <template v-if="!manualWriting || musicPromptMode" #bottom>
       <el-card class="promptCard" shadow="never" :bodyStyle="{ padding: '14px 16px 12px' }">
@@ -83,7 +86,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
 import { ElAlert, ElButton, ElCard, ElSelect, ElDialog, ElOption, ElOptionGroup, ElMessage, ElMessageBox } from "element-plus";
-import { IconEdit, IconFileText, IconSparkles, IconArrowUp, IconMenu2, IconPencil, IconVideo, IconPhoto, IconMusic } from "@tabler/icons-vue";
+import { IconEdit, IconFileText, IconSparkles, IconArrowUp, IconMenu2, IconPencil, IconVideo, IconPhoto, IconMusic, IconCopy } from "@tabler/icons-vue";
 import { getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, validateConnection, z, type NodeAiModel, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { useVueFlow } from "@vue-flow/core";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
@@ -113,6 +116,13 @@ const { node, nodeProps, outputs, ai, files, nodeEvent, previewReady } = useNode
 });
 const { refList, referenceMentions, setReferencePreview, removeReference } = useNodeReferences();
 const editing = ref(false);
+async function copyText() {
+  try {
+    await navigator.clipboard.writeText(outputs.value.text.value);
+    ElMessage.success("已复制");
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : "复制失败，请在编辑窗口中选择并复制"); }
+}
+
 const inlineEditing = ref(false);
 const textContentElement = ref<HTMLElement>();
 const manualToolbar = ref<HTMLElement>();
@@ -515,7 +525,7 @@ nodeTools.register({
       max-height: none;
     }
 
-    .editButton { flex-shrink: 0; }
+    .textActions { flex-shrink: 0; }
   }
 
   &.empty {
@@ -593,7 +603,6 @@ nodeTools.register({
       }
     }
 
-    .editButton { margin: 0; }
   }
 
   .textPreview {
@@ -604,9 +613,11 @@ nodeTools.register({
     user-select: none;
   }
 
-  .editButton {
+  .textActions {
     display: flex;
-    margin-left: auto;
+    justify-content: flex-end;
+
+    :deep(.el-button) { margin: 0; }
   }
 }
 

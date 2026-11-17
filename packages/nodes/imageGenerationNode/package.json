@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./promptPresets": "./src/imagePromptPresets.ts"
+  },
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch",

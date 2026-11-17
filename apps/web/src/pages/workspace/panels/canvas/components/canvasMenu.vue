@@ -1,6 +1,7 @@
 <template>
   <panel class="canvasMenuPanel" position="top-left">
-    <el-card class="canvasMenu" shadow="never" :bodyStyle="{ padding: '2px 4px' }">
+    <teleport :to="menuTarget || 'body'" :disabled="!menuTarget">
+    <el-card v-show="!menuHidden" class="canvasMenu" :class="{ sharedProjectMenu: !!menuTarget }" shadow="never" :bodyStyle="{ padding: '2px 4px' }">
       <div class="menuContent">
         <el-input v-model="projectNameDraft" class="workspaceNameInput" :style="{ '--workspaceName': JSON.stringify(projectNameDraft || ' ') }" size="small" :title="directory" :disabled="!workspaceStore.project" aria-label="项目名称"
           @keydown.stop @keydown.enter="saveProjectName" @keydown.esc.prevent="projectNameDraft = workspaceName" @blur="saveProjectName" />
@@ -37,6 +38,7 @@
         </el-popover>
       </div>
     </el-card>
+    </teleport>
     <div class="menuExtension"><slot /></div>
   </panel>
   <panel v-if="providerBalances.length" class="balanceMenuPanel" position="top-right">
@@ -86,6 +88,8 @@ import { providerBalances, refreshProviderBalance } from "@/lib/providerBilling"
 const props = defineProps<{
   directory?: string;
   initialCanvasId?: string;
+  menuTarget?: HTMLElement;
+  menuHidden?: boolean;
   activateCanvas?: (id: string, signal?: AbortSignal) => Promise<void>;
   flushSave: (action?: () => Promise<void>) => Promise<void>;
 }>();
@@ -923,6 +927,7 @@ defineExpose({ getCanvases, peekCanvases, initialized, addCanvas, switchCanvas, 
 }
 
 .canvasMenu {
+  &.sharedProjectMenu { margin-left: 0; }
   margin-left: 76px;
   min-width: 0;
 

@@ -70,6 +70,7 @@ import { showNodeError } from "@toonflow/node-shared/showNodeError";
 import { useMediaPreview } from "@toonflow/node-shared/mediaPreview";
 import { useImageVariationNode } from "../useImageVariationNode";
 import { buildInpaintPrompt, type InpaintDraftInput } from "../imageInpaint";
+import { getOutpaintLayout, type OutpaintDraftInput } from "../imageOutpaint";
 import imageCrop from "./imageCrop.vue";
 import imageColorAdjust from "./imageColorAdjust.vue";
 import { createColorRenderer, type ColorSettings } from "../imageColor";
@@ -540,6 +541,60 @@ async function createInpaint(input: InpaintDraftInput, signal: AbortSignal) {
   }
 }
 
+async function createOutpaint(input: OutpaintDraftInput, signal: AbortSignal) {
+  const image = sourceImage.value;
+  if (busy.value || props.disabled || !image?.naturalWidth || !image.naturalHeight || !props.src) throw new Error("原图片尚未准备好，无法扩图");
+  if (!nodeTypes?.value?.["remote-imageGenerationNode"]) throw new Error("请先启用图片生成节点插件");
+  if (!nodeTypes?.value?.["remote-imageNode"]) throw new Error("请先启用图片节点插件，用于显示扩图结果");
+  if (!input.model) throw new Error("请选择图片模型");
+  const layout = getOutpaintLayout(image.naturalWidth, image.naturalHeight, input);
+  if (layout.targetWidth > 16384 || layout.targetHeight > 16384 || layout.targetWidth * layout.targetHeight > 64 * 1024 * 1024) throw new Error("扩展后的图片尺寸过大");
+  const source = props.src;
+  const controller = operation = new AbortController();
+  const requestSignal = AbortSignal.any([signal, controller.signal]);
+  const workspace = files.getWorkspaceFiles();
+  const nodeId = crypto.randomUUID();
+  let canvas: HTMLCanvasElement | undefined;
+  busy.value = true;
+  try {
+    requestSignal.throwIfAborted();
+    if (findNode(node.id) !== node || !sourceImage.value || props.src !== source) throw new Error("原图片已变化，请重新操作");
+    canvas = document.createElement("canvas");
+    canvas.width = layout.targetWidth;
+    canvas.height = layout.targetHeight;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("无法创建扩图画布");
+    context.fillStyle = "#fff";
+    if (layout.left) context.fillRect(0, 0, layout.left, layout.targetHeight);
+    if (layout.right) context.fillRect(layout.targetWidth - layout.right, 0, layout.right, layout.targetHeight);
+    if (layout.top) context.fillRect(0, 0, layout.targetWidth, layout.top);
+    if (layout.bottom) context.fillRect(0, layout.targetHeight - layout.bottom, layout.targetWidth, layout.bottom);
+    context.drawImage(image, layout.left, layout.top);
+    const original = await uploadNodeFile(workspace, nodeId, await toFile(canvas));
+    requestSignal.throwIfAborted();
+    const directory = `assets/${nodeId}/outpaint`;
+    await workspace.mkdir(directory);
+    requestSignal.throwIfAborted();
+    const path = `${directory}/${original.split("/").at(-1)}`;
+    await workspace.rename(original, path);
+    requestSignal.throwIfAborted();
+    const outpaintContext = `\n\n目标画布：${layout.targetWidth} × ${layout.targetHeight}；原图大小：${layout.sourceWidth} × ${layout.sourceHeight}；原图左上角位置：(${layout.left}, ${layout.top})。`;
+    const result = await createVariation({
+      label: "扩图", nodeId, prompt: input.prompt,
+      model: input.model,
+      size: input.size,
+      ratio: input.targetRatio,
+      inpaint: { source: node.data.outputs?.image?.value?.url ?? "", original: path, guide: path, mask: path, images: [], mode: "outpaint", outpaintContext },
+    }, requestSignal);
+    if (mode.value) cancel();
+    return result;
+  } finally {
+    if (canvas) canvas.width = canvas.height = 0;
+    if (operation === controller) operation = undefined;
+    busy.value = false;
+  }
+}
+
 async function createSmartEdit(input: { prompt: string; model: string; size: string; ratio: string }, signal: AbortSignal) {
   if (busy.value || mode.value !== "smartEdit") throw new Error("请先进入智能改图");
   if (!input.prompt.trim()) throw new Error("请输入改图提示词");
@@ -590,7 +645,7 @@ async function createSmartEdit(input: { prompt: string; model: string; size: str
   }
 }
 
-defineExpose({ mode, busy, start, cancel, createInpaint, createSmartEdit, previewSrc });
+defineExpose({ mode, busy, start, cancel, createInpaint, createOutpaint, createSmartEdit, previewSrc });
 </script>
 
 <style scoped lang="scss">

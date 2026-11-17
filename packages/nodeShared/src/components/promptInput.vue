@@ -2,7 +2,7 @@
   <div class="promptInputWrap nodrag nopan nowheel">
     <el-button v-if="expandable && panelExpanded === undefined" class="expandButton" :icon="IconMaximize" text circle title="展开编辑提示词" aria-label="展开编辑提示词" @mousedown.prevent @click.stop="expanded = true" />
     <teleport :to="expandedTarget || 'body'" :disabled="!expanded || !expandedTarget">
-      <div ref="senderElement" class="promptInput chat-area-wrap nodrag nopan nowheel" :class="{ expandedInput: editorExpanded }" @keydown.capture="handleMentionKey" @click.capture="previewReference" />
+      <div ref="senderElement" class="promptInput chat-area-wrap nodrag nopan nowheel" :class="{ expandedInput: editorExpanded }" @keydown.capture="handleMentionKey" @mousedown.capture="preservePresetCursor" @click.capture="handleTagClick" />
     </teleport>
   </div>
   <el-dialog v-if="expandable && panelExpanded === undefined" v-model="expanded" class="promptEditorDialog" title="生成提示词" width="80%" alignCenter appendToBody :closeOnClickModal="false" @opened="sender?.focus('mark')" @close="expanded = false" @closed="sender?.focus('mark')">
@@ -28,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, nextTick, ref, watch, type Ref } from "vue";
+import { computed, h, inject, nextTick, ref, render, watch, type Component, type Ref } from "vue";
 import { ElButton, ElDialog, ElImageViewer, ElMessage, useZIndex } from "element-plus";
 import { IconMaximize } from "@tabler/icons-vue";
 import xSender, { type AnyTagProps, type MentionItem } from "x-sender";
@@ -41,6 +41,7 @@ import promptReferenceMenu from "./promptReferenceMenu.vue";
 type Reference = ReferenceMention;
 const props = defineProps<{
   references: Reference[];
+  presets?: readonly { id: string; label: string; value: string; icon?: Component }[];
   materials?: MaterialMention[];
   selectMaterial?: (id: string) => Promise<Reference | undefined>;
   selectAsset?: () => Promise<Reference | undefined>;
@@ -72,6 +73,23 @@ const previewUrl = computed(() => {
 });
 let sender: xSender | undefined;
 let resetTask: Promise<void> | undefined;
+
+defineExpose({ insertPreset });
+
+async function insertPreset(id: string) {
+  const instance = sender;
+  const preset = props.presets?.find(item => item.id === id);
+  if (!instance || !preset || instance.chatEditor.isComposition) return false;
+  await instance.nextTick();
+  if (resetTask) await resetTask;
+  if (sender !== instance) return false;
+  instance.focus("mark");
+  if (getPromptText(instance.getModel()).includes(preset.value)) return true;
+  await instance.setHtml(presetHtml(preset));
+  if (sender !== instance) return false;
+  await instance.setText(" ");
+  return sender === instance;
+}
 
 function closeMentionMenu() {
   mentionVisible.value = false;
@@ -135,7 +153,30 @@ async function chooseReference(select: () => Reference | undefined | Promise<Ref
   }
 }
 
-function previewReference(event: MouseEvent) {
+function preservePresetCursor(event: MouseEvent) {
+  if (event.target instanceof Element && event.target.closest(".promptPreset")) event.preventDefault();
+}
+
+function handleTagClick(event: MouseEvent) {
+  const preset = event.target instanceof Element ? event.target.closest<HTMLElement>(".promptPreset") : null;
+  if (preset && sender) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (sender.chatEditor.isComposition) return;
+    const gridIndex = sender.chatEditor.NODES.findIndex(grid => grid.$el.contains(preset));
+    const grid = sender.chatEditor.NODES[gridIndex];
+    const childIndex = grid?.children.findIndex(child => child.$el.contains(preset)) ?? -1;
+    if (childIndex < 0) return;
+    if (event.target instanceof Element && event.target.closest(".promptPresetRemove")) {
+      const value = sender.getModel();
+      value[gridIndex].splice(childIndex, 1);
+      syncModel(value);
+    } else {
+      const next = grid.children[childIndex + 1];
+      if (next?.type === "Write") next.focus(0);
+    }
+    return;
+  }
   const tag = event.target instanceof Element ? event.target.closest<HTMLElement>(".imageReference[data-reference-id]") : null;
   const reference = props.references.find(item => item.id === tag?.dataset.referenceId);
   if (!reference?.avatar || reference.previewable === false) return;
@@ -146,11 +187,38 @@ function previewReference(event: MouseEvent) {
   previewReferenceId.value = reference.id;
 }
 
+function presetHtml(preset: NonNullable<typeof props.presets>[number]) {
+  const tag = document.createElement("span");
+  tag.className = "promptPreset";
+  tag.dataset.presetId = preset.id;
+  tag.dataset.value = preset.value;
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "promptPresetRemove";
+  remove.title = `删除${preset.label}预设提示词`;
+  remove.setAttribute("aria-label", remove.title);
+  const icon = document.createElement("span");
+  icon.className = "promptPresetIcon";
+  icon.setAttribute("aria-hidden", "true");
+  if (preset.icon) render(h(preset.icon, { size: 14, stroke: 1.8 }), icon);
+  else icon.textContent = "✦";
+  const close = document.createElement("span");
+  close.className = "promptPresetClose";
+  close.setAttribute("aria-hidden", "true");
+  close.textContent = "×";
+  remove.append(icon, close);
+  tag.append(remove, document.createTextNode(preset.label));
+  const html = tag.outerHTML;
+  if (preset.icon) render(null, icon);
+  return html;
+}
+
 function referenceHtml(reference: Reference) {
   const tag = document.createElement("span");
   tag.className = "imageReference";
   tag.dataset.referenceId = reference.id;
   tag.dataset.value = reference.value;
+  tag.title = reference.label || reference.name;
   if (reference.avatar) {
     if (reference.previewable !== false) tag.classList.add("previewable");
     const image = document.createElement("img");
@@ -159,7 +227,8 @@ function referenceHtml(reference: Reference) {
     image.draggable = false;
     tag.append(image);
   }
-  tag.append(document.createTextNode(reference.label || reference.name));
+  const imageNumber = reference.dataType === "IMAGE" ? /^\{\{ref (\d+)\}\}$/.exec(reference.value)?.[1] : undefined;
+  tag.append(document.createTextNode(imageNumber ? `图片${imageNumber}` : reference.label || reference.name));
   return tag.outerHTML;
 }
 
@@ -167,7 +236,9 @@ function normalizeModel(value: AnyTagProps[][]): AnyTagProps[][] {
   if (!value.length) return [[{ type: "Write", text: "" }]];
   return value.map(line => {
     const tags = line.flatMap((tag): AnyTagProps[] => {
-      if (tag.type === "Write") return tag.text.split(/(\{\{ref \d+\}\})/g).map(text => {
+      if (tag.type === "Write") return tag.text.split(/(\{\{ref \d+\}\}|\{\{preset [a-zA-Z0-9]+\}\})/g).map(text => {
+        const preset = props.presets?.find(item => item.value === text);
+        if (preset) return { type: "Custom", html: `<span style="display: inline-block;">${presetHtml(preset)}</span>` };
         const reference = props.references.find(item => item.value === text);
         return reference
           ? { type: "Custom", html: `<span style="display: inline-block;">${referenceHtml(reference)}</span>` }
@@ -176,6 +247,11 @@ function normalizeModel(value: AnyTagProps[][]): AnyTagProps[][] {
       if (tag.type !== "Custom") return [tag];
       const template = document.createElement("template");
       template.innerHTML = tag.html;
+      const presetId = template.content.querySelector<HTMLElement>(".promptPreset[data-preset-id]")?.dataset.presetId;
+      if (presetId) {
+        const preset = props.presets?.find(item => item.id === presetId);
+        return preset ? [{ type: "Custom", html: `<span style="display: inline-block;">${presetHtml(preset)}</span>` }] : [tag];
+      }
       const id = template.content.querySelector<HTMLElement>(".imageReference[data-reference-id]")?.dataset.referenceId;
       if (!id) return [tag];
       const reference = props.references.find(item => item.id === id);
@@ -549,6 +625,49 @@ function handleMentionKey(event: KeyboardEvent) {
       object-fit: cover;
       border-radius: 3px;
       pointer-events: none;
+    }
+  }
+
+  :deep(.promptPreset) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 3px;
+    padding: 2px 6px 2px 2px;
+    border: 1px solid var(--el-border-color);
+    border-radius: 6px;
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-primary);
+    font-size: 12px;
+    line-height: 18px;
+    white-space: nowrap;
+    vertical-align: middle;
+
+    .promptPresetRemove {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      border: 0;
+      border-radius: 4px;
+      background: #a855f7;
+      color: #fff;
+      font: inherit;
+      cursor: pointer;
+
+      &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
+      .promptPresetIcon { display: inline-flex; align-items: center; justify-content: center; }
+      .promptPresetClose { display: none; font-size: 17px; }
+    }
+
+    &:hover, &:focus-within {
+      .promptPresetRemove {
+        background: var(--el-fill-color-dark);
+        .promptPresetIcon { display: none; }
+        .promptPresetClose { display: block; }
+      }
     }
   }
 

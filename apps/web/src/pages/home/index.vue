@@ -48,10 +48,10 @@
     </aside>
     <main v-if="activeSection === 'tools'" class="pageScroll" aria-label="工具" />
     <photoCraft v-if="photoCraftOpened" :class="{ backgroundEditor: activeSection !== 'photoCraft' }" :inert="activeSection !== 'photoCraft'" :aria-hidden="activeSection !== 'photoCraft'" />
-    <el-scrollbar v-show="activeSection !== 'tools' && activeSection !== 'photoCraft'" ref="pageScroll" class="pageScroll" @scroll="updateActiveSection">
+    <el-scrollbar v-show="!['tools', 'photoCraft'].includes(activeSection)" ref="pageScroll" class="pageScroll" @scroll="updateActiveSection">
       <div class="pageBody">
         <el-main class="pageContent">
-          <section class="creationPanel" data-home-section="home" aria-label="创建项目">
+          <section v-show="!projectSectionVisible" class="creationPanel" data-home-section="home" aria-label="创建项目">
             <div class="brand">
               <el-image class="brandLogo" :src="logoUrl" fit="contain" alt="见白" />
               <h1>今天要做点什么？</h1>
@@ -86,10 +86,12 @@
           </section>
           <section class="projectList" data-home-section="projects" aria-labelledby="projectListTitle">
             <h2 id="projectListTitle" class="projectTabs">
-              <button type="button" :class="{ active: projectType === 'local' }" :aria-pressed="projectType === 'local'" aria-controls="projectListContent" @click="projectType = 'local'">项目</button>
-              <button type="button" :class="{ active: projectType === 'team' }" :aria-pressed="projectType === 'team'" aria-controls="projectListContent" @click="projectType = 'team'">团队项目</button>
+              <button type="button" :class="{ active: projectFilter === 'all' }" :aria-pressed="projectFilter === 'all'" aria-controls="projectListContent" @click="scrollToSection('projects')">全部</button>
+              <button type="button" :class="{ active: projectFilter === 'infiniteCanvas' }" :aria-pressed="projectFilter === 'infiniteCanvas'" aria-controls="projectListContent" @click="scrollToSection('infiniteCanvas')">无限画布</button>
+              <button type="button" :class="{ active: projectFilter === 'infiniteComic' }" :aria-pressed="projectFilter === 'infiniteComic'" aria-controls="projectListContent" @click="scrollToSection('infiniteComic')">无限漫画</button>
+              <button type="button" :class="{ active: projectFilter === 'team' }" :aria-pressed="projectFilter === 'team'" aria-controls="projectListContent" @click="scrollToSection('team')">团队项目</button>
             </h2>
-            <div v-if="projectType === 'local'" id="projectListContent" class="projectItems">
+            <div id="projectListContent" class="projectItems">
               <el-card class="projectLaunchCard" shadow="never" :bodyStyle="{ padding: '0', height: '100%' }">
                 <button class="projectLaunch" type="button" :disabled="creating || opening || relocationPicker?.selecting" :aria-busy="creating || relocationPicker?.selecting" title="选择空文件夹新建，或打开已有项目" @click="createProject(false)">
                   <span class="launchIcon">
@@ -110,9 +112,8 @@
                 </template>
               </projectCard>
             </div>
-            <div v-else id="projectListContent" class="teamProjects" />
           </section>
-          <div data-home-section="explore"><explore :scrollElement="pageScroll?.wrapRef" /></div>
+          <div v-show="!projectSectionVisible" data-home-section="explore"><explore :scrollElement="pageScroll?.wrapRef" /></div>
         </el-main>
       </div>
     </el-scrollbar>
@@ -135,7 +136,7 @@ import {
   IconQrcode, IconDeviceDesktop, IconHome, IconCompass,
   IconArrowUp, IconPlus, IconLoader2,
   IconFolder, IconEdit, IconFileZip, IconTools,
-  IconTrash, IconPaperclip,
+  IconTrash, IconPaperclip, IconInfinity, IconLayoutBoard,
 } from "@tabler/icons-vue";
 import modelPopover from "@/components/modelPopover.vue";
 import attachmentList from "@/components/agent/attachmentList.vue";
@@ -158,6 +159,7 @@ import projectCard from "./projectCard.vue";
 import workspacePicker from "./workspacePicker.vue";
 import homeAdvertisementCarousel from "./homeAdvertisementCarousel.vue";
 import photoCraft from "./photoCraft.vue";
+import { comicFileName, createComicProject } from "@/pages/infiniteComic/comicProject";
 
 const settingsVisible = ref(false);
 const settingsDialog = ref<InstanceType<typeof settings>>();
@@ -168,9 +170,10 @@ const sidebarCollapsed = ref(false);
 const pageScroll = ref<ScrollbarInstance>();
 const activeSection = ref("home");
 const photoCraftOpened = ref(false);
-const projectType = ref<"local" | "team">("local");
 const homeSections = [
   { id: "home", label: "首页", icon: IconHome },
+  { id: "infiniteCanvas", label: "无限画布", icon: IconInfinity },
+  { id: "infiniteComic", label: "无限漫画", icon: IconLayoutBoard },
   { id: "projects", label: "项目", icon: IconFolder },
   { id: "tools", label: "工具", icon: IconTools },
   { id: "photoCraft", label: "PS图像编辑" },
@@ -227,6 +230,9 @@ const placeholderPhrases = [
 const promptPlaceholder = ref(translate(placeholderPhrases[0]!));
 
 onMounted(() => {
+  watch(() => router.currentRoute.value.query.section, section => {
+    if (typeof section === "string" && homeSections.some(item => item.id === section)) void scrollToSection(section);
+  }, { immediate: true });
   void loadAdvertisements();
   window.addEventListener("dragend", clearAttachmentDrag, true);
   window.addEventListener("drop", clearAttachmentDrag, true);
@@ -279,14 +285,19 @@ watch([creating, opening], ([creating, opening]) => {
     clearAttachmentDrag();
     workspaceStore.projectLoadingDrawn = false;
     workspaceStore.projectLoading = true;
-  } else if (router.currentRoute.value.path !== "/workspace") {
+  } else if (!["/workspace", "/comic"].includes(router.currentRoute.value.path)) {
     workspaceStore.projectLoading = false;
   }
 }, { flush: "sync" });
 
 const selectedModel = ref("");
 const reasoningEffort = ref("");
-const sortedProjects = computed(() => [...projectList.value].sort((left, right) => right.lastOpenedAt - left.lastOpenedAt));
+const projectSectionVisible = computed(() => ["infiniteCanvas", "infiniteComic", "projects", "team"].includes(activeSection.value));
+const projectFilter = computed(() => ["infiniteCanvas", "infiniteComic", "team"].includes(activeSection.value) ? activeSection.value : "all");
+const sortedProjects = computed(() => projectList.value
+  .filter(project => projectFilter.value === "all"
+    || (project.projectKind ?? "infiniteCanvas") === projectFilter.value)
+  .sort((left, right) => right.lastOpenedAt - left.lastOpenedAt));
 
 async function loadAdvertisements() {
   // ACT: 默认读取后台配置；开发环境显式指定预览模式时才使用临时预览。
@@ -400,6 +411,10 @@ async function scrollToSection(section: string) {
   }
   if (section === "tools") return;
   await nextTick();
+  if (projectSectionVisible.value) {
+    pageScroll.value?.scrollTo({ top: 0 });
+    return;
+  }
   const wrap = pageScroll.value?.wrapRef;
   const target = wrap?.querySelector<HTMLElement>(`[data-home-section="${section}"]`);
   if (!wrap || !target) return;
@@ -411,7 +426,7 @@ async function scrollToSection(section: string) {
 }
 
 function updateActiveSection() {
-  if (activeSection.value === "tools" || activeSection.value === "photoCraft") return;
+  if (projectSectionVisible.value || ["tools", "photoCraft"].includes(activeSection.value)) return;
   const wrap = pageScroll.value?.wrapRef;
   if (!wrap) return;
   if (wrap.scrollTop > 0 && wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 2) {
@@ -531,13 +546,18 @@ async function restoreAttachment(index: number) {
 }
 
 async function enterWorkspace() {
-  await waitForControlValue(() => workspaceStore.projectLoadingDrawn || undefined, pageLifetime.signal).catch(error => {
-    if (!pageLifetime.signal.aborted) throw error;
-  });
+  const comic = workspaceStore.project?.projectKind === "infiniteComic";
+  // 页面代码与开场动画并行加载，路由仍在动画绘制完成后切换。
+  await Promise.all([
+    import("@/pages/workspace/index.vue"),
+    waitForControlValue(() => workspaceStore.projectLoadingDrawn || undefined, pageLifetime.signal).catch(error => {
+      if (!pageLifetime.signal.aborted) throw error;
+    }),
+  ]);
   if (pageLifetime.signal.aborted) return;
   if (!document.hidden) await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   if (pageLifetime.signal.aborted) return;
-  await router.push("/workspace");
+  await router.push(comic ? "/comic" : "/workspace");
 }
 
 async function openProject(project: Project) {
@@ -596,6 +616,7 @@ async function renameProject(project: Project) {
 
 async function createProject(fromPrompt = true) {
   if (creating.value || opening.value || (fromPrompt && !workspaceDirectory.value)) return;
+  const projectKind = !fromPrompt && projectFilter.value === "infiniteComic" ? "infiniteComic" : "infiniteCanvas";
   if (!await confirmPhotoCraftLeave()) return;
   const path = fromPrompt ? workspaceDirectory.value : await relocationPicker.value?.chooseDirectory();
   if (!path || creating.value || opening.value || pageLifetime.signal.aborted) return;
@@ -603,7 +624,10 @@ async function createProject(fromPrompt = true) {
   try {
     const { directory, empty } = await useWorkspaceFiles(path).list();
     if (fromPrompt && !empty) return ElMessage.warning("该文件夹不为空，请重新选择空文件夹；已有项目请使用“新建项目”入口或点击项目列表打开。");
-    if (empty) await useWorkspaceFiles(directory).writeJson("画布1.json", { toonflowCanvas: true, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }, true);
+    if (empty) {
+      if (projectKind === "infiniteComic") await useWorkspaceFiles(directory).writeJson(comicFileName, createComicProject(directory.split(/[\\/]/).filter(Boolean).at(-1) || "漫画项目"), true);
+      else await useWorkspaceFiles(directory).writeJson("画布1.json", { toonflowCanvas: true, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }, true);
+    }
     await workspaceStore.openProject(directory);
     if (fromPrompt && (prompt.value.trim() || promptAttachments.value.length)) {
       workspaceStore.pendingAgentMessage = { directory: workspaceStore.project!.directory, prompt: prompt.value, attachments: [...promptAttachments.value], model: selectedModel.value, reasoningEffort: reasoningEffort.value };
@@ -1054,8 +1078,6 @@ async function createProject(fromPrompt = true) {
               &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 4px; }
             }
           }
-
-          .teamProjects { min-height: 240px; }
 
           .projectItems {
             display: grid;

@@ -10,6 +10,9 @@ export function getPromptText(value: AnyTagProps[][], resolveReference?: (id: st
     }
     const content = document.createElement("template");
     content.innerHTML = tag.html;
+    for (const preset of content.content.querySelectorAll<HTMLElement>(".promptPreset[data-value]")) {
+      preset.replaceWith(preset.dataset.value ?? "");
+    }
     for (const reference of content.content.querySelectorAll<HTMLElement>(".imageReference[data-value]")) {
       const id = reference.dataset.referenceId;
       reference.replaceWith(id && resolveReference ? resolveReference(id) : reference.dataset.value ?? "");

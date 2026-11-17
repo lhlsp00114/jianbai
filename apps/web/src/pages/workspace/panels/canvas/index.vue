@@ -57,6 +57,9 @@
       @paneClick="edgeDisconnect = undefined; assetsVisible = false; nodePanelVisible = false"
       @moveStart="edgeDisconnect = undefined"
       :default-edge-options="defaultEdgeOptions">
+      <template #edge-simplebezier="edgeProps">
+        <flowingEdge v-bind="edgeProps" :motionEnabled="active && !settingsVisible && generalSettings.canvasEdgeAnimationEnabled" />
+      </template>
       <template v-for="type in remoteNodeTypes" :key="type" #[`node-${type}`]="nodeProps">
         <remoteNode
           v-bind="nodeProps"
@@ -73,7 +76,7 @@
         :availableNodes="availableNodes"
         @create="createEmptyNode" />
       <canvasViewportHint v-if="active && !settingsVisible && project?.directory && canvasReady" :key="canvasId" />
-      <canvasMenu ref="canvasMenuRef" v-model:canvasId="canvasId" :directory="project?.directory" :initialCanvasId="initialCanvasId" :activateCanvas="activateCanvas" :flushSave="flushCanvases ?? flushCanvasSave">
+      <canvasMenu ref="canvasMenuRef" v-model:canvasId="canvasId" :menuTarget="menuTarget" :menuHidden="menuHidden" :directory="project?.directory" :initialCanvasId="initialCanvasId" :activateCanvas="activateCanvas" :flushSave="flushCanvases ?? flushCanvasSave">
         <assetLibrary v-if="currentUser?.role !== 'user'" ref="assetLibraryRef" v-model="assetsVisible" :directory="project?.directory" />
       </canvasMenu>
       <canvasControls
@@ -113,8 +116,10 @@
       <span class="snapGuide snapGuideVertical" :style="{ left: `${snapGuideStyle.left}px` }" />
       <span class="snapGuide snapGuideHorizontal" :style="{ top: `${snapGuideStyle.top}px` }" />
     </div>
+    <Teleport :to="toolbarTarget ?? 'body'" :disabled="!toolbarVisible">
+      <div class="toolbarHost" :class="{ toolbarShared: toolbarVisible }">
     <div
-      v-if="active && canvasId"
+      v-if="(active || toolbarVisible) && canvasId"
       class="sideToolbar nodrag nopan nowheel"
       role="toolbar"
       aria-label="左侧工具栏"
@@ -126,18 +131,18 @@
       @contextmenu.stop.prevent
       @wheel.stop>
       <el-tooltip :showArrow="false" :content="nodePanelVisible ? '关闭添加节点' : '添加节点'" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-        <el-button class="sideToolButton addNodeButton" :class="{ active: nodePanelVisible }" text :aria-pressed="nodePanelVisible" aria-label="添加节点" @click="nodePanelVisible = !nodePanelVisible">
+        <el-button class="sideToolButton addNodeButton" :class="{ active: nodePanelVisible }" text :aria-pressed="nodePanelVisible" aria-label="添加节点" @click="handleToolbarTool('nodes')">
           <icon-x v-if="nodePanelVisible" :size="22" aria-hidden="true" />
           <icon-plus v-else :size="22" aria-hidden="true" />
         </el-button>
       </el-tooltip>
       <el-tooltip :showArrow="false" content="上传文件" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-        <el-button class="sideToolButton" text :disabled="!project?.directory || !canvasReady || settingsVisible" aria-label="上传文件" @click="uploadFromPanel">
+        <el-button class="sideToolButton" text :disabled="!project?.directory || !canvasReady || settingsVisible" aria-label="上传文件" @click="handleToolbarTool('upload')">
           <icon-upload :size="22" aria-hidden="true" />
         </el-button>
       </el-tooltip>
       <el-tooltip :showArrow="false" content="创作收藏" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-        <el-button class="sideToolButton" :class="{ active: libraryVisible }" text :aria-pressed="libraryVisible" aria-label="创作收藏" @click="libraryVisible = true">
+        <el-button class="sideToolButton" :class="{ active: libraryVisible }" text :aria-pressed="libraryVisible" aria-label="创作收藏" @click="handleToolbarTool('library')">
           <svg class="creationLibraryIcon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <path d="M7 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1" />
             <rect x="7" y="3" width="14" height="15" rx="2" />
@@ -146,16 +151,18 @@
         </el-button>
       </el-tooltip>
       <el-tooltip v-if="currentUser?.role !== 'user'" :showArrow="false" :content="assetsVisible ? '关闭素材库' : '打开素材库'" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-        <el-button class="sideToolButton" :class="{ active: assetsVisible }" text :aria-pressed="assetsVisible" aria-label="素材库" @click="assetsVisible = !assetsVisible">
+        <el-button class="sideToolButton" :class="{ active: assetsVisible }" text :aria-pressed="assetsVisible" aria-label="素材库" @click="handleToolbarTool('assets')">
           <icon-folder :size="'24'" :stroke="'1.7'" aria-hidden="true" />
         </el-button>
       </el-tooltip>
       <el-tooltip :showArrow="false" :content="historyVisible ? '关闭历史记录' : '历史记录'" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-        <el-button class="sideToolButton" :class="{ active: historyVisible }" text :aria-pressed="historyVisible" aria-label="历史记录" @click="historyVisible = !historyVisible">
+        <el-button class="sideToolButton" :class="{ active: historyVisible }" text :aria-pressed="historyVisible" aria-label="历史记录" @click="handleToolbarTool('history')">
           <icon-history :size="'24'" :stroke="'1.7'" aria-hidden="true" />
         </el-button>
       </el-tooltip>
     </div>
+      </div>
+    </Teleport>
     <section v-if="nodePanelVisible && active && canvasId" class="nodePanel nodrag nopan nowheel" aria-label="添加节点" @pointerdown.stop @click.stop @keydown.esc.stop="nodePanelVisible = false">
       <header class="nodePanelHeader">
         <span>添加节点</span>
@@ -248,6 +255,7 @@ import nodeMenuItems from "./components/nodeMenuItems.vue";
 import groupNode from "./components/groupNode.vue";
 import selectionToolbar from "./components/selectionToolbar.vue";
 import nodeSearch from "./components/nodeSearch.vue";
+import flowingEdge from "./components/flowingEdge.vue";
 import { finishGroupDrag, fitGroupBounds, getSelectionTree } from "./selectionNodes";
 import type { NodeOutput } from "@toonflow/nodes-scaffold/values";
 import { validateConnection, type NodeConnectionFeedback, type NodeHandle } from "@toonflow/nodes-scaffold/connection";
@@ -258,6 +266,8 @@ import { useWorkspaceStore } from "@/stores/workspace";
 import { currentUser } from "@/stores/multiTenant";
 import { generalSettings, settings } from "@/stores/settings";
 import { readImagePromptInstruction } from "@toonflow/node-text/imagePromptInstruction";
+import { readImagePresetPrompt } from "@toonflow/node-image-generation/promptPresets";
+import { readOutpaintPromptInstruction } from "@toonflow/node-image/imageOutpaint";
 import { filterNodeMenu, resolveNodeMenu } from "@toonflow/server/nodeMenu";
 import { getShortcutBindings, shortcutLabel, shortcutMatches, shortcutPressed } from "@/lib/canvasShortcuts";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
@@ -268,6 +278,10 @@ import "@vue-flow/core/dist/theme-default.css";
 import "@vue-flow/minimap/dist/style.css";
 
 const props = withDefaults(defineProps<{
+  menuTarget?: HTMLElement;
+  toolbarTarget?: HTMLElement;
+  toolbarVisible?: boolean;
+  menuHidden?: boolean;
   active?: boolean;
   settingsVisible?: boolean;
   runtimeKey?: string;
@@ -275,9 +289,12 @@ const props = withDefaults(defineProps<{
   activateCanvas?: (canvasId: string, signal?: AbortSignal) => Promise<void>;
   resolveCanvasContext?: (canvasId: string) => CanvasContext | undefined;
   flushCanvases?: (action?: () => Promise<void>) => Promise<void>;
-}>(), { active: true, settingsVisible: false });
+}>(), { active: true, settingsVisible: false, toolbarVisible: false });
+const emit = defineEmits<{ openTool: [tool: "nodes" | "upload" | "library" | "assets" | "history"] }>();
 const { project } = storeToRefs(useWorkspaceStore());
 provide("textImagePromptInstruction", () => readImagePromptInstruction(settings.value.stores));
+provide("imagePresetPromptInstruction", (id: string) => readImagePresetPrompt(settings.value.stores, id));
+provide("imageOutpaintPromptInstruction", () => readOutpaintPromptInstruction(settings.value.stores));
 
 const canvasElement = ref<HTMLElement>();
 const flowData = ref<(Node | Edge)[]>([]);
@@ -609,6 +626,7 @@ provide("nodePersistence", () => {
   };
 });
 defineExpose({ canvasId, canvasReady, getCanvasContext, addNodeAtPointer, readDocumentNode, saveDocumentNode, mountDocumentNode, observeDocumentNode, prepareCanvasDelete, flushSave: flushCanvasSave, cancelSave: cancelCanvasSave,
+  openWorkspaceTool,
   canUndo, canRedo, changeHistory,
   openNodeSearch: () => nodeSearchRef.value?.open(),
   getCanvases: (signal?: AbortSignal) => {
@@ -846,6 +864,22 @@ function addNodeFromPanel(type: string) {
   if (!props.active || props.settingsVisible || !canvasId.value || !project.value?.directory || !canvasReady.value || !center) return;
   nodePanelVisible.value = false;
   void nodeMenuRef.value?.addNode(type, snapPosition({ x: center.x - 180, y: center.y - 140 }));
+}
+function openWorkspaceTool(tool: "nodes" | "upload" | "library" | "assets" | "history") {
+  if (!props.active || props.settingsVisible) return;
+  if (tool === "nodes") nodePanelVisible.value = true;
+  else if (tool === "upload") uploadFromPanel();
+  else if (tool === "library") libraryVisible.value = true;
+  else if (tool === "assets" && currentUser.value?.role !== "user") assetsVisible.value = true;
+  else if (tool === "history") historyVisible.value = true;
+}
+function handleToolbarTool(tool: "nodes" | "upload" | "library" | "assets" | "history") {
+  if (!props.active) { emit("openTool", tool); return; }
+  if (tool === "nodes") nodePanelVisible.value = !nodePanelVisible.value;
+  else if (tool === "upload") uploadFromPanel();
+  else if (tool === "library") libraryVisible.value = !libraryVisible.value;
+  else if (tool === "assets" && currentUser.value?.role !== "user") assetsVisible.value = !assetsVisible.value;
+  else if (tool === "history") historyVisible.value = !historyVisible.value;
 }
 
 function getCanvasCenterPosition() {
@@ -1658,7 +1692,7 @@ const defaultEdgeOptions = markRaw({
   animated: false,
   class: ({ sourceNode, targetNode }: GraphEdge) => {
     if (!sourceNode.selected && !sourceNode.dragging && !targetNode.selected && !targetNode.dragging) return "";
-    return ["edgeNodeActive", generalSettings.value.canvasEdgeColorMode !== "none" && "edgeActive", generalSettings.value.canvasEdgeAnimationEnabled && "animated"].filter(Boolean).join(" ");
+    return ["edgeNodeActive", generalSettings.value.canvasEdgeColorMode !== "none" && "edgeActive"].filter(Boolean).join(" ");
   },
   focusable: false,
   selectable: false,
@@ -1668,6 +1702,53 @@ const defaultEdgeOptions = markRaw({
 </script>
 
 <style lang="scss" scoped>
+.toolbarHost { display: contents; }
+.toolbarHost.toolbarShared {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+
+  .sideToolbar {
+    position: absolute;
+    top: 50%;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 56px;
+    max-height: calc(100% - 160px);
+    overflow-y: auto;
+    padding: 6px;
+    transform: translateY(-50%);
+    border: 1px solid var(--el-border-color-light);
+    border-radius: calc(var(--ui-radius) * 2.25);
+    background: var(--el-bg-color);
+    pointer-events: auto;
+
+    .sideToolButton {
+      display: flex;
+      flex-shrink: 0;
+      width: 42px;
+      height: 42px;
+      margin: 0;
+      padding: 8px;
+      border-radius: var(--ui-radius-large);
+      color: var(--el-text-color-regular);
+      &:hover { color: var(--el-text-color-primary); background: var(--el-fill-color); }
+      &.active { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+    }
+
+    .addNodeButton {
+      border-radius: 50%;
+      background: var(--el-color-white);
+      color: var(--el-color-black);
+      &:hover, &.active { background: var(--el-color-white); color: var(--el-color-black); }
+    }
+  }
+}
+
 :global(.referenceAssetDialog) {
   display: flex;
   flex-direction: column;
@@ -1840,6 +1921,12 @@ const defaultEdgeOptions = markRaw({
 
   :deep(.vue-flow__edge.edgeActive .vue-flow__edge-path) {
     stroke: var(--canvasEdgeColor);
+  }
+  :deep(.vue-flow__edge.edgeActive .edgeFlow) {
+    color: var(--canvasEdgeColor);
+  }
+  :deep(.vue-flow__edge.edgeNodeActive .vue-flow__edge-path) {
+    stroke-width: 1.5;
   }
 
   &:has(.selectionConnection) :deep(.vue-flow__node:not(.selected) .nodeHandle.target .handleIcon) {

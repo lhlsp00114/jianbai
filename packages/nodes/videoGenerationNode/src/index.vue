@@ -49,6 +49,10 @@
     </div>
     <template #bottom>
       <generationPromptPanel>
+        <template #actions>
+          <div ref="providerTarget" />
+          <taskRecovery compact :visible="generationState.recoveryVisible.value" :label="generationState.recoveryLabel.value" :action="generationState.recoverResult" :disabled="cancelling || deleting || uploading" />
+        </template>
         <el-card class="promptCard" shadow="never" :bodyStyle="{ padding: '14px 16px 12px' }">
           <referenceActions :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" :disabled="generating || deleting || uploading" />
           <referenceItem
@@ -68,6 +72,7 @@
             <providerModelSelect
               v-model="data.model"
               :models="models"
+              :providerTarget="providerTarget"
               :loading="modelsLoading"
               :disabled="generating || deleting"
               noDataText="请先在设置中添加视频模型"
@@ -82,8 +87,8 @@
               :ratios="ratioOptions"
               :model="selectedModel"
               :disabled="generating || deleting || !selectedModel" />
+            <promptPresets :disabled="generating || deleting || uploading" />
             <div class="generationActions">
-              <taskRecovery :visible="generationState.recoveryVisible.value" :label="generationState.recoveryLabel.value" :action="generationState.recoverResult" :disabled="cancelling || deleting || uploading" />
               <mediaPrice v-if="generationInput" :input="{ ...generationInput, mediaType: 'video' }" :supported="selectedModel?.supportsPrice === true" />
               <el-button v-if="pendingRecovery" class="sendButton" :icon="IconPlayerStop" :loading="cancelling" :disabled="deleting || uploading" title="放弃任务" aria-label="放弃任务" @click="generationState.cancel().catch(error => showNodeError(error, '停止生成失败'))" />
               <el-button
@@ -118,6 +123,7 @@ import { getModelFormValues, useModelForm } from "@toonflow/node-shared/useModel
 import { useNodeReferences } from "@toonflow/node-shared/useNodeReferences";
 import { getPromptText } from "@toonflow/node-shared/promptText";
 import promptInput from "@toonflow/node-shared/promptInput";
+import promptPresets from "@toonflow/node-shared/promptPresets";
 import generationPromptPanel from "@toonflow/node-shared/generationPromptPanel";
 import videoPlayer from "@toonflow/node-video/videoPlayer";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
@@ -154,6 +160,7 @@ data.value.other ??= {};
 const { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference } = useNodeReferences();
 const models = shallowRef<NodeMediaModel[]>([]);
 const modelsLoading = ref(false);
+const providerTarget = ref<HTMLElement>();
 const uploading = ref(false);
 const fileInput = ref<HTMLInputElement>();
 let disposed = false;

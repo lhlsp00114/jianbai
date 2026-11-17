@@ -25,7 +25,14 @@ const router = createRouter({
     },
     {
       path: "/workspace",
-      beforeEnter: () => publicWeb.value && !useWorkspaceStore().project ? { path: "/home", replace: true } : true,
+      beforeEnter: () => useWorkspaceStore().project?.projectKind === "infiniteComic" ? { path: "/comic", replace: true }
+        : publicWeb.value && !useWorkspaceStore().project ? { path: "/home", replace: true } : true,
+      component: () => import("@/pages/workspace/index.vue"),
+    },
+    {
+      path: "/comic",
+      beforeEnter: () => !useWorkspaceStore().project ? { path: "/home", replace: true }
+        : useWorkspaceStore().project?.projectKind !== "infiniteComic" ? { path: "/workspace", replace: true } : true,
       component: () => import("@/pages/workspace/index.vue"),
     },
     adminRoute,

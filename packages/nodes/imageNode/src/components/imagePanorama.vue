@@ -42,7 +42,7 @@ import { IconPanoramaHorizontal } from "@tabler/icons-vue";
 import { useNode } from "@vue-flow/core";
 import type { NodeMediaValue } from "@toonflow/nodes-scaffold/runtime";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
-import { buildPanoramaPrompt, type PanoramaMode } from "../imagePanorama";
+import { panoramaPromptPresets, type PanoramaMode } from "../imagePanorama";
 import { usePanoramaCapture } from "../usePanoramaCapture";
 import { useImageVariationNode } from "../useImageVariationNode";
 import imagePanoramaPreview from "./imagePanoramaPreview.vue";
@@ -84,10 +84,10 @@ async function selectAction(command: string) {
   try {
     await createVariation({
       label: mode.value === "sphere" ? "720°全景图" : "360°环绕图",
-      prompt: buildPanoramaPrompt(mode.value),
+      prompt: panoramaPromptPresets[mode.value === "sphere" ? 0 : 1].value + " ",
       model: typeof node.data.model === "string" ? node.data.model : "",
       size: typeof node.data.size === "string" ? node.data.size : "",
-      ratio: mode.value === "sphere" ? "2:1" : "4:1",
+      ratio: panoramaPromptPresets[mode.value === "sphere" ? 0 : 1].ratio,
     });
   } catch (error) {
     showNodeError(error, "全景节点创建失败");

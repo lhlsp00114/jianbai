@@ -375,6 +375,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
 .historyGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-auto-rows: max-content;
   gap: 12px;
   flex: 1;
   min-height: 0;
@@ -394,7 +395,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
     background: var(--el-fill-color-light);
     cursor: default;
 
-    img, video { width: 100%; height: 100%; object-fit: contain; }
+    img, video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
     video { background: #111; }
     &:hover { border-color: var(--el-color-primary); }
     .playMark { position: absolute; color: white; text-shadow: 0 1px 5px #000; pointer-events: none; }

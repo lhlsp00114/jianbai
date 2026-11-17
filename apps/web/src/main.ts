@@ -1,5 +1,5 @@
 import { createApp, h, nextTick, ref, type App } from "vue";
-import { ElButton, ElResult } from "element-plus";
+import { ElButton, ElMessageBox, ElResult } from "element-plus";
 import { isRtlLocale } from "@toonflow/i18n";
 import "@/assets/main.scss";
 import "element-plus/es/components/message-box/style/css";
@@ -23,6 +23,24 @@ const requiresWebView2Update = actualPlatform.isDesktop && actualPlatform.isWind
   && [Map.groupBy, URL.canParse, Promise.withResolvers].some(method => typeof method !== "function");
 const requiresMobileWebViewUpdate = actualPlatform.isMobile && getMissingBrowserFeatures().length > 0;
 let isMounted = false;
+let resourceReloadPromptVisible = false;
+
+window.addEventListener("vite:preloadError", (event) => {
+  event.preventDefault();
+  if (resourceReloadPromptVisible) return;
+  resourceReloadPromptVisible = true;
+  void ElMessageBox.confirm(
+    translate("页面资源加载失败，可能是应用已更新或网络暂时中断。请先保存当前未保存的内容，再刷新页面重试。"),
+    translate("需要刷新页面"),
+    {
+      confirmButtonText: translate("刷新页面"),
+      cancelButtonText: translate("暂不刷新"),
+      type: "warning",
+    },
+  ).then(() => window.location.reload()).catch(() => {}).finally(() => {
+    resourceReloadPromptVisible = false;
+  });
+});
 
 async function notifyDesktopReady(failed = false) {
   if (!actualPlatform.isDesktop || publicWeb.value) return;

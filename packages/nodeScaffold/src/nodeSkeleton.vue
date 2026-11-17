@@ -1,7 +1,7 @@
 <template>
   <div v-if="documentTarget" class="nodeDocumentPlaceholder" :style="canvasSize" aria-hidden="true" />
   <teleport :to="documentTarget ?? 'body'" :disabled="!documentTarget">
-  <div ref="skeletonElement" v-bind="$attrs" class="nodeSkeleton" :class="{ documentNode: documentTarget, resized: !!resizedStyle.height, resizing: !!resize, hasTitleMeta: !!$slots.titleMeta }" :style="resizedStyle" @wheel.capture="zoomCanvas" @dblclick.stop="focusNode" @contextmenu="openMenu($event)">
+  <div ref="skeletonElement" v-bind="$attrs" class="nodeSkeleton" :class="{ documentNode: documentTarget, previewVisible: previewReady && !loading && !readOnly && !documentTarget, resized: !!resizedStyle.height, resizing: !!resize, hasTitleMeta: !!$slots.titleMeta }" :style="resizedStyle" @wheel.capture="zoomCanvas" @dblclick.stop="focusNode" @contextmenu="openMenu($event)">
     <el-dropdown
       v-if="!readOnly"
       ref="menu"
@@ -697,11 +697,22 @@ watch(
 </script>
 
 <style scoped>
+@keyframes nodeAppear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .nodeSkeleton {
   position: relative;
   width: 220px;
   color: var(--el-text-color-primary);
   text-align: left;
+
+  &.previewVisible { animation: nodeAppear 140ms ease-out; }
+
+  @media (prefers-reduced-motion: reduce) {
+    &.previewVisible { animation: none; }
+  }
 
   &.resized {
     display: flex;

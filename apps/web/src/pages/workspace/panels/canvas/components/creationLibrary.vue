@@ -4,21 +4,21 @@
       <el-tabs v-if="!draft" v-model="category" :beforeLeave="changeCategory">
         <el-tab-pane label="Skill 收藏" name="skill" />
         <el-tab-pane label="提示词收藏" name="prompt" />
-        <el-tab-pane label="内置节点指令" name="nodes" />
+        <el-tab-pane label="内置节点提示词" name="nodes" />
       </el-tabs>
-      <builtinNodeInstructions v-if="visible && category === 'nodes'" ref="builtinEditor" />
-      <el-alert v-if="category !== 'nodes' && (library.error || operationError)" :title="library.error || operationError" type="error" :closable="false" showIcon />
+      <builtinNodeInstructions v-if="visible && builtinCategory" ref="builtinEditor" />
+      <el-alert v-if="!builtinCategory && (library.error || operationError)" :title="library.error || operationError" type="error" :closable="false" showIcon />
       <div v-if="draft" class="editorNavigation">
         <el-button text :icon="IconArrowLeft" :disabled="busy" @click="backToGrid">返回收藏</el-button>
         <span class="saveHint" role="status">{{ saving ? "正在保存…" : "返回或关闭时自动保存" }}</span>
       </div>
-      <div v-else-if="category !== 'nodes'" class="libraryToolbar">
+      <div v-else-if="!builtinCategory" class="libraryToolbar">
         <el-input v-model="search" clearable :prefixIcon="IconSearch" placeholder="搜索收藏名称或内容" aria-label="搜索收藏" />
         <el-button :icon="IconPlus" :disabled="busy || !!library.error" @click="createEntry">新增收藏</el-button>
         <el-button :icon="IconUpload" :disabled="busy || !!library.error" @click="fileInput?.click()">导入文件</el-button>
         <input ref="fileInput" type="file" accept=".md,.markdown,.txt" hidden aria-label="导入 Skill 或提示词文本" @change="importEntry" />
       </div>
-      <div v-if="category !== 'nodes'" class="libraryBody">
+      <div v-if="!builtinCategory" class="libraryBody">
         <nav v-if="!draft" class="entryList" aria-label="收藏列表">
           <button class="entryItem createEntryCard" type="button" :disabled="busy || !!library.error" @click="createEntry">
             <icon-plus :size="28" aria-hidden="true" />
@@ -82,6 +82,7 @@ import builtinNodeInstructions from "./builtinNodeInstructions.vue";
 type Entry = { id: string; kind: "skill" | "prompt"; title: string; content: string; cover?: string };
 const visible = defineModel<boolean>({ default: false });
 const category = ref<"skill" | "prompt" | "nodes">("skill");
+const builtinCategory = computed(() => category.value === "nodes");
 const builtinEditor = ref<InstanceType<typeof builtinNodeInstructions>>();
 const search = ref("");
 const draft = ref<Entry>();
@@ -155,7 +156,7 @@ function resetDraft() {
 }
 
 async function saveBeforeLeaving() {
-  if (category.value === "nodes") return await builtinEditor.value?.saveBeforeLeaving() ?? true;
+  if (builtinCategory.value) return await builtinEditor.value?.saveBeforeLeaving() ?? true;
   if (busy.value || draggedId.value) return false;
   if (!dirty.value || !draft.value) return true;
   if (!original.value && !draft.value.title.trim() && !draft.value.content.trim() && !draft.value.cover) return true;
@@ -178,7 +179,7 @@ async function changeCategory() {
 }
 
 async function createEntry() {
-  if (category.value === "nodes") return;
+  if (category.value !== "skill" && category.value !== "prompt") return;
   if (!await saveBeforeLeaving()) return;
   resetDraft();
   draft.value = { id: crypto.randomUUID(), kind: category.value, title: "", content: "" };
@@ -200,7 +201,7 @@ function showError(error: unknown) {
 }
 
 function openTextDraft(content: string, title: string) {
-  if (category.value === "nodes") return;
+  if (category.value !== "skill" && category.value !== "prompt") return;
   if (!content.trim() || content.length > 64000 || content.includes("\0")) {
     throw new Error(translate("内容必须是非空文本，且不能超过 64000 个字符"));
   }

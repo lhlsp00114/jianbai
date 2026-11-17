@@ -7,6 +7,7 @@ export type Project = {
   directory: string;
   name: string;
   lastOpenedAt: number;
+  projectKind?: "infiniteCanvas" | "infiniteComic" | "team";
 };
 
 export const useWorkspaceStore = defineStore("workspace", () => {
@@ -24,9 +25,20 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     signal?.throwIfAborted();
     if (data.code !== 200 || !data.data?.directory) throw new Error(data.message || "工作目录校验失败");
     const checkedDirectory = data.data.directory;
+    const { default: useWorkspaceFiles } = await import("@/lib/workspaceFiles");
+    const files = useWorkspaceFiles(checkedDirectory);
+    const { entries } = await files.list("", signal);
+    const comicEntry = entries.find(item => ["comicProject.json", "comicProjectBackup.json"].includes(item.name) && item.type === "file");
+    let projectKind: NonNullable<Project["projectKind"]> = "infiniteCanvas";
+    if (comicEntry) {
+      const { readComicSnapshot } = await import("@/pages/infiniteComic/comicPersistence");
+      await readComicSnapshot(files);
+      projectKind = "infiniteComic";
+    }
+    signal?.throwIfAborted();
     const existing = projectList.value.find(project => project.directory === previousDirectory)
       ?? projectList.value.find(project => project.directory === checkedDirectory);
-    const added = { directory: checkedDirectory, name: name?.trim() || existing?.name || checkedDirectory.split(/[\\/]/).filter(Boolean).at(-1) || checkedDirectory, lastOpenedAt: Date.now() };
+    const added: Project = { directory: checkedDirectory, name: name?.trim() || existing?.name || checkedDirectory.split(/[\\/]/).filter(Boolean).at(-1) || checkedDirectory, lastOpenedAt: Date.now(), projectKind };
     projectList.value = [
       added,
       ...projectList.value.filter(item => item.directory !== previousDirectory && item.directory !== checkedDirectory),

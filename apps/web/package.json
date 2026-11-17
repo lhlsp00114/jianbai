@@ -42,6 +42,8 @@
     "@toonflow/multi-tenant-admin-web": "workspace:*",
     "@toonflow/multi-tenant-user-web": "workspace:*",
     "@toonflow/node-text": "workspace:*",
+    "@toonflow/node-image": "workspace:*",
+    "@toonflow/node-image-generation": "workspace:*",
     "@toonflow/node-shared": "workspace:*",
     "@toonflow/node-video": "workspace:*",
     "@toonflow/nodes-scaffold": "workspace:*",

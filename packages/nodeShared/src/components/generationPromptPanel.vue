@@ -1,7 +1,10 @@
 <template>
   <teleport :to="expandedTarget || 'body'" :disabled="!expanded || !expandedTarget">
-    <div v-show="!pickingReference" class="generationPromptPanel nodrag nopan nowheel" :class="{ expandedPanel: expanded }" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop="handleKeydown">
-      <el-button class="panelExpandButton" :icon="expanded ? IconMinimize : IconMaximize" text :title="expanded ? '收起编辑提示词' : '展开编辑提示词'" :aria-label="expanded ? '收起编辑提示词' : '展开编辑提示词'" @mousedown.prevent @click.stop="expanded = !expanded" />
+    <div v-show="!pickingReference" class="generationPromptPanel nodrag nopan nowheel" :class="{ expandedPanel: expanded, hasPanelActions: !!$slots.actions }" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop="handleKeydown">
+      <div class="panelActions">
+        <slot name="actions" />
+        <el-button class="panelExpandButton" :icon="expanded ? IconMinimize : IconMaximize" text :title="expanded ? '收起编辑提示词' : '展开编辑提示词'" :aria-label="expanded ? '收起编辑提示词' : '展开编辑提示词'" @mousedown.prevent @click.stop="expanded = !expanded" />
+      </div>
       <slot />
     </div>
   </teleport>
@@ -36,25 +39,112 @@ function handleKeydown(event: KeyboardEvent) {
 .generationPromptPanel {
   position: relative;
 
-  .panelExpandButton {
+  :deep(.promptCard) {
+    border-radius: 16px;
+    border-color: var(--el-border-color-lighter);
+    box-shadow: 0 4px 16px #0000000d;
+
+    > .el-card__body { padding: 10px 12px 12px !important; }
+
+    .referenceActions {
+      gap: 4px;
+      min-height: 24px;
+      margin-bottom: 8px;
+
+      .el-button { height: 24px; padding: 0 7px; font-size: 12px; }
+      .el-icon { font-size: 14px; }
+    }
+
+    .referenceList { gap: 6px; }
+    .promptInputWrap { margin: 10px 0 12px; }
+    .referenceHint { font-size: 12px; line-height: 1.5; }
+
+    .promptFooter {
+      gap: 8px;
+      min-width: 0;
+
+      .providerModelSelect { flex: 0 1 210px; width: 210px; min-width: 0; }
+      .modelSelect {
+        .el-select__wrapper {
+          min-height: 30px;
+          padding: 0 8px;
+          border-radius: 6px;
+          font-size: 12px;
+          line-height: 20px;
+          transition: background-color 0.15s, color 0.15s;
+          cursor: pointer;
+
+          &:hover:not(.is-disabled), &.is-focused:not(.is-disabled) {
+            background: var(--el-fill-color-light);
+            color: var(--el-text-color-primary);
+          }
+        }
+
+        .el-select__selection { min-height: 20px; }
+        .el-select__input { height: 20px; }
+        .el-select__placeholder { display: flex; align-items: center; height: 20px; font-size: 12px; }
+        .modelLabel { display: flex; align-items: center; gap: 5px; line-height: 20px; }
+        .modelIcon { flex-shrink: 0; }
+        .el-select__suffix { align-self: center; }
+      }
+      .settingsButton { height: 30px; padding: 0 8px; border-radius: 6px; font-size: 12px; }
+      .promptPresetsButton {
+        flex-shrink: 0;
+        width: 30px;
+        height: 30px;
+        margin: 0;
+        padding: 6px;
+        border-radius: 6px;
+        color: var(--el-text-color-regular);
+
+        &:hover, &:focus-visible { background: var(--el-fill-color-light); color: var(--el-text-color-primary); }
+      }
+      .mediaPrice { min-height: 30px; padding: 0 4px; font-size: 11px; }
+      .generationActions { gap: 6px; }
+      .sendButton { width: 32px; height: 32px; border-radius: 10px; }
+      .confirmButton { height: 32px; }
+    }
+  }
+
+  .panelActions {
     position: absolute;
     top: 8px;
     right: 8px;
     z-index: 12;
-    width: 30px;
-    height: 30px;
-    padding: 6px;
-    border-radius: 7px;
-    color: var(--el-text-color-secondary);
+    display: flex;
+    align-items: center;
+    gap: 3px;
 
-    &:hover { color: var(--el-text-color-primary); background: var(--el-fill-color); }
+    :deep(.compactRecovery) { width: 24px; height: 24px; padding: 4px; }
+    :deep(.detachedProviderSelect) {
+      width: 56px;
+      .el-select__wrapper { min-height: 24px; padding: 0 5px; font-size: 11px; border-color: transparent; }
+      .el-select__wrapper:hover { background: var(--el-fill-color-light); }
+    }
+
+    .panelExpandButton {
+      width: 24px;
+      height: 24px;
+      margin: 0;
+      padding: 4px;
+      border-radius: 6px;
+      color: var(--el-text-color-secondary);
+
+      &:hover { color: var(--el-text-color-primary); background: var(--el-fill-color); }
+    }
   }
 
-  :deep(.referenceList) { padding-right: 34px; box-sizing: border-box; }
+  :deep(.referenceList) { box-sizing: border-box; }
   :deep(.chat-rich-text > [contenteditable]),
-  :deep(.chat-placeholder-wrap) { padding-right: 34px; }
+  :deep(.chat-placeholder-wrap) { padding-right: 0; }
+
+  &.hasPanelActions {
+    :deep(.referenceActions) { padding-right: 112px; }
+  }
 
   &:not(.expandedPanel) {
+    :deep(.chat-rich-text > [contenteditable]),
+    :deep(.chat-placeholder-wrap) { font-size: 13px !important; line-height: 1.7 !important; }
     :deep(.promptCard > .el-card__body > .promptInputWrap:first-child) { margin-top: 30px; }
   }
 

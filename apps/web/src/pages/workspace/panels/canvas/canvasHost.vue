@@ -13,9 +13,14 @@
       :initialCanvasId="entry.fileName"
       :active="active && entry.key === activeKey"
       :settingsVisible="settingsVisible"
+      :toolbarVisible="toolbarVisible && entry.key === activeKey"
+      :toolbarTarget="entry.key === activeKey ? toolbarTarget : undefined"
+      :menuTarget="entry.key === activeKey ? menuTarget : undefined"
+      :menuHidden="entry.key !== activeKey"
       :activateCanvas="activateCanvas"
       :resolveCanvasContext="resolveCanvasContext"
-      :flushCanvases="flushSave" />
+      :flushCanvases="flushSave"
+      @openTool="emit('openTool', $event)" />
     <uploadPluginDialog v-if="pendingUpload" :plugin="pendingUpload.plugin" :pluginFile="pendingUpload.file" :token="toonflowAccountToken" @closed="pendingUpload = undefined" />
   </div>
 </template>
@@ -34,7 +39,8 @@ import { createCanvasMention, mentionNodeOutputs, queryMentionNodes, type Mentio
 import type { NodeDocumentState } from "@toonflow/nodes-scaffold/nodeDocument";
 import { copyCanvasFiles, findRemainingCanvas, readCanvasFiles, type DocumentNode, type DocumentNodeOptions } from "./canvasFiles";
 
-const props = withDefaults(defineProps<{ active?: boolean; settingsVisible?: boolean }>(), { active: true, settingsVisible: false });
+const props = withDefaults(defineProps<{ active?: boolean; settingsVisible?: boolean; menuTarget?: HTMLElement; toolbarTarget?: HTMLElement; toolbarVisible?: boolean }>(), { active: true, settingsVisible: false, toolbarVisible: false });
+const emit = defineEmits<{ openTool: [tool: "nodes" | "upload" | "library" | "assets" | "history"] }>();
 const selectedTool = defineModel<"move" | "hand">("selectedTool", { default: "move" });
 type CanvasInstance = InstanceType<typeof canvasPanel>;
 const entries = shallowRef<{ key: string; fileName?: string }[]>([{ key: crypto.randomUUID() }]);
@@ -408,6 +414,7 @@ const mentionSource: MentionCanvasSource = {
 };
 
 defineExpose({ canvasId, canvasReady, canvasListReady, getCanvasContext, readDocumentNode, readDocumentNodes, focusDocumentNode, saveDocumentNode, mountDocumentNode, observeDocumentNode, resolveDocumentNodeFile, performFileAction, flushSave, cancelSave,
+  openWorkspaceTool: (tool: "nodes" | "upload" | "library" | "assets" | "history") => activeInstance.value?.openWorkspaceTool(tool),
   addNodeAtPointer: () => activeInstance.value?.addNodeAtPointer(),
   openNodeSearch: () => activeInstance.value?.openNodeSearch(),
   get canUndo() { return !fileActionBusy.value && !!activeInstance.value?.canUndo; },

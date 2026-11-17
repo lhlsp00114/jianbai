@@ -10,6 +10,7 @@
     "./mediaTypes": "./src/mediaTypes.ts",
     "./pcmPreview": "./src/pcmPreview.ts",
     "./promptInput": "./src/components/promptInput.vue",
+    "./promptPresets": "./src/components/promptPresets.vue",
     "./generationPromptPanel": "./src/components/generationPromptPanel.vue",
     "./promptText": "./src/promptText.ts",
     "./referenceItem": "./src/components/referenceItem.vue",

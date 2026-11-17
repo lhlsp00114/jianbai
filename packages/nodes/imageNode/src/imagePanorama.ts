@@ -1,4 +1,9 @@
 export type PanoramaMode = "sphere" | "cylinder";
+export const panoramaPromptPresets = [
+  { id: "panoramaSphere", label: "720全景", description: "完整球形全景", value: "{{preset panoramaSphere}}", mode: "sphere", ratio: "2:1" },
+  { id: "panoramaCylinder", label: "360环绕", description: "水平环绕场景", value: "{{preset panoramaCylinder}}", mode: "cylinder", ratio: "4:1" },
+] as const;
+
 export type PanoramaCapture = {
   images: { blob: Blob; width: number; height: number; label: string }[];
   columns: number;
@@ -24,4 +29,17 @@ export function buildPanoramaPrompt(mode: PanoramaMode) {
       : "Output a 360-degree horizontal cylindrical panorama as one image with a strict 4:1 aspect ratio. Cover a complete horizontal revolution around the camera, keep the horizon level and vertically centered, and make the left and right edges join seamlessly. This must be a flat cylindrical texture ready to map onto the inside of a cylinder.",
     "Produce one continuous panorama without panels, grids, borders, seams, labels, text, watermarks, cameras or interface controls. Do not output a little-planet view, fisheye view or a picture of a panorama viewer.",
   ].join("\n");
+}
+
+export function readPanoramaPromptInstruction(stores: unknown, mode: PanoramaMode): string {
+  if (stores === undefined) return buildPanoramaPrompt(mode);
+  if (!stores || typeof stores !== "object" || Array.isArray(stores)) throw new Error("内置节点指令设置格式错误");
+  const instructions = (stores as Record<string, unknown>).nodeInstructions;
+  if (instructions === undefined) return buildPanoramaPrompt(mode);
+  if (!instructions || typeof instructions !== "object" || Array.isArray(instructions)) throw new Error("内置节点指令设置格式错误");
+  const id = panoramaPromptPresets[mode === "sphere" ? 0 : 1].id;
+  const value = (instructions as Record<string, unknown>)[id];
+  if (value === undefined) return buildPanoramaPrompt(mode);
+  if (typeof value !== "string" || !value.trim() || value.length > 16000) throw new Error("全景图指令必须是 1–16000 字符的非空文本");
+  return value;
 }

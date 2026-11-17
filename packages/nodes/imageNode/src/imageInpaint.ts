@@ -1,9 +1,11 @@
 import { useNode, useVueFlow } from "@vue-flow/core";
+import { inject } from "vue";
 import { uploadNodeFile, useNodeAi, useNodeFiles, type NodeImageRequest, type NodeImageResult } from "@toonflow/nodes-scaffold/runtime";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
 import { createMediaPreview } from "@toonflow/node-shared/mediaPreview";
+import { buildOutpaintPrompt, defaultOutpaintPromptInstruction } from "./imageOutpaint";
 
-export type ImageInpaint = { source: string; original: string; guide: string; mask: string; images: NonNullable<NodeImageRequest["images"]>; mode?: "mask" | "guide" };
+export type ImageInpaint = { source: string; original: string; guide: string; mask: string; images: NonNullable<NodeImageRequest["images"]>; mode?: "mask" | "guide" | "outpaint"; outpaintContext?: string };
 export type InpaintDraftInput = { prompt: string; images?: NodeImageRequest["images"] };
 
 const inpaintInstruction = "对父节点提供的第一张原图片进行局部重绘。第二张图片是同一原图的标注图，红色涂抹标出了需要修改的区域；红色仅用于指示选区，不要把标注画进结果。只修改标注区域，保留原图的构图、尺寸比例和区域外内容，返回完整图片。";
@@ -13,12 +15,12 @@ export function buildInpaintPrompt(prompt: string) {
   return prompt.startsWith(inpaintInstruction) ? prompt : `${inpaintInstruction}\n\n重绘要求：\n${prompt}`;
 }
 
-export function buildInpaintRequest<T extends Pick<NodeImageRequest, "prompt" | "images">>(input: T, inpaint: ImageInpaint): T {
+export function buildInpaintRequest<T extends Pick<NodeImageRequest, "prompt" | "images">>(input: T, inpaint: ImageInpaint, outpaintInstruction = defaultOutpaintPromptInstruction): T {
   const instruction = inpaint.mode === "guide" ? smartEditInstruction : inpaintInstruction;
   return {
     ...input,
-    images: [{ path: inpaint.original, mimeType: "image/png" }, { path: inpaint.guide, mimeType: "image/png" }, ...inpaint.images, ...(input.images ?? [])],
-    prompt: inpaint.mode === "guide"
+    images: [{ path: inpaint.original, mimeType: "image/png" }, ...(inpaint.mode === "outpaint" ? [] : [{ path: inpaint.guide, mimeType: "image/png" }]), ...inpaint.images, ...(input.images ?? [])],
+    prompt: inpaint.mode === "outpaint" ? buildOutpaintPrompt(input.prompt, inpaint.outpaintContext, outpaintInstruction) : inpaint.mode === "guide"
       ? input.prompt.startsWith(instruction) ? input.prompt : `${instruction}\n\n修改要求：\n${input.prompt}`
       : buildInpaintPrompt(input.prompt),
   };
@@ -29,12 +31,21 @@ export function useImageInpaint(generate?: (input: NodeImageRequest, signal: Abo
   const { findNode } = useVueFlow();
   const files = useNodeFiles();
   const ai = useNodeAi();
+  const readOutpaintInstruction = inject<() => string>("imageOutpaintPromptInstruction", () => defaultOutpaintPromptInstruction);
 
   return async function generateInpaint(input: NodeImageRequest, inpaint: ImageInpaint, signal: AbortSignal, recovered?: NodeImageResult[]): Promise<NodeImageResult[]> {
     signal.throwIfAborted();
     if (!inpaint || ![inpaint.original, inpaint.guide, inpaint.mask].every(path => typeof path === "string" && path.trim())
       || !Array.isArray(inpaint.images) || inpaint.images.some(image => !image || typeof image.path !== "string" || !image.path.trim() || typeof image.mimeType !== "string" || !image.mimeType.startsWith("image/"))) {
       throw new Error("局部重绘素材无效，请重新创建重绘节点");
+    }
+    if (inpaint.mode === "outpaint") {
+      const request = buildInpaintRequest(input, inpaint, readOutpaintInstruction());
+      const results = recovered ?? await (generate ? generate(request, signal, { input, inpaint }) : ai.generateImage(request, signal));
+      signal.throwIfAborted();
+      if (!results[0]) throw new Error("供应商未返回扩图结果");
+      if (findNode(id) !== node) throw new Error("扩图节点已移除");
+      return results;
     }
     const workspace = files.getWorkspaceFiles();
     const temporaryId = recovered?.[0]?.path.match(/^assets\/([^/]+)\/[^/]+$/)?.[1] ?? crypto.randomUUID();
