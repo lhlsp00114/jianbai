@@ -82,12 +82,14 @@ import { IconVector, IconCheck, IconChevronDown, IconChevronUp, IconChevronRight
 import { useWorkspaceStore } from "@/stores/workspace";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
 import { getCanvasAssetDirectories, isCanvasFile } from "@/pages/workspace/canvasFile";
+import { comicFolderRoot } from "@/pages/infiniteComic/comicPersistence";
 import { findRemainingCanvas } from "../canvasFiles";
 import { providerBalances, refreshProviderBalance } from "@/lib/providerBilling";
 
 const props = defineProps<{
   directory?: string;
   initialCanvasId?: string;
+  createDefaultCanvas: boolean;
   menuTarget?: HTMLElement;
   menuHidden?: boolean;
   activateCanvas?: (id: string, signal?: AbortSignal) => Promise<void>;
@@ -276,7 +278,7 @@ function selectEntry(entry: CanvasEntry) {
   if (entry.type === "file" && !pickerBusy.value && editingId.value === null && folderDraft.value === null) void handleSwitchCanvas(entry.path);
 }
 
-watch(() => props.directory, async (directory, _previous, onCleanup) => {
+watch([() => props.directory, () => props.createDefaultCanvas], async ([directory, createDefaultCanvas], _previous, onCleanup) => {
   let cancelled = false;
   treeController.abort();
   treeController = new AbortController();
@@ -309,7 +311,7 @@ watch(() => props.directory, async (directory, _previous, onCleanup) => {
       await loadDirectory(folders.value[index]!.path);
     }
     if (cancelled) return;
-    if (!canvases.value.length) {
+    if (!canvases.value.length && createDefaultCanvas) {
       try {
         const canvas = await createCanvasFile(directory, "画布1", controller.signal);
         checkCanvasDirectory(directory, controller.signal);
@@ -514,7 +516,7 @@ async function listCanvasEntries(directory: string, path = "", recursive = false
   for (let index = 0; index < entries.length; index++) {
     checkCanvasDirectory(directory, signal);
     const entry = entries[index]!;
-    if (entry.type !== "directory" || ["assets", ".agent"].includes(entry.name.toLowerCase())) continue;
+    if (entry.type !== "directory" || entry.path === comicFolderRoot || ["assets", ".agent"].includes(entry.name.toLowerCase())) continue;
     const folder: CanvasEntry = { ...entry };
     folders.push(folder);
     if (recursive) {

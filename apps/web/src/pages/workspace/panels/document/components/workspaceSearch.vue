@@ -67,6 +67,7 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue
 import { ElAlert, ElButton, ElCheckbox, ElDialog, ElInput, type InputInstance } from "element-plus";
 import { msg, t, translate, type MessageDescriptor } from "@toonflow/i18n/vue";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
+import { isComicStoragePath } from "@/pages/infiniteComic/comicPersistence";
 
 type SearchMatch = { start: number; end: number; line: number; column: number; before: string; text: string; after: string };
 type SearchFile = { path: string; text: string; matches: SearchMatch[]; truncated: boolean; selected: boolean; saved?: boolean; error?: string };
@@ -191,6 +192,7 @@ async function search() {
       controller.signal.throwIfAborted();
       for (const entry of entries.sort((left, right) => left.path.localeCompare(right.path))) {
         if (entry.type === "directory") { directories.push(entry.path); continue; }
+        if (isComicStoragePath(entry.path)) continue;
         if (++inspected > 1000) { limited = msg`已达到 1000 个文件的检查上限，已停止。以下为部分结果，可缩小查找文本后重试。`; break; }
         if (/\.(?:png|jpe?g|webp|gif|bmp|avif|ico|tiff?|pdf|mp[34]|wav|flac|ogg|m4[av]|webm|mov|avi|mkv|zip|rar|7z|gz|tar|exe|dll|bin|wasm|woff2?|ttf|otf|sqlite|db|docx?|xlsx?|pptx?|psd)$/i.test(entry.path)) { skippedBinary.value++; continue; }
         try {

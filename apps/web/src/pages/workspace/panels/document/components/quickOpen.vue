@@ -19,6 +19,7 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue
 import type { InputInstance } from "element-plus";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
 import { isCanvasFile } from "@/pages/workspace/canvasFile";
+import { isComicStoragePath } from "@/pages/infiniteComic/comicPersistence";
 import { documentError } from "../documentSession";
 import { extensionIcon, listExtensions } from "../extensions";
 import type { TreeSelection } from "./fileTree.vue";
@@ -66,6 +67,7 @@ async function open() {
         request.signal.throwIfAborted();
         if (++visited > 10000) { error.value = "工作区超过 10000 个条目，仅搜索已读取部分；其余文件可从文件树打开。"; return; }
         if (child.type === "directory") { pending.push(child.path); continue; }
+        if (isComicStoragePath(child.path)) continue;
         if (/\.json$/i.test(child.path) && await isCanvasFile(files, child.path, request.signal)) {
           const canvas = await files.readJson<{ nodes?: { id: string; data?: { label?: string } }[] }>(child.path, request.signal);
           if (Array.isArray(canvas.nodes)) for (const node of canvas.nodes) {

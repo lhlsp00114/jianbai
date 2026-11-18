@@ -1,7 +1,7 @@
 <template>
   <div class="builtinInstructions">
     <el-alert v-if="error" :title="error" type="error" :closable="false" showIcon />
-    <div class="instructionMode">
+    <div v-if="!comic" class="instructionMode">
       <span class="modeLabel">节点类型</span>
       <el-segmented :modelValue="nodeType" class="modeSwitch" :options="nodeTypeOptions" :disabled="saving" block aria-label="节点类型" @change="selectNodeType" />
     </div>
@@ -20,7 +20,7 @@
             <span class="nodeLabel">{{ selectedInstruction.nodeLabel }}</span>
             <h3>{{ selectedInstruction.label }}</h3>
           </div>
-          <label :for="editorId">{{ nodeType === "image" ? "内置提示词" : "内置生成指令" }}</label>
+          <label :for="editorId">{{ comic || nodeType === "image" ? "内置提示词" : "内置生成指令" }}</label>
         </header>
         <div class="instructionDescription">
           <p>{{ selectedInstruction.description }}</p>
@@ -44,8 +44,10 @@ import { translate } from "@toonflow/i18n/vue";
 import { defaultImagePromptInstruction, imagePromptInstructionId, readImagePromptInstruction } from "@toonflow/node-text/imagePromptInstruction";
 import { imagePromptPresets, imagePromptPresetColumns, readImagePresetPrompt } from "@toonflow/node-image-generation/promptPresets";
 import { defaultOutpaintPromptInstruction, outpaintPromptInstructionId, readOutpaintPromptInstruction } from "@toonflow/node-image/imageOutpaint";
+import { comicScriptInstructionId, scriptSystemPrompt, readComicScriptInstruction } from "@/pages/infiniteComic/comicProject";
 import { saveSettings, settings } from "@/stores/settings";
 
+const props = defineProps<{ comic?: boolean }>();
 const editorId = useId();
 type Instruction = { id: string; label: string; nodeLabel: string; description: string; help: string; defaultContent: string; read: (stores: unknown) => string; group?: string; icon?: Component };
 type NodeType = "text" | "image";
@@ -85,11 +87,23 @@ const imageInstructions: Instruction[] = [...imagePromptPresets
     read: readOutpaintPromptInstruction,
     group: "空间与机位",
   }];
-const instructions = computed(() => nodeType.value === "image" ? imageInstructions : textInstructions);
+const comicInstructions: Instruction[] = [{
+  id: comicScriptInstructionId,
+  label: translate("漫画脚本提示词"),
+  nodeLabel: translate("AI 漫画创作"),
+  description: translate("用于第一步生成分页脚本和分格画面描述。"),
+  help: translate("可调整编剧和分镜要求。请保留 JSON 输出格式（pages、number、script、description），以便程序读取草稿。"),
+  defaultContent: scriptSystemPrompt,
+  read: readComicScriptInstruction,
+}];
+const instructions = computed(() => {
+  if (props.comic) return comicInstructions;
+  return nodeType.value === "image" ? imageInstructions : textInstructions;
+});
 const instructionGroups = computed(() => nodeType.value === "image"
   ? imagePromptPresetColumns.flat().map(label => ({ label, items: instructions.value.filter(item => item.group === label) })).filter(group => group.items.length)
   : [{ label: "", items: instructions.value }]);
-const selectedId = ref(textInstructions[0].id);
+const selectedId = ref(instructions.value[0].id);
 const selectedInstruction = computed(() => instructions.value.find(item => item.id === selectedId.value) ?? instructions.value[0]);
 const content = ref("");
 const original = ref("");

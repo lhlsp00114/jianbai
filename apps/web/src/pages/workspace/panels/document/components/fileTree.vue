@@ -93,6 +93,7 @@ import { writeClipboardText } from "@/lib/clipboard";
 import { isMobile, isRemoteConnection } from "@/lib/platform";
 import { t, translate } from "@toonflow/i18n/vue";
 import { isCanvasFile } from "@/pages/workspace/canvasFile";
+import { isComicStoragePath } from "@/pages/infiniteComic/comicPersistence";
 import { extensionCandidates, extensionIcon, listExtensions } from "../extensions";
 import { getNodeIcon } from "../../canvas/loadNodeComponent";
 import type { DocumentNode, DocumentNodeOptions } from "../../canvas/canvasFiles";
@@ -725,6 +726,7 @@ async function readDirectory(currentDirectory: string, path: string, signal: Abo
     while (cursor < entries.length) {
       signal.throwIfAborted();
       const entry = entries[cursor++]!;
+      if (isComicStoragePath(entry.path)) continue;
       const item: FileTreeItem = { ...entry, key: JSON.stringify([entry.type, entry.path]), isLeaf: entry.type === "file" || undefined };
       const nodes = entry.type === "directory" ? nodeIndex?.get(pathIdentity(entry.name)) : undefined;
       if (nodes?.length) {

@@ -5,8 +5,9 @@
         <el-tab-pane label="Skill 收藏" name="skill" />
         <el-tab-pane label="提示词收藏" name="prompt" />
         <el-tab-pane label="内置节点提示词" name="nodes" />
+        <el-tab-pane label="内置漫画" name="comic" />
       </el-tabs>
-      <builtinNodeInstructions v-if="visible && builtinCategory" ref="builtinEditor" />
+      <builtinNodeInstructions v-if="visible && builtinCategory" :key="category" ref="builtinEditor" :comic="category === 'comic'" />
       <el-alert v-if="!builtinCategory && (library.error || operationError)" :title="library.error || operationError" type="error" :closable="false" showIcon />
       <div v-if="draft" class="editorNavigation">
         <el-button text :icon="IconArrowLeft" :disabled="busy" @click="backToGrid">返回收藏</el-button>
@@ -81,8 +82,8 @@ import builtinNodeInstructions from "./builtinNodeInstructions.vue";
 
 type Entry = { id: string; kind: "skill" | "prompt"; title: string; content: string; cover?: string };
 const visible = defineModel<boolean>({ default: false });
-const category = ref<"skill" | "prompt" | "nodes">("skill");
-const builtinCategory = computed(() => category.value === "nodes");
+const category = ref<"skill" | "prompt" | "nodes" | "comic">("skill");
+const builtinCategory = computed(() => category.value === "nodes" || category.value === "comic");
 const builtinEditor = ref<InstanceType<typeof builtinNodeInstructions>>();
 const search = ref("");
 const draft = ref<Entry>();

@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, shallowRef } from "vue";
 import axios from "axios";
 import type { AgentAttachment } from "@/components/agent/types";
 
@@ -16,6 +16,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const projectLoading = ref(false);
   const projectLoadingDrawn = ref(false);
   const projectLoadingVisible = ref(false);
+  const pendingCanvasUpload = shallowRef<{ directory: string; files: File[] } | null>(null);
   const pendingAgentMessage = ref<{ directory: string; prompt: string; attachments?: AgentAttachment[]; model: string; reasoningEffort: string } | null>(null);
 
   async function addProject(path: string, name?: string, signal?: AbortSignal, previousDirectory = path) {
@@ -63,7 +64,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     if (project.value?.directory === path) project.value = null;
   }
 
-  return { project, projectList, projectLoading, projectLoadingDrawn, projectLoadingVisible, pendingAgentMessage, addProject, openProject, renameProject, removeProject };
+  return { project, projectList, projectLoading, projectLoadingDrawn, projectLoadingVisible, pendingCanvasUpload, pendingAgentMessage, addProject, openProject, renameProject, removeProject };
 }, {
   persist: {
     key: "toonflow.projectList",

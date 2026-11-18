@@ -1,9 +1,9 @@
 <template>
   <el-config-provider :locale="elementLocale">
     <config-provider :globalConfig="tdesignLocale">
-      <router-view v-slot="{ Component: currentComponent }">
+      <router-view v-slot="{ Component: currentComponent, route }">
         <transition name="el-fade-in" mode="out-in">
-          <component :is="currentComponent" />
+          <component :is="currentComponent" :key="route.path === '/comic' ? route.fullPath : undefined" />
         </transition>
       </router-view>
       <loadingPage v-model:visible="workspaceStore.projectLoadingVisible" v-model:drawn="workspaceStore.projectLoadingDrawn" :active="workspaceStore.projectLoading" />

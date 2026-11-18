@@ -13,10 +13,10 @@
         </button>
       </div>
       <nav class="sidebarNav" aria-label="首页导航">
-        <button v-for="section in homeSections" :key="section.id" class="sidebarItem" :class="{ active: activeSection === section.id }" type="button" :aria-current="activeSection === section.id ? 'location' : undefined" :aria-label="translate(section.label)" :title="translate(section.label)" @click="scrollToSection(section.id)">
+        <button v-for="section in homeSections" :key="section.id" class="sidebarItem" :class="{ active: activeSection === section.id }" type="button" :aria-current="activeSection === section.id ? 'location' : undefined" :title="translate(section.label) + (section.beta ? ' Beta' : '')" @click="scrollToSection(section.id)">
           <span v-if="section.id === 'photoCraft'" class="psIcon" aria-hidden="true">Ps</span>
           <component v-else :is="section.icon" :size="18" aria-hidden="true" />
-          <span class="sidebarText">{{ translate(section.label) }}</span>
+          <span class="sidebarText">{{ translate(section.label) }}<span v-if="section.beta" class="betaBadge"> Beta</span></span>
         </button>
         <hr v-if="currentUser?.role !== 'user'" class="sidebarDivider" />
         <button v-if="currentUser?.role !== 'user'" class="sidebarItem" :class="{ active: assetsVisible }" type="button" aria-label="素材库" title="素材库" aria-haspopup="dialog" :aria-expanded="assetsVisible" @click="assetsVisible = true">
@@ -104,7 +104,7 @@
                   </span>
                 </button>
               </el-card>
-              <projectCard v-for="project in sortedProjects" :key="project.directory" :project="project" :disabled="creating || opening" :actionsLoading="exportingDirectory === project.directory" @select="openProject(project)">
+              <projectCard v-for="project in sortedProjects" :key="project.directory" class="homeProjectCard" :project="project" :disabled="creating || opening" :actionsLoading="exportingDirectory === project.directory" @select="openProject(project)">
                 <template #actions>
                   <el-dropdown-item :icon="IconEdit" :disabled="creating || opening || exportingDirectory === project.directory" @click="renameProject(project)">重命名</el-dropdown-item>
                   <el-dropdown-item :icon="IconFileZip" :disabled="creating || opening || !!exportingDirectory" @click="exportProject(project)">打包导出 ZIP</el-dropdown-item>
@@ -173,10 +173,10 @@ const photoCraftOpened = ref(false);
 const homeSections = [
   { id: "home", label: "首页", icon: IconHome },
   { id: "infiniteCanvas", label: "无限画布", icon: IconInfinity },
-  { id: "infiniteComic", label: "无限漫画", icon: IconLayoutBoard },
+  { id: "infiniteComic", label: "无限漫画", icon: IconLayoutBoard, beta: true },
   { id: "projects", label: "项目", icon: IconFolder },
   { id: "tools", label: "工具", icon: IconTools },
-  { id: "photoCraft", label: "PS图像编辑" },
+  { id: "photoCraft", label: "PS图像编辑", beta: true },
   { id: "explore", label: "探索", icon: IconCompass },
 ];
 const mobileConnect = defineAsyncComponent(() => import("@/components/mobileConnect.vue"));
@@ -547,9 +547,10 @@ async function restoreAttachment(index: number) {
 
 async function enterWorkspace() {
   const comic = workspaceStore.project?.projectKind === "infiniteComic";
+  const page = comic ? import("@/pages/infiniteComic/index.vue") : import("@/pages/workspace/index.vue");
   // 页面代码与开场动画并行加载，路由仍在动画绘制完成后切换。
   await Promise.all([
-    import("@/pages/workspace/index.vue"),
+    page,
     waitForControlValue(() => workspaceStore.projectLoadingDrawn || undefined, pageLifetime.signal).catch(error => {
       if (!pageLifetime.signal.aborted) throw error;
     }),
@@ -812,6 +813,14 @@ async function createProject(fromPrompt = true) {
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
+        .betaBadge {
+          margin-inline-start: 6px;
+          padding: 1px 5px;
+          border: 1px solid var(--el-border-color);
+          border-radius: var(--ui-radius-small);
+          color: var(--el-text-color-secondary);
+          font-size: 10px;
+        }
         transition: max-width var(--sidebarMotion) ease, opacity var(--sidebarFade) ease;
       }
 
@@ -1058,11 +1067,13 @@ async function createProject(fromPrompt = true) {
             flex-wrap: wrap;
             gap: 28px;
             margin: 0 0 20px;
-            font-size: 22px;
+            border-bottom: 1px solid var(--el-border-color-lighter);
+            font-size: 17px;
             font-weight: 600;
             line-height: 1.5;
 
             button {
+              position: relative;
               min-height: 44px;
               padding: 0;
               border: 0;
@@ -1073,8 +1084,20 @@ async function createProject(fromPrompt = true) {
               text-align: start;
               cursor: pointer;
 
-              &.active { color: var(--el-text-color-primary); }
-              &:hover { color: var(--el-color-primary); }
+              &.active {
+                color: var(--el-text-color-primary);
+
+                &::after {
+                  position: absolute;
+                  inset-inline: 0;
+                  bottom: -1px;
+                  height: 2px;
+                  border-radius: 2px;
+                  background: var(--el-color-primary);
+                  content: "";
+                }
+              }
+              &:hover { color: var(--el-text-color-primary); }
               &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 4px; }
             }
           }
@@ -1085,12 +1108,48 @@ async function createProject(fromPrompt = true) {
             grid-auto-rows: 1fr;
             gap: 20px;
 
+            .homeProjectCard, .projectLaunchCard {
+              box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
+              transition: border-color 160ms ease, box-shadow 160ms ease;
+
+              &:hover, &:focus-within {
+                border-color: var(--el-border-color);
+                box-shadow: 0 4px 14px rgb(0 0 0 / 13%);
+              }
+
+              @media (prefers-reduced-motion: reduce) { transition: none; }
+            }
+
+            .homeProjectCard {
+              :deep(.projectInfo) {
+                gap: 4px;
+                padding-block: 13px;
+
+                .projectTime {
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                  font-variant-numeric: tabular-nums;
+                }
+              }
+
+              :deep(.projectMenuButton) {
+                border-radius: 50%;
+                background: rgb(0 0 0 / 64%);
+                color: var(--el-color-white);
+
+                &:hover:not(:disabled), &[aria-expanded="true"] {
+                  background: rgb(0 0 0 / 82%);
+                  color: var(--el-color-white);
+                }
+              }
+            }
+
             .projectLaunchCard {
               position: relative;
               border-radius: calc(var(--ui-radius) * 2.5);
               border-color: var(--el-border-color-lighter);
               background: color-mix(in srgb, var(--el-bg-color-overlay) 70%, transparent);
-              box-shadow: var(--el-box-shadow-lighter);
 
               &:focus-within {
                 border-color: var(--el-color-primary-light-5);
@@ -1122,8 +1181,8 @@ async function createProject(fromPrompt = true) {
                   width: 36px;
                   height: 36px;
                   border-radius: 50%;
-                  background: var(--el-color-primary);
-                  color: var(--el-color-white);
+                  background: var(--el-color-primary-light-9);
+                  color: var(--el-color-primary);
 
                   .isLoading { animation: launchSpin 1.5s linear infinite; }
 
@@ -1138,7 +1197,7 @@ async function createProject(fromPrompt = true) {
                   gap: 6px;
 
                   .launchTitle { font-size: 15px; font-weight: 500; line-height: 1.8; }
-                  .launchDescription { color: var(--el-text-color-regular); font-size: 13px; line-height: 1.6; }
+                  .launchDescription { color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
                 }
               }
             }

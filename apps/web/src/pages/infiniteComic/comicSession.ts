@@ -1,23 +1,24 @@
 import { effectScope, reactive, ref } from "vue";
 import { useNodeAi, type NodeImageRequest, type NodeMediaResult } from "@toonflow/nodes-scaffold/nodeAi";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
-import { comicFileName, type ComicPage, type ComicRequestRecord } from "./comicProject";
+import { comicFileName, readComicProject, type ComicPage, type ComicRequestRecord } from "./comicProject";
 import { readComicSnapshot, restoreComicSnapshot, writeComicBackup } from "./comicPersistence";
 
 const sessions = new Map<string, ReturnType<typeof createSession>>();
 
 if (typeof window !== "undefined") window.addEventListener("beforeunload", event => {
-  if (![...sessions.values()].some(session => session.active.size || session.batch.running || session.saveError.value || session.saveStatus.value === "保存中" || session.saveStatus.value === "待保存")) return;
+  if (![...sessions.values()].some(session => session.active.size || session.cancelling.size || session.batch.running || session.saveError.value || session.saveStatus.value === "保存中" || session.saveStatus.value === "待保存")) return;
   event.preventDefault(); event.returnValue = "";
 });
 
-export function getComicSession(directory: string) {
-  let session = sessions.get(directory);
-  if (!session) { session = createSession(directory); sessions.set(directory, session); }
+export function getComicSession(directory: string, path = comicFileName) {
+  const key = JSON.stringify([directory, path]);
+  let session = sessions.get(key);
+  if (!session) { session = createSession(directory, path); sessions.set(key, session); }
   return session;
 }
 
-function createSession(directory: string) {
+function createSession(directory: string, path: string) {
   const files = useWorkspaceFiles(directory);
   const scope = effectScope(true);
   const ai = scope.run(() => useNodeAi())!;
@@ -31,8 +32,8 @@ function createSession(directory: string) {
   let queue = Promise.resolve();
   let savedText = "";
   function readState() {
-    return readComicSnapshot(files).then(async state => {
-      const snapshot = state.recovered ? await restoreComicSnapshot(files, state) : state.snapshot!;
+    return readComicSnapshot(files, path).then(async state => {
+      const snapshot = state.recovered ? await restoreComicSnapshot(files, state, path) : state.snapshot!;
       if (state.recovered) message.value = "主文件异常，已从上一份备份恢复；原损坏内容已另存保留。";
       const project = ref(state.project);
       savedText = JSON.stringify(project.value, null, 2) + "\n";
@@ -50,10 +51,11 @@ function createSession(directory: string) {
       const text = JSON.stringify(state.project.value, null, 2) + "\n";
       if (text === savedText) { saveError.value = ""; saveStatus.value = "已保存"; return; }
       saveStatus.value = "保存中";
-      const disk = await files.readTextSnapshot(comicFileName);
+      readComicProject(JSON.parse(text));
+      const disk = await files.readTextSnapshot(path);
       if (disk.revision !== state.snapshot.revision) throw new Error("项目已被其他窗口修改，当前内容已保留，未覆盖文件与备份");
-      await writeComicBackup(files, state.snapshot.text);
-      const revision = await files.writeTextSnapshot(comicFileName, text, state.snapshot);
+      await writeComicBackup(files, state.snapshot.text, path);
+      const revision = await files.writeTextSnapshot(path, text, state.snapshot);
       state.snapshot = { ...state.snapshot, revision, text }; savedText = text;
       saveError.value = ""; saveStatus.value = JSON.stringify(state.project.value, null, 2) + "\n" === savedText ? "已保存" : "待保存";
     }).catch(error => {
@@ -70,7 +72,7 @@ function createSession(directory: string) {
       prompt: task.prompt, model: task.input.modelId, ratio: task.input.ratio, size: task.input.size, request: task.request });
     await save();
   }
-  async function execute(page: ComicPage, resume: boolean) {
+  async function execute(page: ComicPage) {
     if (active.has(page.id) || !page.task) return;
     active.add(page.id);
     try {
@@ -81,9 +83,9 @@ function createSession(directory: string) {
           task.startedAt ??= Date.now();
           await save();
           if (task.cancelled) break;
-          const options = { taskId: task.id, nodeId: page.id, canvasPath: comicFileName,
+          const options = { taskId: task.id, nodeId: page.id, canvasPath: path,
             isCancelled: () => !!task.cancelled, onStatus: (status: { state?: string }) => { failed = status.state === "failed"; } };
-          const shouldResume = resume && task.submitted !== false;
+          const shouldResume = task.submitted !== false;
           if (!shouldResume) {
             task.submitted = true;
             try { await save(); } catch (error) { task.submitted = false; throw error; }
@@ -96,7 +98,6 @@ function createSession(directory: string) {
           page.task = (task.remaining ?? 1) > 1 ? { ...task, id: crypto.randomUUID(), startedAt: undefined, submitted: false, remaining: task.remaining! - 1 } : null;
           page.error = "";
           try { await save(); } catch (error) { page.task = task; throw error; }
-          resume = false;
         } catch (error) {
           if (failed || (error as { mediaTaskRejected?: boolean })?.mediaTaskRejected) {
             if (page.task?.id === task.id) page.task = null;
@@ -115,12 +116,12 @@ function createSession(directory: string) {
     if (!Number.isInteger(count) || count < 1 || count > 4) throw new Error("生成次数必须为 1–4");
     page.task = { id: crypto.randomUUID(), prompt: input.prompt, input: JSON.parse(JSON.stringify(input)), request: JSON.parse(JSON.stringify(request)), remaining: count, submitted: false };
     page.error = "";
-    return execute(page, false);
+    return execute(page);
   }
   async function recover(page: ComicPage) {
     if (!page.task || active.has(page.id) || cancelling.has(page.id)) return;
     page.task.cancelled = false;
-    return execute(page, true);
+    return execute(page);
   }
   async function cancel(page: ComicPage) {
     if (!page.task || cancelling.has(page.id)) return;
@@ -132,13 +133,15 @@ function createSession(directory: string) {
       if (task.submitted === false) { page.error = "未提交的生成已停止，可恢复或结束任务。"; await save(); return; }
       await ai.cancelMedia(directory, task.id);
       const status = await ai.readMediaTask(directory, task.id);
-      if (status.state === "succeeded" && status.result?.data) await applyResult(page, task, status.result.data);
-      if (!active.has(page.id) && status.state === "succeeded") {
-        page.task = null;
-        try { await save(); } catch (error) { page.task = task; throw error; }
+      if (status.state === "succeeded" && status.result?.data) {
+        await applyResult(page, task, status.result.data);
+        if (!active.has(page.id) && page.task?.id === task.id) {
+          page.task = null;
+          try { await save(); } catch (error) { page.task = task; throw error; }
+        }
       }
       page.error = "已停止后续生成，已完成图片保留；可查询恢复当前任务。";
-      await save(); await save();
+      await save();
     } finally { cancelling.delete(page.id); }
   }
   async function finish(page: ComicPage) {
@@ -186,16 +189,21 @@ function createSession(directory: string) {
       void ready.catch(() => { loadFailed = true; });
     }
     const state = await ready;
-    await queue.catch(() => {});
-    if (active.size || cancelling.size || batch.running || JSON.stringify(state.project.value, null, 2) + "\n" !== savedText) return state;
-    const disk = await readComicSnapshot(files);
-    const snapshot = disk.recovered ? await restoreComicSnapshot(files, disk) : disk.snapshot!;
-    if (disk.recovered) message.value = "主文件异常，已从备份恢复，原损坏内容已另存。";
-    const project = disk.project;
-    state.snapshot = snapshot; state.project.value = project;
-    savedText = JSON.stringify(project, null, 2) + "\n";
-    saveError.value = ""; saveStatus.value = "已保存";
-    return state;
+    const hasLocalWork = () => active.size || cancelling.size || batch.running || JSON.stringify(state.project.value, null, 2) + "\n" !== savedText;
+    const pending = queue.catch(() => {}).then(async () => {
+      if (hasLocalWork()) return state;
+      const disk = await readComicSnapshot(files, path);
+      if (hasLocalWork()) return state;
+      const snapshot = disk.recovered ? await restoreComicSnapshot(files, disk, path) : disk.snapshot!;
+      if (hasLocalWork()) return state;
+      if (disk.recovered) message.value = "主文件异常，已从备份恢复，原损坏内容已另存。";
+      savedText = JSON.stringify(disk.project, null, 2) + "\n";
+      state.snapshot = snapshot; state.project.value = disk.project;
+      saveError.value = ""; saveStatus.value = "已保存";
+      return state;
+    });
+    queue = pending.then(() => {}, () => {});
+    return pending;
   }
   return { refresh, save, active, queued, cancelling, batch, message, saveError, saveStatus, start, recover, cancel, finish, runBatch,
     async dirty() { const state = await ready; return JSON.stringify(state.project.value, null, 2) + "\n" !== savedText; } };

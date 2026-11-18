@@ -11,6 +11,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import "element-plus/es/components/radio-button/style/css";
 import { useNodeModelSelection, type NodeMediaModel } from "@toonflow/nodes-scaffold/nodeAi";
 import { useImageModelForm } from "@toonflow/node-shared/useModelForm";
 import providerModelSelect from "@toonflow/node-shared/providerModelSelect";
@@ -27,8 +28,16 @@ const { sizeOptions, ratioOptions } = useImageModelForm(value, model);
 <style scoped lang="scss">
 .comicGenerationSettings {
   display: grid; gap: 16px;
-  label { display: grid; gap: 8px; font-size: 13px; }
+  > label { display: grid; gap: 8px; font-size: 13px; }
   small { color: var(--el-text-color-secondary); line-height: 1.6; font-size: 12px; }
   :deep(.providerModelSelect) { width: 100%; }
+  :deep(.modelForm .qualityChoices) {
+    gap: 4px;
+    .el-radio-button {
+      display: inline-flex;
+      min-width: 0;
+      .el-radio-button__inner { padding: 7px 2px; font-size: 12px; white-space: nowrap; }
+    }
+  }
 }
 </style>

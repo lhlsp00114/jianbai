@@ -188,6 +188,19 @@ export function inspectPage(project: ComicProject, page: ComicPage) {
 }
 
 export const scriptSystemPrompt = "你是一名专业漫画编剧和分镜策划。根据用户主题、角色与创作要求输出分页脚本。只输出 JSON，格式为 {\"pages\":[{\"number\":1,\"script\":\"剧情、对白、旁白和动作\",\"description\":\"1-1：第一格描述\\n1-2：第二格描述\"}]}。页数必须符合要求，number 从1连续递增。对白使用角色名：对白格式。自动分格时每页独立决定1到12格；自定义分格时遵循数量或范围。保持角色身份、外观、服装、场景和剧情连续，不要输出额外说明。";
+export const comicScriptInstructionId = "comicScript";
+
+export function readComicScriptInstruction(stores: unknown): string {
+  if (stores === undefined) return scriptSystemPrompt;
+  if (!stores || typeof stores !== "object" || Array.isArray(stores)) throw new Error("内置指令设置格式错误");
+  const instructions = (stores as Record<string, unknown>).nodeInstructions;
+  if (instructions === undefined) return scriptSystemPrompt;
+  if (!instructions || typeof instructions !== "object" || Array.isArray(instructions)) throw new Error("内置指令设置格式错误");
+  const value = (instructions as Record<string, unknown>)[comicScriptInstructionId];
+  if (value === undefined) return scriptSystemPrompt;
+  if (typeof value !== "string" || !value.trim() || value.length > 16000) throw new Error("漫画脚本提示词必须是 1–16000 字符的非空文本");
+  return value;
+}
 
 export function parseScript(text: string, count: number): ComicPage[] {
   const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");

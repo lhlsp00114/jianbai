@@ -1,14 +1,23 @@
 <template>
-  <main class="comicWorkspace" :class="{ embeddedComic: embedded }" :inert="!active">
+  <main class="comicWorkspace">
     <header class="workspaceHeader">
+      <workspaceMenu class="comicProjectMenu" @openSettings="settingsVisible = true" />
+      <div class="comicProjectIdentity">
+        <strong class="comicProjectName" :title="workspace.project?.name">{{ workspace.project?.name }}</strong>
+        <el-divider direction="vertical" />
+        <comicFilePicker :directory="directory" :comicPath="comicPath" :disabled="busy || cancelling" @select="openComicFile" />
+      </div>
+      <workspacePanelSwitcher class="panelSwitcher" activePanel="comic" showComic @change="switchWorkspacePanel" />
+    </header>
+    <div class="comicWorkflowBar">
       <nav class="stepNavigation" aria-label="漫画创作步骤">
         <button v-for="(label, index) in steps" :key="label" type="button" :class="{ active: project.activeStep === index + 1 }" :disabled="!loaded" :aria-current="project.activeStep === index + 1 ? 'step' : undefined" @click="project.activeStep = index + 1"><span>{{ index + 1 }}</span>{{ label }}</button>
       </nav>
       <el-button class="generationToggle" text :aria-pressed="generationSettingsVisible" @click="generationSettingsVisible = !generationSettingsVisible">生成设置</el-button>
-    </header>
+    </div>
     <div v-if="loadError" class="loadError" role="alert">{{ loadError }}<el-button @click="loadProject">重新读取</el-button></div>
     <el-alert v-if="session.message.value.includes('备份')" :title="session.message.value" type="warning" :closable="false" />
-    <div v-else-if="loaded" class="workspaceBody" :class="{ settingsHidden: !sidebarVisible, creationStep: project.activeStep === 1, scriptStep: project.activeStep === 2 }">
+    <div v-if="loaded" class="workspaceBody" :class="{ settingsHidden: !sidebarVisible, creationStep: project.activeStep === 1, scriptStep: project.activeStep === 2, previewStep: project.activeStep === 5 }">
       <aside v-if="project.activeStep >= 3" class="pageRail">
         <div class="railHeading"><strong>页面 · {{ project.pages.length }}</strong><el-button text :disabled="busy" @click="addPage">＋</el-button></div>
         <div class="pageList">
@@ -21,20 +30,28 @@
         <div v-if="batchTotal" class="batchSummary" role="status"><el-progress :percentage="Math.round((batchCompleted + batchFailed) / batchTotal * 100)" :strokeWidth="6" /><span>完成 {{ batchCompleted }} · 未完成 {{ batchFailed }} · 共 {{ batchTotal }} 页</span></div>
         <el-button v-if="selectedPage" text type="danger" :disabled="busy || !!selectedPage.task || session.queued.has(selectedPage.id)" @click="removePage()">删除当前页</el-button>
       </aside>
-      <section class="stepContent" :aria-label="steps[project.activeStep - 1]">
+      <section :key="[1, 5].includes(project.activeStep) ? project.activeStep : 0" class="stepContent" :aria-label="steps[project.activeStep - 1]">
         <template v-if="project.activeStep === 1">
+          <div class="creationContent">
           <el-alert v-if="project.creation.error" :title="project.creation.error" type="error" @close="clearScriptError" />
           <div class="creationLayout">
           <div class="creationForm">
             <h2>AI 漫画创作</h2>
-            <label>故事主题<el-input v-model="project.creation.topic" type="textarea" :rows="3" :disabled="busy" /></label>
-            <label>创作要求<el-input v-model="project.creation.requirements" type="textarea" :rows="3" :disabled="busy" /></label>
-            <label>叙事风格<el-input v-model="project.creation.narrativeStyle" :disabled="busy" /></label>
-            <div class="creationParameters"><label>目标页数<el-input-number :modelValue="project.creation.pageCount" :min="1" :max="50" :precision="0" :disabled="busy" @update:modelValue="(value: number | undefined) => project.creation.pageCount = Math.min(50, Math.max(1, Math.round(value || 1)))" /></label>
+            <div class="storyFields">
+              <label>故事主题<el-input v-model="project.creation.topic" type="textarea" :rows="3" :disabled="busy" /></label>
+              <label>创作要求<el-input v-model="project.creation.requirements" type="textarea" :rows="3" :disabled="busy" /></label>
+            </div>
+            <div class="creationParameters">
+              <label class="narrativeField">叙事风格<el-input v-model="project.creation.narrativeStyle" :disabled="busy" /></label>
+              <label>目标页数<el-input-number :modelValue="project.creation.pageCount" :min="1" :max="50" :precision="0" :disabled="busy" @update:modelValue="(value: number | undefined) => project.creation.pageCount = Math.min(50, Math.max(1, Math.round(value || 1)))" /></label>
               <label>每页分格<el-select v-model="project.creation.panelMode" :disabled="busy"><el-option label="自动分格" value="auto" /><el-option label="自定义" value="custom" /></el-select></label>
-              <label v-if="project.creation.panelMode === 'custom'">分格数量或范围<el-input v-model="project.creation.panelsPerPage" :disabled="busy" /></label></div>
-            <label>文本模型<comicTextModelSelect v-model="project.creation.model" :models="textModels" :disabled="busy" :loading="textModelsLoading" @refresh="refreshTextModels" /></label>
-            <div class="creationActions"><span role="status">{{ actionStatus }}</span><el-button type="primary" :disabled="busy || !textModel || !project.creation.topic.trim()" @click="generateScript">生成漫画脚本</el-button></div>
+              <label v-if="project.creation.panelMode === 'custom'" class="customPanelField">分格数量或范围<el-input v-model="project.creation.panelsPerPage" :disabled="busy" /></label>
+            </div>
+            <div class="creationActions">
+              <label>文本模型<comicTextModelSelect v-model="project.creation.model" :models="textModels" :disabled="busy" :loading="textModelsLoading" @refresh="refreshTextModels" /></label>
+              <el-button type="primary" :disabled="busy || !textModel || !project.creation.topic.trim()" @click="generateScript">生成漫画脚本</el-button>
+              <span v-if="actionStatus" role="status">{{ actionStatus }}</span>
+            </div>
           </div>
           <section class="creationCharacters">
             <div class="sectionHeading"><h3>故事角色参考</h3><el-button :disabled="busy" @click="addCharacter">新增角色</el-button></div>
@@ -47,10 +64,17 @@
           </section>
           </div>
           <div v-if="project.creation.draftPages.length" class="draftPages">
-            <div class="sectionHeading"><h3>脚本草稿</h3><span v-if="project.creation.generatedAt">{{ new Date(project.creation.generatedAt).toLocaleString() }}</span><el-button :disabled="busy" @click="applyDraft(false)">追加到脚本</el-button><el-button :disabled="busy" @click="applyDraft(true)">替换脚本</el-button></div>
-            <article v-for="page in project.creation.draftPages" :key="page.id"><strong>{{ page.title }}</strong><label>草稿脚本<el-input v-model="page.script" type="textarea" :rows="5" :disabled="busy" /></label><label>草稿画面描述<el-input :modelValue="page.description" type="textarea" :rows="5" :disabled="busy" @update:modelValue="(value: string) => updateDescription(page, value)" /></label></article>
+            <div class="sectionHeading"><h3>脚本草稿 · {{ project.creation.draftPages.length }} 页</h3><span v-if="project.creation.generatedAt">{{ new Date(project.creation.generatedAt).toLocaleString() }}</span><el-button :disabled="busy" @click="applyDraft(false)">追加到脚本</el-button><el-button :disabled="busy" @click="applyDraft(true)">替换脚本</el-button></div>
+            <article v-for="page in project.creation.draftPages" :key="page.id">
+              <strong>{{ page.title }}</strong>
+              <div class="storyFields">
+                <label>草稿脚本<el-input v-model="page.script" type="textarea" :rows="5" :disabled="busy" /></label>
+                <label>草稿画面描述<el-input :modelValue="page.description" type="textarea" :rows="5" :disabled="busy" @update:modelValue="(value: string) => updateDescription(page, value)" /></label>
+              </div>
+            </article>
           </div>
           <details v-if="project.creation.rawOutput"><summary>模型原始输出</summary><pre>{{ project.creation.rawOutput }}</pre></details>
+          </div>
         </template>
         <template v-else-if="project.activeStep === 2">
           <div class="sectionHeading"><h2>脚本编辑</h2><el-button :disabled="busy" @click="tableDialog = true">粘贴表格</el-button><el-button :disabled="busy" @click="addPage">新增页面</el-button></div>
@@ -86,18 +110,50 @@
           <comicCharacterEditor :characters="project.characters" :models="textModels" :defaultModel="characterModelKey" :directory="directory" :disabled="busy" @add="addCharacter" @remove="removeCharacter" @upload="(id: string) => chooseUpload({ kind: 'character', characterId: id })" @describe="describeCharacter" @refresh="refreshTextModels" />
         </template>
         <template v-else-if="project.activeStep === 5 && selectedPage">
-          <div class="sectionHeading"><h2>{{ selectedPage.title }}</h2><el-button v-if="selectedPage.task" :disabled="busy || cancelling || session.active.has(selectedPage.id)" @click="recoverPage(selectedPage)">查询／恢复结果</el-button><el-button v-if="selectedPage.task" :disabled="cancelling || (busy && activePageId !== selectedPage.id)" @click="cancelTask(selectedPage)">{{ selectedPage.task.cancelled ? '确认结束任务' : '停止任务' }}</el-button><el-button type="primary" :disabled="busy || cancelling || batchRunning || !!selectedPage.task || !imageModel || !inspectPage(project, selectedPage).canGenerate" @click="generatePage(selectedPage)">生成本页</el-button></div>
-          <p v-if="session.message.value || actionStatus" role="status">{{ session.message.value || actionStatus }}</p><p v-if="selectedPage.task" role="status">本页剩余 {{ selectedPage.task.remaining ?? 1 }} 次（含当前任务）</p><p v-if="selectedPage.error" class="errorText" role="alert">{{ selectedPage.error }}</p>
-          <el-segmented v-model="generationView" class="generationTabs" :options="[{ label: '页面预览', value: 'preview' }, { label: '单格局部重绘', value: 'redraw' }]" aria-label="页面预览与单格局部重绘切换" />
+          <div class="previewToolbar">
+            <h2>{{ selectedPage.title }}</h2>
+            <el-segmented v-model="generationView" class="generationTabs" :options="[{ label: '页面预览', value: 'preview' }, { label: '单格局部重绘', value: 'redraw' }]" aria-label="页面预览与单格局部重绘切换" />
+            <div class="previewActions">
+              <el-button v-if="selectedPage.task" :disabled="busy || cancelling || session.active.has(selectedPage.id)" @click="recoverPage(selectedPage)">查询／恢复结果</el-button>
+              <el-button v-if="selectedPage.task" :disabled="cancelling || (busy && activePageId !== selectedPage.id)" @click="cancelTask(selectedPage)">{{ selectedPage.task.cancelled ? '确认结束任务' : '停止任务' }}</el-button>
+              <el-button type="primary" :disabled="busy || cancelling || batchRunning || !!selectedPage.task || !imageModel || !inspectPage(project, selectedPage).canGenerate" @click="generatePage(selectedPage)">生成本页</el-button>
+            </div>
+          </div>
+          <div v-if="session.message.value || actionStatus || selectedPage.task || selectedPage.error" class="previewStatus">
+            <p v-if="session.message.value || actionStatus" role="status">{{ session.message.value || actionStatus }}</p><p v-if="selectedPage.task" role="status">本页剩余 {{ selectedPage.task.remaining ?? 1 }} 次（含当前任务）</p><p v-if="selectedPage.error" class="errorText" role="alert">{{ selectedPage.error }}</p>
+          </div>
           <section v-show="generationView === 'preview'">
-          <div v-if="selectedVersion" class="resultImages"><div v-for="reference in selectedVersion.images" :key="reference.id" class="resultImage" :class="{ selected: selectedImage?.id === reference.id }"><comicImage :directory="directory" :reference="reference" /><div class="formRow"><el-button text @click="downloadReference(reference)">下载</el-button><el-button text type="danger" :disabled="busy || !!selectedPage.task" @click="removeVersionImage(reference)">移除此图</el-button><el-button text @click="copyImageToCanvas(reference)">复制到画布</el-button><el-button text :type="selectedImage?.id === reference.id ? 'primary' : 'default'" :disabled="busy" @click="selectedImageId = reference.id">{{ selectedImage?.id === reference.id ? '当前重绘底图' : '用此图重绘' }}</el-button></div></div></div>
-          <div v-if="selectedPage.versions.length" class="versionList"><button v-for="(version, index) in selectedPage.versions" :key="version.id" type="button" :class="{ active: selectedVersion?.id === version.id }" :aria-pressed="selectedVersion?.id === version.id" @click="selectedVersionId = version.id"><span v-if="version.images[0]" class="versionThumbnail"><comicImage :directory="directory" :reference="version.images[0]" /></span><span>V{{ selectedPage.versions.length - index }}{{ index === 0 ? ' · 当前' : '' }} · {{ version.images.length }} 张</span></button></div>
-          <div v-if="selectedVersion" class="formRow"><el-button text :disabled="busy" @click="restoreVersion">设为当前版本</el-button><el-button text type="danger" :disabled="busy" @click="removeVersion">移除版本记录</el-button></div>
+          <div v-if="selectedVersion" class="resultLayout">
+          <div v-if="selectedImage" class="resultImage"><comicImage :directory="directory" :reference="selectedImage" /></div>
+          <section class="versionSection" aria-label="生成版本">
+          <div v-if="selectedImage" class="imageActions">
+            <el-button @click="downloadReference(selectedImage)">下载</el-button>
+            <el-button @click="copyImageToCanvas(selectedImage)">复制到画布</el-button>
+            <el-button text :disabled="busy" @click="generationView = 'redraw'">用此图重绘</el-button>
+            <el-button text type="danger" :disabled="busy || !!selectedPage.task" @click="removeVersionImage(selectedImage)">移除此图</el-button>
+          </div>
+          <label v-if="selectedVersion.images.length > 1">版本内图片
+            <el-select :modelValue="selectedImage?.id" @update:modelValue="selectedImageId = $event">
+              <el-option v-for="(reference, index) in selectedVersion.images" :key="reference.id" :value="reference.id" :label="`图片 ${index + 1}`" />
+            </el-select>
+          </label>
+          <h3>生成版本</h3>
+          <div class="versionList">
+            <button v-for="(version, index) in selectedPage.versions" :key="version.id" type="button" :class="{ active: selectedVersion.id === version.id }" :aria-pressed="selectedVersion.id === version.id" @click="selectedVersionId = version.id">
+              <span v-if="version.images[0]" class="versionThumbnail"><comicImage :directory="directory" :reference="version.images[0]" /></span>
+              <span>V{{ selectedPage.versions.length - index }}{{ index === 0 ? ' · 当前' : '' }} · {{ version.images.length }} 张</span>
+            </button>
+          </div>
+          <div class="versionActions">
+            <el-button text :disabled="busy || selectedVersion.id === selectedPage.versions[0]?.id" @click="restoreVersion">设为当前版本</el-button>
+            <el-button text type="danger" :disabled="busy" @click="removeVersion">移除版本记录</el-button>
+          </div>
           <p v-if="selectedVersion" class="versionMeta">{{ selectedVersion.model ?? '' }} · {{ selectedVersion.ratio ?? '' }} · {{ selectedVersion.size ?? '' }} · {{ new Date(selectedVersion.createdAt).toLocaleString() }}</p>
-          <details v-if="selectedVersion" class="versionRequest"><summary>此版本的生成记录</summary><p>{{ selectedVersion.request?.mode === 'redraw' ? `单格重绘 · ${selectedVersion.request.panelLabel}` : '整页生成' }}</p><pre>{{ selectedVersion.prompt }}</pre><template v-if="selectedVersion.request"><p v-if="selectedVersion.request.instruction">修改要求：{{ selectedVersion.request.instruction }}</p><pre>{{ JSON.stringify(selectedVersion.request.other, null, 2) }}</pre><div class="referenceGrid"><article v-for="(reference, index) in selectedVersion.request.references" :key="`${index}-${reference.id}`"><comicImage :directory="directory" :reference="reference" /><span>{{ index + 1 }} · {{ reference.label }}</span></article></div></template></details>
-          <label>最终提示词<el-input :modelValue="pagePrompt(project, selectedPage)" type="textarea" :rows="8" :disabled="busy || !!selectedPage.task" @update:modelValue="(value: string) => selectedPage && (selectedPage.prompt = stripPromptAffixes(project, value))" /></label><el-button text :disabled="busy || !!selectedPage.task" @click="selectedPage.prompt = ''">恢复自动提示词</el-button>
           </section>
-          <div class="pageReferences"><div class="sectionHeading"><h3>本页画面参考</h3><el-select v-model="referenceKind" :disabled="busy" aria-label="参考图用途"><el-option v-for="item in referenceKinds" :key="item.value" :value="item.value" :label="item.label" /></el-select><el-button :disabled="busy || !!selectedPage.task" @click="chooseUpload({ kind: referenceKind, pageId: selectedPage.id })">上传参考图</el-button></div><div class="referenceGrid"><article v-for="reference in selectedPage.references" :key="reference.id"><comicImage :directory="directory" :reference="reference" /><el-select v-model="reference.kind" :disabled="busy || !!selectedPage.task" aria-label="参考图用途"><el-option v-for="item in referenceKinds" :key="item.value" :value="item.value" :label="item.label" /></el-select><el-button text :disabled="busy || !!selectedPage.task" @click="selectedPage.references = selectedPage.references.filter(item => item.id !== reference.id)">移除</el-button></article></div></div>
+          </div>
+          <details v-if="selectedVersion" class="versionRequest"><summary>此版本的生成记录</summary><p>{{ selectedVersion.request?.mode === 'redraw' ? `单格重绘 · ${selectedVersion.request.panelLabel}` : '整页生成' }}</p><pre>{{ selectedVersion.prompt }}</pre><template v-if="selectedVersion.request"><p v-if="selectedVersion.request.instruction">修改要求：{{ selectedVersion.request.instruction }}</p><pre>{{ JSON.stringify(selectedVersion.request.other, null, 2) }}</pre><div class="referenceGrid"><article v-for="(reference, index) in selectedVersion.request.references" :key="`${index}-${reference.id}`"><comicImage :directory="directory" :reference="reference" /><span>{{ index + 1 }} · {{ reference.label }}</span></article></div></template></details>
+          <details class="previewPrompt" :open="!selectedVersion"><summary>最终提示词</summary><el-input aria-label="最终提示词" :modelValue="pagePrompt(project, selectedPage)" type="textarea" :rows="8" :disabled="busy || !!selectedPage.task" @update:modelValue="(value: string) => selectedPage && (selectedPage.prompt = stripPromptAffixes(project, value))" /><el-button text :disabled="busy || !!selectedPage.task" @click="selectedPage.prompt = ''">恢复自动提示词</el-button></details>
+          </section>
           <div v-if="generationView === 'redraw'" class="redrawPanel">
             <div v-if="selectedImage" class="redrawPreview"><comicImage :directory="directory" :reference="selectedImage" /></div>
             <div class="panelChoices"><button v-for="(panel, index) in selectedPage.panels" :key="panel.id" type="button" :disabled="busy" :class="{ active: redrawPanelId === panel.id }" :aria-pressed="redrawPanelId === panel.id" @click="redrawPanelId = panel.id"><strong>第 {{ index + 1 }} 格 · {{ panel.label }}</strong><span>{{ panel.description }}</span></button></div>
@@ -105,6 +161,7 @@
             <el-button :disabled="busy || !!selectedPage.task || !imageModel || !selectedImage || !redrawPanelId || !redrawInstruction.trim()" @click="generatePage(selectedPage, true)">重绘选中分格</el-button>
             <details v-if="redrawPanel"><summary>本次重绘提示词</summary><pre>{{ pagePrompt(project, selectedPage, redrawPanel, redrawInstruction) }}</pre></details>
           </div>
+          <div class="pageReferences"><div class="sectionHeading"><h3>本页画面参考</h3><el-select v-model="referenceKind" :disabled="busy" aria-label="参考图用途"><el-option v-for="item in referenceKinds" :key="item.value" :value="item.value" :label="item.label" /></el-select><el-button :disabled="busy || !!selectedPage.task" @click="chooseUpload({ kind: referenceKind, pageId: selectedPage.id })">上传参考图</el-button></div><div class="referenceGrid"><article v-for="reference in selectedPage.references" :key="reference.id"><comicImage :directory="directory" :reference="reference" /><el-select v-model="reference.kind" :disabled="busy || !!selectedPage.task" aria-label="参考图用途"><el-option v-for="item in referenceKinds" :key="item.value" :value="item.value" :label="item.label" /></el-select><el-button text :disabled="busy || !!selectedPage.task" @click="selectedPage.references = selectedPage.references.filter(item => item.id !== reference.id)">移除</el-button></article></div></div>
           <details><summary>{{ generationView === 'redraw' ? '重绘参考图顺序' : '本页生成参考图顺序' }}</summary><div class="referenceGrid"><article v-for="(reference, index) in requestReferences" :key="`${index}-${reference.id}`"><comicImage :directory="directory" :reference="reference" /><span>{{ index + 1 }} · {{ reference.label }}</span></article></div></details>
         </template>
       </section>
@@ -145,51 +202,61 @@
         </div>
       </aside>
     </div>
-    <footer v-if="loaded" class="workspaceFooter"><span>{{ selectedPage?.title ?? '' }} · 共 {{ project.pages.length }} 页</span><el-button :disabled="project.activeStep <= 1" @click="project.activeStep--">上一步</el-button><el-button :disabled="project.activeStep >= 5" @click="project.activeStep++">下一步</el-button></footer>
+    <footer v-if="loaded" class="workspaceFooter">
+      <span v-if="project.activeStep === 1">脚本草稿 · {{ project.creation.draftPages.length }} 页</span>
+      <span v-else><template v-if="project.activeStep >= 3 && selectedPage">{{ selectedPage.title }} · </template>共 {{ project.pages.length }} 页</span>
+      <el-button :disabled="project.activeStep <= 1" @click="project.activeStep--">上一步</el-button>
+      <el-button :disabled="project.activeStep >= 5" @click="project.activeStep++">下一步</el-button>
+    </footer>
     <input ref="uploadInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden @change="uploadReference" />
     <el-dialog v-model="tableDialog" title="粘贴漫画脚本表格" width="min(800px, 90vw)"><el-input v-model="tableText" type="textarea" :rows="14" aria-label="页码、脚本、画面描述表格" /><template #footer><el-button @click="tableDialog = false">取消</el-button><el-button type="primary" @click="importTable">追加页面</el-button></template></el-dialog>
+    <workspaceSideToolbar class="comicSideToolbar" :libraryVisible="libraryVisible" :assetsVisible="assetsVisible" @openTool="openWorkspaceTool" />
+    <creationLibrary v-model="libraryVisible" />
+    <assetLibrary v-if="assetsVisible" v-model="assetsVisible" class="comicAssetLibrary" :directory="directory" />
+    <input ref="canvasUploadInput" type="file" multiple hidden @change="uploadToCanvas" />
     <settings v-model="settingsVisible" />
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { onBeforeRouteLeave, useRouter } from "vue-router";
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
-import { IconPlus, IconUpload, IconBookmarks, IconFolder, IconHistory } from "@tabler/icons-vue";
-import { currentUser } from "@/stores/multiTenant";
 import { findNodeModel, getNodeModelKey, getNodeModelIdentity, useNodeAi, useNodeModelSelection, type NodeAiModel, type NodeMediaModel, type NodeImageRequest } from "@toonflow/nodes-scaffold/nodeAi";
 import { useWorkspaceStore } from "@/stores/workspace";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
 import { getComicSession } from "./comicSession";
+import { isComicFile } from "./comicPersistence";
 import saveFile from "@/lib/saveFile";
 import { writeClipboardImage } from "@/lib/clipboard";
 import settings from "@/components/settings/index.vue";
+import { settings as appSettings } from "@/stores/settings";
+import workspaceMenu from "@/pages/workspace/components/workspaceMenu.vue";
+import workspacePanelSwitcher from "@/pages/workspace/components/workspacePanelSwitcher.vue";
+import workspaceSideToolbar from "@/pages/workspace/components/workspaceSideToolbar.vue";
+import assetLibrary from "@/pages/workspace/panels/canvas/components/assetLibrary.vue";
+import creationLibrary from "@/pages/workspace/panels/canvas/components/creationLibrary.vue";
 import comicImage from "./comicImage.vue";
+import comicFilePicker from "./comicFilePicker.vue";
 import comicGenerationSettings from "./comicGenerationSettings.vue";
 import comicTextModelSelect from "./comicTextModelSelect.vue";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
 import { readLastNodeModel, rememberNodeModel } from "@toonflow/node-shared/modelPreference";
 import comicCharacterEditor from "./comicCharacterEditor.vue";
 import comicPageBinding from "./comicPageBinding.vue";
-import { createComicProject, createComicPage, splitPanels, pageCharacters, pageReferences, pagePrompt, stripPromptAffixes, inspectPage, scriptSystemPrompt, parseScript, parseTable, type ComicPage, type ComicCharacter, type ComicReference, type ComicRequestRecord } from "./comicProject";
+import { comicFileName, createComicProject, createComicPage, splitPanels, pageCharacters, pageReferences, pagePrompt, stripPromptAffixes, inspectPage, readComicScriptInstruction, parseScript, parseTable, type ComicPage, type ComicCharacter, type ComicReference, type ComicRequestRecord } from "./comicProject";
 
 const workspace = useWorkspaceStore();
-const props = withDefaults(defineProps<{ embedded?: boolean; active?: boolean }>(), { embedded: false, active: true });
-const emit = defineEmits<{ openCanvas: [] }>();
-async function flushSave() {
-  if (busy.value || cancelling.value) throw new Error("漫画操作尚未完成，请稍后切换");
-  if (loaded.value) await save();
-}
-defineExpose({ flushSave });
+const route = useRoute();
 const router = useRouter();
 const directory = workspace.project?.directory ?? "";
 const files = useWorkspaceFiles(directory);
+const comicPath = isComicFile(route.query.comicFile) ? route.query.comicFile : comicFileName;
 const project = ref(createComicProject(workspace.project?.name ?? "漫画项目"));
 const loaded = ref(false);
 const loadError = ref("");
-const session = getComicSession(directory);
+const session = getComicSession(directory, comicPath);
 const saveError = session.saveError;
 const saveStatus = session.saveStatus;
 const actionStatus = ref("");
@@ -202,6 +269,9 @@ const batchTotal = computed(() => session.batch.total);
 const batchCompleted = computed(() => session.batch.completed);
 const batchFailed = computed(() => session.batch.failed);
 const settingsVisible = ref(false);
+const libraryVisible = ref(false);
+const assetsVisible = ref(false);
+const canvasUploadInput = ref<HTMLInputElement>();
 const settingsExpanded = ref<boolean>();
 const generationSettingsVisible = computed({ get: () => settingsExpanded.value ?? project.value.activeStep === 5, set: value => { settingsExpanded.value = value; } });
 watch(() => project.value.activeStep, () => { settingsExpanded.value = undefined; });
@@ -290,6 +360,10 @@ watch(() => {
   for (const page of project.value.pages) if (previous?.has(page.id) && previous.get(page.id) !== current.get(page.id)) page.prompt = "";
 }, { flush: "sync" });
 
+async function openComicFile(path: string) {
+  await router.push({ path: "/comic", query: { comicFile: path === comicFileName ? undefined : path } });
+}
+
 async function loadProject() {
   loadError.value = "";
   try {
@@ -302,7 +376,7 @@ async function loadProject() {
     if (!selectedPage.value) project.value.selectedPageId = project.value.pages[0]?.id ?? "";
     await refreshModels();
   } catch (error) { if (!loaded.value) loadError.value = error instanceof Error ? error.message : "读取漫画项目失败"; else showError(error); }
-  finally { if (!props.embedded) workspace.projectLoading = false; }
+  finally { workspace.projectLoading = false; }
 }
 
 const textModelsLoading = ref(false);
@@ -418,7 +492,7 @@ async function generateScript() {
       const referenceIndex = illustratedCharacters.indexOf(item);
       return `${item.name}（${item.aliases}）：${item.description}${referenceIndex >= 0 ? `；对应参考图 ${referenceIndex + 1}` : '；没有参考图'}`;
     }).join("\n");
-    const result = await ai.generate({ ...getNodeModelIdentity(model), directory, systemPrompt: scriptSystemPrompt, references,
+    const result = await ai.generate({ ...getNodeModelIdentity(model), directory, systemPrompt: readComicScriptInstruction(appSettings.value.stores), references,
       prompt: `故事主题：${creation.topic}\n创作要求：${creation.requirements}\n目标页数：${creation.pageCount}\n分格：${creation.panelMode === "custom" ? creation.panelsPerPage : "自动，每页1到12格"}\n叙事风格：${creation.narrativeStyle}\n角色：${characterDescriptions}`,
       onEvent: event => { if (event.type === "text") actionStatus.value = "正在接收脚本…"; },
     });
@@ -552,9 +626,32 @@ function restoreVersion() {
 async function copyImageToCanvas(reference: ComicReference) {
   try {
     await writeClipboardImage(new Blob([await files.read(reference.path)], { type: reference.mimeType }));
-    if (props.embedded) emit("openCanvas");
-    ElMessage.success("已复制，打开无限画布后粘贴即可添加图片节点");
+    if (await openCanvas()) ElMessage.success("已复制，在画布粘贴即可添加图片节点");
   } catch (error) { showError(error); }
+}
+async function openCanvas(tool?: "nodes" | "upload" | "history") {
+  return !await router.push({ path: "/workspace", query: { tool, comicFile: comicPath === comicFileName ? undefined : comicPath } });
+}
+function switchWorkspacePanel(value: string | number | boolean) {
+  if (value === "canvas") return openCanvas();
+  if (value === "document") return router.push({ path: "/workspace", query: { panel: "document", comicFile: comicPath === comicFileName ? undefined : comicPath } });
+}
+function openWorkspaceTool(tool: "nodes" | "upload" | "library" | "assets" | "history") {
+  if (tool === "library") libraryVisible.value = !libraryVisible.value;
+  else if (tool === "assets") assetsVisible.value = !assetsVisible.value;
+  else if (tool === "upload") canvasUploadInput.value?.click();
+  else void openCanvas(tool);
+}
+async function uploadToCanvas(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const selectedFiles = Array.from(input.files ?? []);
+  input.value = "";
+  if (!selectedFiles.length) return;
+  workspace.pendingCanvasUpload = { directory, files: selectedFiles };
+  try { await openCanvas("upload"); }
+  finally {
+    if (router.currentRoute.value.path !== "/workspace") workspace.pendingCanvasUpload = null;
+  }
 }
 async function removeVersion() {
   if (!selectedPage.value || !selectedVersion.value || busy.value || selectedPage.value.task) return;
@@ -579,22 +676,44 @@ async function downloadReference(reference: ComicReference) {
 function preventUnload(event: BeforeUnloadEvent) {
   if (busy.value || cancelling.value || session.active.size > 0 || session.batch.running || saveStatus.value !== "已保存") { event.preventDefault(); event.returnValue = ""; }
 }
-onBeforeRouteLeave(async () => {
+async function saveBeforeNavigation() {
   if (busy.value || cancelling.value) { ElMessage.warning("当前操作尚未结束，请先停止任务或等待完成"); return false; }
   if (!loaded.value) return true;
   try { await save(); return true; } catch (error) { showError(error); return false; }
-});
+}
+onBeforeRouteLeave(saveBeforeNavigation);
+onBeforeRouteUpdate(saveBeforeNavigation);
 onMounted(() => { window.addEventListener("beforeunload", preventUnload); void loadProject(); });
 onBeforeUnmount(() => { disposed = true; clearTimeout(saveTimer); window.removeEventListener("beforeunload", preventUnload); });
 </script>
 
 <style scoped lang="scss">
 .comicWorkspace {
-  &.embeddedComic { padding-left: 80px; box-sizing: border-box; }
-  display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--el-text-color-primary); background: var(--el-bg-color);
+  position: relative; display: flex; flex-direction: column; height: 100dvh; min-height: 0; color: var(--el-text-color-primary); background: var(--el-bg-color);
+  .comicSideToolbar { position: fixed; max-height: calc(100dvh - 24px); background: var(--el-bg-color-overlay); }
+  .comicAssetLibrary { position: fixed; top: 50%; left: 76px; z-index: 9; transform: translateY(-50%); width: min(360px, calc(100% - 88px)); }
+  .workspaceBody, .loadError { margin-left: 76px; }
   .workspaceHeader {
-    display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 18px; min-height: 58px; padding: 8px 52px; border-bottom: 1px solid var(--el-border-color); flex-shrink: 0;
-    .generationToggle { margin-left: 12px; color: var(--el-text-color-secondary); &[aria-pressed="true"] { color: var(--el-text-color-primary); background: var(--el-fill-color-light); } }
+    position: relative;
+    flex: 0 0 58px;
+
+    .comicProjectMenu { position: absolute; top: 15px; left: 15px; }
+    .comicProjectIdentity {
+      position: absolute; top: 15px; left: 90px; display: flex; align-items: center; box-sizing: border-box; max-width: calc(50% - 240px); padding: 0 4px 0 10px; border: 1px solid var(--el-border-color-light); border-radius: var(--ui-radius-large); background: var(--el-bg-color-overlay);
+      .comicProjectName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+    }
+    .panelSwitcher { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); }
+  }
+  .comicWorkflowBar {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 0 16px 8px;
+    border-bottom: 1px solid var(--el-border-color);
+
+    .generationToggle { flex-shrink: 0; color: var(--el-text-color-secondary); &[aria-pressed="true"] { color: var(--el-text-color-primary); background: var(--el-fill-color-light); } }
     .stepNavigation { display: flex; gap: 4px; flex-wrap: wrap; padding: 3px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; background: var(--el-fill-color-light);
       button { display: flex; align-items: center; gap: 6px; height: 32px; border: 1px solid transparent; padding: 0 10px; border-radius: 6px; background: transparent; color: var(--el-text-color-secondary); font-size: 12px; font-weight: 700; cursor: pointer;
         span { display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--el-border-color); border-radius: 50%; background: var(--el-bg-color); font-size: 10px; }
@@ -603,12 +722,24 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(saveTimer); window.removeE
       }
     }
   }
+  @media (max-width: 760px) {
+    .workspaceHeader {
+      flex-basis: 96px;
+      .comicProjectIdentity { max-width: calc(100% - 105px); }
+      .panelSwitcher { top: 56px; }
+    }
+  }
+  @media (max-width: 380px) { .workspaceHeader { .panelSwitcher { left: auto; right: 15px; transform: none; } } }
   .loadError { padding: 32px; color: var(--el-color-danger); }
-  .workspaceFooter { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--el-border-color); span { margin-right: auto; font-size: 13px; color: var(--el-text-color-secondary); } }
+  .workspaceFooter { display: flex; flex-shrink: 0; align-items: center; gap: 8px; padding: 8px 20px; border-top: 1px solid var(--el-border-color-light);
+    span { margin-right: auto; font-size: 12px; color: var(--el-text-color-secondary); }
+    .el-button { margin: 0; }
+  }
   .workspaceBody {
     display: grid; grid-template-columns: 218px minmax(0, 1fr) 270px; flex: 1; min-height: 0; background: var(--el-fill-color-light);
     &.settingsHidden { grid-template-columns: 218px minmax(0, 1fr); }
-    &.creationStep { grid-template-columns: minmax(0, 1fr); }
+    &.creationStep { grid-template-columns: minmax(0, 1fr) 270px; &.settingsHidden { grid-template-columns: minmax(0, 1fr); } }
+    &.previewStep:not(.settingsHidden) { grid-template-columns: 218px minmax(0, 1fr) 286px; }
     &.scriptStep { grid-template-columns: minmax(0, 1fr) 300px; }
     .pageRail { display: flex; flex-direction: column; gap: 0; border-right: 1px solid var(--el-border-color); background: var(--el-bg-color); min-height: 0;
       .railHeading { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 12px; border-bottom: 1px solid var(--el-border-color-lighter); font-size: 13px; }
@@ -628,20 +759,38 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(saveTimer); window.removeE
     .stepContent { overflow-y: auto; padding: 14px; min-width: 0; scrollbar-gutter: stable; container: comicContent / inline-size;
       h2 { margin: 2px 0 14px; font-size: 18px; }
       .creationForm, .pageEditor { display: grid; gap: 16px; min-width: 0; }
-      .pageEditor { max-width: 960px; }
-      .creationLayout { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(280px, .95fr); gap: 14px; align-items: start; max-width: 1360px; margin: 0 auto; }
-      .creationForm { padding: 14px; border: 1px solid var(--el-border-color); border-radius: 7px; background: var(--el-bg-color); box-shadow: 0 3px 10px rgb(15 23 42 / 4%); min-width: 0;
+      .creationContent { display: grid; gap: 24px; max-width: 1260px; margin: 4px auto 12px; }
+      .creationLayout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 24px; align-items: start; }
+      .storyFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .creationForm {
+        gap: 12px;
         h2 { margin: 2px 0 2px; font-size: 17px; }
-        .creationParameters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;
+        .creationParameters { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); gap: 12px;
           label { min-width: 0; } .el-select, .el-input-number { width: 100%; }
+          .customPanelField { grid-column: -3 / -1; }
         }
-        .creationActions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 12px; span { margin-right: auto; color: var(--el-text-color-secondary); font-size: 12px; } }
+        .creationActions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px 12px;
+          label { min-width: 0; }
+          > span { grid-column: 1 / -1; color: var(--el-text-color-secondary); font-size: 12px; }
+        }
       }
-      .creationCharacters { min-width: 0; padding: 14px; border: 1px solid var(--el-border-color); border-radius: 7px; background: var(--el-bg-color); box-shadow: 0 3px 10px rgb(15 23 42 / 4%);
-        .sectionHeading { align-items: center; h3 { font-size: 16px; } }
-        .characterGrid { grid-template-columns: 1fr; .characterCard { gap: 16px; padding: 20px; } }
+      .creationCharacters { min-width: 0; padding-inline-start: 20px; border-inline-start: 1px solid var(--el-border-color-light);
+        .sectionHeading { margin-bottom: 12px; h3 { font-size: 15px; } }
+        .characterGrid { grid-template-columns: minmax(0, 1fr); gap: 12px;
+          .characterCard { gap: 12px; padding: 12px; background: var(--el-bg-color); }
+        }
       }
-      @container comicContent (max-width: 820px) { .creationLayout { grid-template-columns: minmax(0, 1fr); } }
+      @container comicContent (max-width: 740px) {
+        .creationLayout { grid-template-columns: minmax(0, 1fr); }
+        .creationCharacters { padding: 12px 0 0; border-inline-start: 0; border-top: 1px solid var(--el-border-color-light); }
+      }
+      @container comicContent (max-width: 440px) {
+        .storyFields { grid-template-columns: minmax(0, 1fr); }
+        .creationForm .creationActions { grid-template-columns: minmax(0, 1fr); > .el-button { justify-self: end; } }
+      }
+      @container comicContent (max-width: 980px) {
+        .creationForm .creationParameters { grid-template-columns: repeat(2, minmax(0, 1fr)); .narrativeField { grid-column: 1 / -1; } }
+      }
       .scriptTable { display: grid; gap: 0; padding: 8px; border: 1px solid var(--el-border-color); border-radius: 7px; background: var(--el-bg-color);
         .scriptTableHeading, .scriptRow { display: grid; grid-template-columns: 132px minmax(180px, 1fr) minmax(220px, 1.2fr) 84px; gap: 16px; align-items: start; }
         .scriptRow { padding: 8px 0; border-bottom: 1px solid var(--el-border-color); }
@@ -654,12 +803,32 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(saveTimer); window.removeE
       }
       .pageEditor + .panelEditor { margin-top: 14px; }
       .versionMeta { font-size: 12px; color: var(--el-text-color-secondary); }
-      .draftPages article, .readinessCard { padding: 18px; margin: 16px 0; border: 1px solid var(--el-border-color); border-radius: var(--ui-radius); p { white-space: pre-wrap; } }
+      .draftPages {
+        padding-top: 16px; border-top: 1px solid var(--el-border-color-light);
+        .sectionHeading { margin-bottom: 12px; span { color: var(--el-text-color-secondary); font-size: 12px; } .el-button { margin: 0; } }
+        article { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: var(--ui-radius); background: var(--el-bg-color); }
+        article + article { margin-top: 12px; }
+      }
+      .readinessCard { padding: 18px; margin: 16px 0; border: 1px solid var(--el-border-color); border-radius: var(--ui-radius); p { white-space: pre-wrap; } }
       .characterGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;
         .characterCard { display: grid; gap: 14px; border: 1px solid var(--el-border-color); border-radius: var(--ui-radius); padding: 18px; .characterPreview { height: 200px; } }
       }
       .bindingPanel, .redrawPanel, .pageReferences { margin-top: 24px; }
-      .generationTabs { margin-bottom: 20px; }
+      .previewToolbar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: -14px -14px 14px; padding: 12px 14px; background: var(--el-bg-color); border-bottom: 1px solid var(--el-border-color-light);
+        h2 { margin: 0; overflow-wrap: anywhere; }
+        .generationTabs { max-width: 100%; }
+        .previewActions { display: flex; flex-wrap: wrap; gap: 6px; margin-inline-start: auto; .el-button { margin: 0; } }
+      }
+      .previewStatus { margin: 0 0 14px; color: var(--el-text-color-secondary); font-size: 13px; p { margin: 6px 0; } }
+      .pageReferences { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--el-border-color-light);
+        .sectionHeading { margin-bottom: 8px; .el-button { margin: 0; } }
+        h3 { font-size: 15px; }
+        .el-select { width: min(150px, 100%); }
+      }
+      .previewPrompt { padding-top: 14px; border-top: 1px solid var(--el-border-color-light);
+        summary { cursor: pointer; }
+        .el-textarea { margin-top: 10px; }
+      }
       .redrawPanel { display: grid; gap: 16px;
         .redrawPreview { height: 300px; }
         .panelChoices { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;
@@ -670,13 +839,22 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(saveTimer); window.removeE
           }
         }
       }
-      .resultImages { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;
-        .resultImage { display: flex; flex-direction: column; height: 60vh; min-height: 240px; padding: 8px; border: 1px solid transparent; border-radius: var(--ui-radius); background: var(--el-fill-color-light); &.selected { border-color: var(--el-color-primary); } .formRow { flex-shrink: 0; } }
+      .resultLayout { display: grid; grid-template-columns: minmax(0, 1fr) 232px; align-items: start; gap: 14px;
+        .resultImage { display: grid; place-items: center; min-width: 0; height: clamp(270px, 62dvh, 720px); padding: 10px; border: 1px solid var(--el-border-color-light); border-radius: var(--ui-radius-large); background: var(--el-bg-color); }
+        .versionSection { grid-column: -2; display: grid; min-width: 0; gap: 12px; padding: 12px; border: 1px solid var(--el-border-color-light); border-radius: var(--ui-radius-large); background: var(--el-bg-color);
+          h3 { margin: 0; font-size: 13px; }
+          .versionMeta { margin: 0; overflow-wrap: anywhere; }
+          .imageActions, .versionActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; .el-button { margin: 0; padding-inline: 3px; font-size: 12px; } }
+          .imageActions { padding-bottom: 10px; border-bottom: 1px solid var(--el-border-color-lighter); }
+        }
       }
-      .versionList { display: flex; overflow-x: auto; gap: 12px; margin: 16px 0; padding: 4px;
-        button { display: grid; gap: 8px; flex-shrink: 0; width: 128px; padding: 8px; border: 1px solid var(--el-border-color); border-radius: var(--ui-radius); background: var(--el-bg-color); color: var(--el-text-color-primary); cursor: pointer;
-          .versionThumbnail { height: 96px; pointer-events: none; }
-          &.active { border-color: var(--el-color-primary); }
+      @container comicContent (max-width: 560px) {
+        .resultLayout { grid-template-columns: minmax(0, 1fr); }
+      }
+      .versionList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: 214px; overflow-y: auto; margin: -2px; padding: 2px;
+        button { display: grid; gap: 4px; min-width: 0; padding: 5px; border: 1px solid var(--el-border-color-light); border-radius: var(--ui-radius); background: var(--el-fill-color-light); color: var(--el-text-color-primary); font-size: 11px; cursor: pointer;
+          .versionThumbnail { height: 66px; pointer-events: none; }
+          &.active { border-color: var(--el-color-primary-light-5); background: var(--el-color-primary-light-9); }
           &:focus-visible { outline: 2px solid var(--el-color-primary); }
         }
       }
@@ -706,27 +884,32 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(saveTimer); window.removeE
       span { color: var(--el-text-color-secondary); font-size: 10px; } strong { font-size: 16px; }
     }
     .sidebarWarning { margin: 0; padding: 8px; border-radius: 4px; color: var(--el-color-warning-dark-2); background: var(--el-color-warning-light-9); font-size: 11px; line-height: 1.5; }
-    label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--el-text-color-regular); }
+    label:not([class^="el-"]) { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--el-text-color-regular); }
     .formRow, .sectionHeading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
     .sectionHeading { margin-bottom: 16px; h2, h3 { margin: 0 auto 0 0; } }
     .referenceGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px;
       article { height: 160px; display: flex; flex-direction: column; min-height: 0; span { font-size: 12px; } }
     }
   }
-  @media (max-width: 1150px) { .workspaceHeader { .stepNavigation { flex: 1; min-width: 0; justify-content: flex-start; } } .workspaceBody { grid-template-columns: 156px minmax(0, 1fr); &.settingsHidden { grid-template-columns: 156px minmax(0, 1fr); } &.creationStep { grid-template-columns: minmax(0, 1fr); } &.scriptStep { grid-template-columns: minmax(0, 1fr) 260px; } .generationSidebar { grid-column: 1 / -1; max-height: 300px; border-top: 1px solid var(--el-border-color); } .stepContent .scriptTable { overflow-x: auto; .scriptRow, .scriptTableHeading { min-width: 650px; } } } }
+  @media (max-width: 1150px) { .workspaceBody { grid-template-columns: 156px minmax(0, 1fr); &.settingsHidden { grid-template-columns: 156px minmax(0, 1fr); } &.creationStep { grid-template-columns: minmax(0, 1fr); } &.scriptStep { grid-template-columns: minmax(0, 1fr) 260px; } .generationSidebar { grid-column: 1 / -1; max-height: 300px; border-top: 1px solid var(--el-border-color); } &.creationStep, &.previewStep { .generationSidebar { max-height: min(300px, 32dvh); } } .stepContent .scriptTable { overflow-x: auto; .scriptRow, .scriptTableHeading { min-width: 650px; } } } }
+  @media (max-width: 1150px) {
+    .workspaceBody:not(.settingsHidden):not(.scriptStep) { grid-template-rows: minmax(0, 1fr) auto; }
+    .workspaceBody.previewStep:not(.settingsHidden) { grid-template-columns: 156px minmax(0, 1fr); }
+  }
   @media (max-width: 650px) {
-    .workspaceHeader { padding: 12px 16px; .stepNavigation { justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; button { flex-shrink: 0; } } }
+    .comicWorkflowBar { .stepNavigation { min-width: 0; flex-wrap: nowrap; overflow-x: auto; button { flex-shrink: 0; } } }
     .workspaceFooter { padding: 10px 12px; gap: 8px; font-size: 12px; span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
     .workspaceBody { display: flex; flex-direction: column; overflow-y: auto;
       .pageRail { max-height: 230px; flex-shrink: 0; overflow-y: auto; border-right: 0; border-bottom: 1px solid var(--el-border-color);
         .pageList { flex: none; display: flex; gap: 8px; overflow-x: auto; button { width: 150px; flex-shrink: 0; } }
       }
       .stepContent { overflow: visible; padding: 20px 12px;
-        .creationForm { padding: 16px; } .creationLayout { display: block; .creationCharacters { margin-top: 24px; } }
+        .previewToolbar { position: static; margin: -20px -12px 14px; padding-inline: 12px; }
         .scriptTable { overflow: visible; .scriptTableHeading { display: none; } .scriptRow { min-width: 0; grid-template-columns: minmax(0, 1fr); padding-bottom: 16px; } }
         .panelEditor .panelRow { grid-template-columns: minmax(0, 1fr); }
       }
       .generationSidebar { overflow: visible; max-height: none; }
+      &.creationStep, &.previewStep { .generationSidebar { max-height: none; } }
       .projectOverviewSidebar { border-left: 0; border-top: 1px solid var(--el-border-color); }
     }
   }

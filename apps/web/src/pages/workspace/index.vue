@@ -1,6 +1,5 @@
 <template>
   <main class="workspacePage" :inert="workspaceStore.projectLoadingVisible" :style="{ '--agentWidth': `${agentVisible ? agentWidth : 0}px` }">
-    <comicPanel v-if="comicOpened && isComicProject" v-show="activePanel === 'comic'" :key="workspaceStore.project?.directory" ref="comicPanelRef" class="comicPanel" embedded :active="activePanel === 'comic'" @openCanvas="switchPanel('canvas')" />
     <canvasPanel
       :key="workspaceStore.project?.directory"
       v-model:selectedTool="selectedTool"
@@ -10,11 +9,9 @@
       :inert="activePanel !== 'canvas'"
       :aria-hidden="activePanel !== 'canvas'"
       :active="activePanel === 'canvas'"
+      :createDefaultCanvas="createDefaultCanvas"
       :menuTarget="projectMenuTarget"
-      :settingsVisible="settingsVisible"
-      :toolbarTarget="toolbarTarget"
-      :toolbarVisible="activePanel === 'comic'"
-      @openTool="openComicTool" />
+      :settingsVisible="settingsVisible" />
     <keep-alive :key="workspaceStore.project?.directory" :max="1">
       <documentPanel
         v-if="activePanel === 'document'"
@@ -33,15 +30,8 @@
     <workspaceMenu class="workspaceMenu" @openSettings="settingsVisible = true" />
     <div ref="projectMenuTarget" class="projectMenuTarget" />
     <div class="workspaceTools">
-      <el-segmented :modelValue="activePanel" class="panelSwitcher" :options="panelOptions" size="small" aria-label="切换面板" @change="switchPanel">
-        <template #default="{ item }">
-          <span class="panelOption">
-            <component :is="item.icon" :size="15" aria-hidden="true" />
-            {{ item.label }}
-          </span>
-        </template>
-      </el-segmented>
-      <div v-show="activePanel !== 'comic'" class="bottomTools">
+      <workspacePanelSwitcher class="panelSwitcher" :activePanel="activePanel" :showComic="isComicProject" @change="switchPanel" />
+      <div class="bottomTools">
         <el-card v-if="activePanel === 'canvas'" class="toolMenu" shadow="never" :bodyStyle="{ padding: '2px 4px' }">
           <div class="toolMenuContent" role="toolbar" aria-label="画布工具">
             <el-tooltip content="添加节点" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
@@ -148,7 +138,6 @@
         </el-tooltip>
       </div>
     </div>
-    <div ref="toolbarTarget" class="toolbarTarget" />
     <floatingAgent ref="floatingAgentRef" v-model="agentVisible" :inert="workspaceStore.projectLoadingVisible" @resize="agentWidth = $event" />
     <settings v-model="settingsVisible" />
     <el-dialog v-model="contactVisible" :title="contactInfo.title" width="min(360px, calc(100vw - 32px))" alignCenter appendToBody>
@@ -171,9 +160,9 @@
 <script setup lang="ts">
 import { translate } from "@toonflow/i18n/vue";
 import { computed, defineAsyncComponent, nextTick, onMounted, onScopeDispose, provide, ref, shallowRef, watch, type ComponentPublicInstance } from "vue";
-import { onBeforeRouteLeave } from "vue-router";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import axios from "axios";
-import { IconVector, IconFileText, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase, IconSun, IconMoon, IconArrowBackUp, IconArrowForwardUp, IconKeyboard } from "@tabler/icons-vue";
+import { IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase, IconSun, IconMoon, IconArrowBackUp, IconArrowForwardUp, IconKeyboard } from "@tabler/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { QRCode } from "tdesign-vue-next";
 import type { AgentMention } from "@toonflow/server/agent/types";
@@ -189,16 +178,16 @@ import { useProviderBalances } from "@/lib/providerBilling";
 import canvasPanel from "./panels/canvas/canvasHost.vue";
 import type { DocumentNodeOptions } from "./panels/canvas/canvasFiles";
 import workspaceMenu from "./components/workspaceMenu.vue";
+import workspacePanelSwitcher from "./components/workspacePanelSwitcher.vue";
 import floatingAgent from "./components/floatingAgent.vue";
 
 const documentPanel = defineAsyncComponent(() => import("./panels/document/index.vue"));
-const comicPanel = defineAsyncComponent(() => import("@/pages/infiniteComic/index.vue"));
+const route = useRoute();
+const router = useRouter();
+const workspaceStore = useWorkspaceStore();
 const isComicProject = computed(() => workspaceStore.project?.projectKind === "infiniteComic");
-const comicOpened = ref(false);
-const comicPanelRef = ref<InstanceType<typeof comicPanel>>();
-const toolbarTarget = ref<HTMLElement>();
-
-const activePanel = ref<"canvas" | "document" | "comic">("canvas");
+const activePanel = ref<"canvas" | "document">(isComicProject.value && route.query.panel === "document" ? "document" : "canvas");
+const createDefaultCanvas = ref(activePanel.value === "canvas");
 const selectedTool = ref<"move" | "hand">("move");
 const appearanceLabel = computed(() => appearanceDark.value ? "深色模式，点击切换为浅色模式" : "浅色模式，点击切换为深色模式");
 const textHistory = shallowRef<CanvasTextHistory>();
@@ -232,7 +221,8 @@ function preventSideButtonNavigation(event: MouseEvent) {
   if (event.button === 3 || event.button === 4) event.preventDefault();
 }
 onMounted(() => {
-  anonymousData.track("workspace.canvas");
+  anonymousData.track(activePanel.value === "canvas" ? "workspace.canvas" : "workspace.document");
+  void openInitialWorkspaceTool();
   document.addEventListener("pointerdown", clearTextHistory, true);
   document.addEventListener("focusin", clearTextHistory, true);
   for (const eventName of sideButtonEvents) window.addEventListener(eventName, preventSideButtonNavigation, true);
@@ -242,14 +232,7 @@ onScopeDispose(() => {
   document.removeEventListener("focusin", clearTextHistory, true);
   for (const eventName of sideButtonEvents) window.removeEventListener(eventName, preventSideButtonNavigation, true);
 });
-const workspaceStore = useWorkspaceStore();
-if (isComicProject.value) { activePanel.value = "comic"; comicOpened.value = true; }
 useProviderBalances();
-const panelOptions = computed(() => [
-  ...(isComicProject.value ? [{ label: "漫画", value: "comic", icon: IconBook }] : []),
-  { label: "画布", value: "canvas", icon: IconVector },
-  { label: "文档", value: "document", icon: IconFileText },
-]);
 const agentVisible = ref(false);
 const agentWidth = ref(0);
 const settingsVisible = ref(false);
@@ -365,7 +348,6 @@ registerWorkspaceControl({
 });
 
 async function flushSave() {
-  await comicPanelRef.value?.flushSave();
   await documentPanelRef.value?.flushSave();
   await canvasPanelRef.value?.flushSave();
 }
@@ -402,15 +384,15 @@ onBeforeRouteLeave(async () => {
 });
 
 async function switchPanel(value: string | number | boolean) {
-  if (value !== "canvas" && value !== "document" && (value !== "comic" || !isComicProject.value)) return false;
+  if (value === "comic" && isComicProject.value) return !await router.push({ path: "/comic", query: { comicFile: route.query.comicFile } });
+  if (value !== "canvas" && value !== "document") return false;
   try {
-    if (activePanel.value === "comic") await comicPanelRef.value?.flushSave();
     if (activePanel.value === "document") await documentPanelRef.value?.flushSave();
-    if (value === "comic") { await canvasPanelRef.value?.flushSave(); comicOpened.value = true; }
     const changed = activePanel.value !== value;
+    if (value === "canvas" && !canvasPanelRef.value?.canvasId) createDefaultCanvas.value = true;
     activePanel.value = value;
     await nextTick();
-    if (changed && value !== "comic") anonymousData.track(value === "canvas" ? "workspace.canvas" : "workspace.document");
+    if (changed) anonymousData.track(value === "canvas" ? "workspace.canvas" : "workspace.document");
     return true;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "文本保存失败");
@@ -418,12 +400,21 @@ async function switchPanel(value: string | number | boolean) {
   }
 }
 
-async function openComicTool(tool: "nodes" | "upload" | "library" | "assets" | "history") {
-  if (!await switchPanel("canvas")) return;
+async function openInitialWorkspaceTool() {
+  const tool = route.query.tool;
+  if (!isComicProject.value || activePanel.value !== "canvas" || (tool !== "nodes" && tool !== "history" && tool !== "upload")) return;
+  const upload = workspaceStore.pendingCanvasUpload;
+  workspaceStore.pendingCanvasUpload = null;
+  if (tool === "upload" && (!upload || upload.directory !== workspaceStore.project?.directory)) return;
   try {
-    const panel = await waitForControlValue(() => canvasPanelRef.value?.canvasReady ? canvasPanelRef.value : undefined, AbortSignal.any([controlLifetime.signal, AbortSignal.timeout(30000)]));
-    await panel.openWorkspaceTool(tool);
-  } catch (error) { ElMessage.error(error instanceof Error ? error.message : "画布工具尚未就绪"); }
+    const signal = AbortSignal.any([controlLifetime.signal, AbortSignal.timeout(30000)]);
+    const panel = await waitForControlValue(() => canvasPanelRef.value?.canvasReady ? canvasPanelRef.value : undefined, signal);
+    if (activePanel.value !== "canvas") return;
+    if (tool === "upload" && upload) await panel.uploadFiles(upload.files);
+    else if (tool === "nodes" || tool === "history") panel.toggleWorkspaceTool(tool);
+  } catch (error) {
+    if (!controlLifetime.signal.aborted) ElMessage.error(error instanceof Error ? error.message : "画布工具尚未就绪");
+  }
 }
 
 function readDocumentNode(directory: string, canvasPath: string, nodeId: string) {
@@ -480,7 +471,6 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
   width: 100%;
   height: 100dvh;
   background-color: var(--el-bg-color);
-  .comicPanel { position: absolute; inset: 58px 0 0; width: calc(100% - var(--agentWidth, 0px)); height: calc(100% - 58px); }
 
   .canvasPanel {
     position: absolute;
@@ -502,7 +492,6 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
     z-index: 5;
   }
   .projectMenuTarget { position: absolute; top: 15px; left: 90px; z-index: 6; }
-  .toolbarTarget { display: contents; }
 
   .workspaceTools {
     position: absolute;
@@ -512,31 +501,12 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
     pointer-events: none;
 
     .panelSwitcher {
-      --el-border-radius-base: var(--ui-radius-large);
-      --el-segmented-color: var(--el-text-color-secondary);
-      --el-segmented-item-selected-color: var(--el-text-color-primary);
-      --el-segmented-item-selected-bg-color: color-mix(in srgb, var(--el-text-color-primary) 12%, var(--el-bg-color));
-      --el-segmented-item-hover-bg-color: color-mix(in srgb, var(--el-text-color-primary) 6%, transparent);
       position: absolute;
       top: 15px;
       left: 50%;
       z-index: 5;
-      min-height: 28px;
-      padding: 2px;
-      border: 1px solid var(--el-border-color-light);
-      font-size: 12px;
       transform: translateX(-50%);
       pointer-events: auto;
-
-      .panelOption {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 4px;
-        padding: 0 2px;
-        line-height: 22px;
-        font-weight: 500;
-      }
     }
 
     .bottomTools {

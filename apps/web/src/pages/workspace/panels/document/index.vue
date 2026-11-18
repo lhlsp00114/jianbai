@@ -17,6 +17,7 @@ import { settings, settingsStorage } from "@/stores/settings";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
 import { waitForControlValue } from "@/lib/mcpControl";
 import { isCanvasFile } from "@/pages/workspace/canvasFile";
+import { isComicStoragePath } from "@/pages/infiniteComic/comicPersistence";
 import type { DocumentNode, DocumentNodeOptions } from "../canvas/canvasFiles";
 import fileTree, { type FileAction, type FileTreeItem, type TreeSelection } from "./components/fileTree.vue";
 import openWithDialog from "./components/openWithDialog.vue";
@@ -251,6 +252,7 @@ async function openSelectionNow(selection: TreeSelection, signal: AbortSignal, f
   const resource: ExtResource = "filePath" in selection
     ? { kind: "file", directory, path: relativePath(selection.filePath), label: selection.label }
     : { kind: "canvasNode", directory, path: relativePath(selection.canvasPath), nodeId: selection.nodeId, label: selection.label };
+  if (resource.kind === "file" && isComicStoragePath(resource.path)) throw new Error("请在漫画工作区编辑漫画项目");
   if (resource.kind === "file" && /\.json$/i.test(resource.path) && await isCanvasFile(useWorkspaceFiles(directory), resource.path)) {
     throw new Error("画布文件请展开后打开节点，不能作为普通文本编辑");
   }
@@ -473,6 +475,7 @@ async function openSearchResult(location: { path: string; line: number; column: 
 async function replaceSearchFile(path: string, expectedText: string, nextText: string) {
   if (!directory || workspace.project?.directory !== directory || changingFiles) throw new Error("工作区或文件正在变更，请重新搜索");
   path = relativePath(path);
+  if (isComicStoragePath(path)) throw new Error("请在漫画工作区编辑漫画项目");
   changingFiles = true;
   fileRevision++;
   try {
@@ -531,6 +534,7 @@ async function executeFileAction(action: FileAction, item: FileTreeItem, target?
   if (changingFiles) throw new Error("文件操作尚未完成，请稍后再试");
   if (!item.path || (item.type === "node" && (action !== "delete" || !item.nodeId))) throw new Error("不能修改这个文件树条目");
   const sourcePath = relativePath(item.path);
+  if (isComicStoragePath(sourcePath)) throw new Error("请在漫画工作区管理漫画项目");
   if (target !== undefined) target = relativePath(target);
   if (item.type === "canvas" && ["rename", "move"].includes(action) && !target?.toLowerCase().endsWith(".json")) throw new Error("画布文件须保留 .json 后缀");
   changingFiles = true;
