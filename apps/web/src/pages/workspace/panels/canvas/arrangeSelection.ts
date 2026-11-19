@@ -3,13 +3,22 @@ import { fitGroupBounds, getSelectionRoots } from "./selectionNodes";
 
 export type ArrangeSelectionMode = "horizontal" | "vertical" | "grid";
 
+export function getArrangeTargets(selection: GraphNode[], nodes: GraphNode[]) {
+  const roots = getSelectionRoots(selection, nodes);
+  const [root] = roots;
+  if (roots.length === 1 && root?.type === "canvasGroup") {
+    return nodes.filter(node => node.parentNode === root.id && !node.hidden);
+  }
+  return roots;
+}
+
 export function arrangeSelection(flow: ReturnType<typeof useVueFlow>, selection: GraphNode[], mode: ArrangeSelectionMode) {
   const nodes = flow.getNodes.value;
-  const roots = getSelectionRoots(selection, nodes);
-  if (roots.length < 2) return;
+  const targets = getArrangeTargets(selection, nodes);
+  if (targets.length < 2) return;
   const byId = new Map(nodes.map(node => [node.id, node]));
   const affected = new Set<GraphNode>();
-  const items = roots.map(node => {
+  const items = targets.map(node => {
     if (byId.get(node.id) !== node) throw new Error("节点已变化，请重新选择后整理");
     if (node.draggable === false) throw new Error(`节点 ${node.id} 不允许移动`);
     const { width, height } = node.dimensions;

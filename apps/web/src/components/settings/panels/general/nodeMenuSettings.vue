@@ -123,7 +123,12 @@ import axios from "axios";
 import { translate } from "@toonflow/i18n/vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from "vue";
 import { ElMessage, type InputInstance } from "element-plus";
-import { IconBox, IconFolder, IconFolderOpen, IconFolderMinus, IconRestore, IconChevronRight, IconEdit, IconEye, IconEyeOff, IconPlus, IconDragDrop, IconFileText, IconPhoto, IconVideo, IconMusic, IconMusicBolt, IconCube3dSphere, IconPhotoAi, IconCameraAi } from "@tabler/icons-vue";
+import { IconBox, IconFolder, IconFolderOpen, IconFolderMinus, IconRestore, IconChevronRight, IconEdit, IconEye, IconEyeOff, IconPlus, IconDragDrop, IconPhoto, IconMusic, IconMusicBolt, IconPhotoSpark, IconMovie } from "@tabler/icons-vue";
+import textNodeIcon from "@toonflow/node-shared/textNodeIcon";
+import directorIcon from "@toonflow/node-shared/directorIcon";
+import videoIcon from "@toonflow/node-shared/videoIcon";
+import videoGenerationIcon from "@toonflow/node-shared/videoGenerationIcon";
+import { storyboardOption } from "@/pages/workspace/panels/canvas/storyboard";
 import { normalizeNodeMenu, resolveNodeMenu, serializeNodeMenu, type NodeMenuItem } from "@toonflow/server/nodeMenu";
 import { generalSettings, updateGeneralSettings } from "@/stores/settings";
 
@@ -132,14 +137,16 @@ type MenuColumn = { id: string; depth: number; label: string; items: NodeMenuIte
 type DropTarget = { parentId: string; index: number; itemId?: string; mode: "before" | "after" | "inside" | "end" };
 const levelNames = computed(() => [translate("一级"), translate("二级"), translate("三级")]);
 const nodeIcons: Record<string, Component> = {
-  "remote-textNode": IconFileText,
+  "remote-textNode": textNodeIcon,
   "remote-imageNode": IconPhoto,
-  "remote-videoNode": IconVideo,
+  "remote-videoNode": videoIcon,
   "remote-audioNode": IconMusic,
   "remote-audioGenerationNode": IconMusicBolt,
-  "remote-director3dNode": IconCube3dSphere,
-  "remote-imageGenerationNode": IconPhotoAi,
-  "remote-videoGenerationNode": IconCameraAi,
+  "remote-director3dNode": directorIcon,
+  "remote-imageGenerationNode": IconPhotoSpark,
+  "remote-videoGenerationNode": videoGenerationIcon,
+  "remote-scriptGeneratorNode": IconMovie,
+  [storyboardOption.type]: storyboardOption.icon,
 };
 const installedNodes = ref<{ type: string; label: string; enabled: boolean }[]>([]);
 const installedTypes = computed(() => new Set(installedNodes.value.map(node => node.type)));
@@ -358,7 +365,10 @@ async function loadNodes() {
     if (data.code !== 200 || !Array.isArray(data.data) || data.data.some(node => !node || typeof node.name !== "string" || !/^[a-z][a-zA-Z0-9]*$/.test(node.name))) {
       throw new Error("节点列表格式错误");
     }
-    installedNodes.value = data.data.map(node => ({ type: `remote-${node.name}`, label: typeof node.displayName === "string" && node.displayName ? node.displayName : node.name, enabled: node.enabled !== false }));
+    installedNodes.value = [
+      ...data.data.map(node => ({ type: `remote-${node.name}`, label: typeof node.displayName === "string" && node.displayName ? node.displayName : node.name, enabled: node.enabled !== false })),
+      { ...storyboardOption, enabled: true },
+    ];
     loadError.value = "";
   } catch {
     if (request === loadRequest) loadError.value = "节点列表读取失败，请重试。已保存的菜单配置仍会保留。";

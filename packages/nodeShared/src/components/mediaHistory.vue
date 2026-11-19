@@ -1,40 +1,39 @@
 <template>
   <el-popover v-if="inline && replaceable" ref="replacePopover" v-model:visible="replaceVisible" trigger="click" placement="bottom-end" :appendTo="historyTarget" :width="180" :disabled="disabled" :showArrow="false" :persistent="false" :popperStyle="{ padding: '6px' }">
     <template #reference>
-      <el-button class="historyTrigger replaceTrigger nodrag nopan nowheel" :icon="IconTransfer" :disabled="disabled" :aria-expanded="replaceVisible" title="替换素材" aria-label="替换素材" @pointerdown.stop @mousedown.stop @click.stop @dblclick.stop @keydown.stop />
+      <el-button ref="replaceTrigger" class="historyTrigger nodrag nopan nowheel" :class="{ replaceTrigger: !hideHistory }" :icon="IconTransfer" :disabled="disabled" :aria-expanded="replaceVisible" title="替换素材" aria-label="替换素材" @pointerdown.stop @mousedown.stop @click.stop @dblclick.stop @keydown.stop />
     </template>
     <div class="replaceMenu nodrag nopan nowheel" role="group" aria-label="替换素材来源" @pointerdown.stop @mousedown.stop @click.stop @dblclick.stop @keydown.stop @wheel.stop>
       <el-button :icon="IconUpload" :disabled="disabled" text @click="replaceVisible = false; emit('upload')">本地上传</el-button>
       <el-button :icon="IconPhoto" :disabled="disabled" text @click="replaceVisible = false; canvasVisible = true">画布{{ mediaLabel }}</el-button>
     </div>
   </el-popover>
-  <el-popover v-if="inline" ref="historyPopover" v-model:visible="visible" trigger="click" placement="right-start" :appendTo="historyTarget" :width="280" :disabled="disabled" :showArrow="false" :persistent="false" :popperStyle="{ padding: '12px', maxWidth: 'calc(100vw - 24px)' }">
+  <el-popover v-if="inline && !hideHistory" ref="historyPopover" v-model:visible="visible" trigger="click" placement="right-start" :appendTo="historyTarget" :width="316" :disabled="historyDisabled" :showArrow="false" :persistent="false" :popperStyle="{ padding: '12px', maxWidth: 'calc(100vw - 24px)' }" @before-enter="emit('open')">
     <template #reference>
-      <el-button ref="historyTrigger" class="historyTrigger nodrag nopan nowheel" :icon="IconHistory" :disabled="disabled" :aria-expanded="visible" title="历史记录" aria-label="历史记录" @pointerdown.stop @mousedown.stop @click.stop @dblclick.stop @keydown.stop />
+      <el-button ref="historyTrigger" class="historyTrigger historyToggle nodrag nopan nowheel" :icon="IconHistory" :disabled="historyDisabled" :aria-expanded="visible" :title="loadError || (loading ? '正在读取历史记录' : items.length < 2 ? '暂无其他版本' : '历史记录')" aria-label="历史记录" @pointerdown.stop @mousedown.stop @click.stop @dblclick.stop @keydown.stop />
     </template>
-    <section v-loading="loading" class="imageHistoryPanel nodrag nopan nowheel" aria-label="节点历史" @pointerdown.stop @mousedown.stop @click.stop @dblclick.stop @keydown.stop @wheel.stop>
+    <section v-loading="loading" class="historyPanel nodrag nopan nowheel" aria-label="节点历史" @pointerdown.stop @mousedown.stop @click.stop @dblclick.stop @keydown.stop @wheel.stop>
       <div class="historyHeader"><span>节点历史</span><span class="historyCount">{{ items.length }} {{ mediaType === 'video' ? '段' : '张' }}</span></div>
       <el-alert v-if="loadError || previewError" :title="loadError || previewError" type="error" :closable="false" />
       <div v-if="!loading && !items.length && !loadError" class="historyEmpty">暂无历史记录</div>
-      <div class="imageHistoryList">
-        <div v-for="(item, index) in pageItems" :key="item.url" class="imageHistoryRow" :class="{ current: item.url === currentUrl }">
-          <button class="selectHistory" type="button" :disabled="disabled || loading" :aria-pressed="item.url === currentUrl" :aria-label="`切换到历史${mediaLabel} ${(page - 1) * pageSize + index + 1}`" @click="chooseMedia(item)">
+      <div v-if="!loading && pageItems.length" class="historyGrid">
+        <div v-for="(item, index) in pageItems" :key="item.url" class="historyTile" :class="{ current: item.url === currentUrl }">
+          <button class="selectHistory" type="button" :disabled="disabled" :aria-pressed="item.url === currentUrl" :aria-label="`切换到历史${mediaLabel} ${(page - 1) * historyPageSize + index + 1}`" @click="chooseMedia(item)">
             <promptReferenceThumbnail class="historyThumbnail" :dataType="mediaType === 'video' ? 'VIDEO' : 'IMAGE'" :media="item" />
-            <span class="historyName">{{ mediaLabel }} {{ (page - 1) * pageSize + index + 1 }}</span>
             <span v-if="item.url === currentUrl" class="currentBadge">当前</span>
             <span v-else-if="item.url === selected?.url && !previewOnly" class="currentBadge">切换中</span>
           </button>
-          <el-button class="expandHistory" :icon="IconMaximize" text :disabled="disabled || loading" title="放大预览" :aria-label="`放大历史${mediaLabel} ${(page - 1) * pageSize + index + 1}`" @click="chooseMedia(item, true)" />
+          <el-button class="expandHistory" :icon="IconMaximize" text :disabled="disabled" title="放大预览" :aria-label="`放大历史${mediaLabel} ${(page - 1) * historyPageSize + index + 1}`" @click="chooseMedia(item, true)" />
         </div>
       </div>
-      <el-pagination v-model:currentPage="page" :pageSize="pageSize" :total="items.length" layout="prev, pager, next" hideOnSinglePage small />
+      <el-pagination v-model:currentPage="page" :pageSize="historyPageSize" :total="items.length" layout="prev, pager, next" :pagerCount="5" hideOnSinglePage small />
       <template v-if="mediaSrc && selected">
         <img v-if="mediaType === 'image'" class="pendingPreview" :src="mediaSrc" alt="" aria-hidden="true" @load="readPreview" @error="previewFailed" />
         <video v-else class="pendingPreview" :src="mediaSrc" muted playsinline preload="auto" aria-hidden="true" @loadeddata="readPreview" @error="previewFailed" />
       </template>
     </section>
   </el-popover>
-  <el-button v-else :icon="IconHistory" :disabled="disabled" text title="历史记录" aria-label="历史记录" @click.stop="visible = true">历史记录</el-button>
+  <el-button v-else-if="!inline" :icon="IconHistory" :disabled="disabled" text title="历史记录" aria-label="历史记录" @click.stop="visible = true">历史记录</el-button>
   <el-dialog v-if="inline && replaceable" v-model="canvasVisible" :title="`选择画布${mediaLabel}`" width="min(620px, calc(100vw - 32px))" appendToBody destroyOnClose>
     <div class="canvasImagePicker nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @click.stop @dblclick.stop @keydown.stop>
       <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" />
@@ -93,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
 import { ElAlert, ElButton, ElDialog, ElEmpty, ElLoading, ElPagination, ElPopover, ElImageViewer } from "element-plus";
 import { IconHistory, IconMaximize, IconTransfer, IconUpload, IconPhoto } from "@tabler/icons-vue";
@@ -103,8 +102,8 @@ import { useMediaPreview } from "../mediaPreview";
 import { getMediaMimeType } from "../mediaTypes";
 import promptReferenceThumbnail from "./promptReferenceThumbnail.vue";
 
-const props = defineProps<{ mediaType: "image" | "video"; current?: NodeMediaValue; disabled?: boolean; inline?: boolean; replaceable?: boolean }>();
-const emit = defineEmits<{ select: [value: NodeMediaValue]; upload: [] }>();
+const props = defineProps<{ mediaType: "image" | "video"; current?: NodeMediaValue; disabled?: boolean; inline?: boolean; replaceable?: boolean; hideHistory?: boolean }>();
+const emit = defineEmits<{ select: [value: NodeMediaValue]; upload: []; open: [] }>();
 const vLoading = ElLoading.directive;
 const { id, node } = useNode();
 const { viewport, getNodes } = useVueFlow();
@@ -116,8 +115,9 @@ const canvasPage = ref(1);
 const replacePopover = ref<InstanceType<typeof ElPopover>>();
 const historyPopover = ref<InstanceType<typeof ElPopover>>();
 const historyTrigger = ref<InstanceType<typeof ElButton>>();
+const replaceTrigger = ref<InstanceType<typeof ElButton>>();
 const historyTarget = computed(() => {
-  const element = historyTrigger.value?.$el as HTMLElement | undefined;
+  const element = (historyTrigger.value ?? replaceTrigger.value)?.$el as HTMLElement | undefined;
   return element?.closest<HTMLElement>(".vue-flow__node") ?? element?.closest<HTMLElement>(".nodeSkeleton") ?? undefined;
 });
 watch(() => (visible.value || replaceVisible.value) && props.inline ? [viewport.value.x, viewport.value.y, viewport.value.zoom,
@@ -131,20 +131,29 @@ const loading = ref(false);
 const loadError = ref("");
 const previewReadError = ref("");
 const previewReady = ref(false);
-const items = ref<NodeMediaValue[]>([]);
+const historyFiles = ref<NodeMediaValue[]>([]);
+const currentFile = computed(() => props.current && { ...props.current, url: props.current.url.replaceAll("\\", "/") });
+const items = computed(() => {
+  const results = new Map(historyFiles.value.map(file => [file.url, file]));
+  // 副本只补当前结果，不继承原节点目录的全部历史。
+  const current = currentFile.value;
+  if (current) results.set(current.url, current);
+  return [...results.values()].sort((left, right) => left.url.localeCompare(right.url, "zh-CN", { numeric: true }));
+});
+const historyDisabled = computed(() => props.disabled || loading.value || !!loadError.value || items.value.length < 2);
 const mediaLabel = computed(() => props.mediaType === "video" ? "视频" : "图片");
-const currentUrl = computed(() => props.current?.url.replaceAll("\\", "/"));
+const currentUrl = computed(() => currentFile.value?.url);
 const selected = ref<NodeMediaValue>();
 const page = ref(1);
 const pageSize = 20;
+const historyPageSize = computed(() => props.inline ? 9 : pageSize);
 const canvasMedia = computed(() => !canvasVisible.value ? [] : getNodes.value.flatMap(source => source.id === id ? [] :
   Object.entries(source.data.outputs ?? {}).flatMap(([handle, output]) => isNodeOutput(output) && output.dataType === (props.mediaType === "video" ? "VIDEO" : "IMAGE")
     ? [{ key: `${source.id}:${handle}`, name: String(source.data.label || mediaLabel.value), file: { ...output.value, url: output.value.url.replaceAll("\\", "/") } }] : [])));
 const canvasPageItems = computed(() => canvasMedia.value.slice((canvasPage.value - 1) * pageSize, canvasPage.value * pageSize));
-const pageItems = computed(() => items.value.slice((page.value - 1) * pageSize, page.value * pageSize));
+const pageItems = computed(() => items.value.slice((page.value - 1) * historyPageSize.value, page.value * historyPageSize.value));
 const previewFile = computed(() => visible.value || viewerVisible.value || canvasVisible.value ? selected.value : undefined);
 watch(previewFile, () => { previewReadError.value = ""; }, { flush: "sync" });
-// ACT: 仅展开时读取历史，每页最多加载 20 张缩略图；海量目录需服务端分页时再扩展 list。
 const previewUrl = files.useFileUrl(previewFile, () => { previewReadError.value = "历史文件读取失败，文件可能已被移动或删除"; });
 const { src: mediaSrc, preparing: preparingPreview, error: mediaError, handleError, handleLoaded } = useMediaPreview(previewUrl, () => props.mediaType);
 const previewError = computed(() => previewReadError.value || mediaError.value);
@@ -153,15 +162,28 @@ watch([previewFile, mediaSrc], () => { previewReady.value = false; }, { flush: "
 watch(() => props.disabled, disabled => { if (disabled) visible.value = replaceVisible.value = canvasVisible.value = false; });
 watch(replaceVisible, open => { if (open) visible.value = false; });
 watch(canvasVisible, () => { canvasPage.value = 1; selected.value = undefined; });
-watch([visible, () => props.inline ? props.current?.url : undefined], async ([open], _previous, onCleanup) => {
+function showCurrentPage() {
+  const index = items.value.findIndex(item => item.url === currentUrl.value);
+  page.value = Math.floor(Math.max(0, index) / historyPageSize.value) + 1;
+}
+
+watch(visible, open => {
+  if (!viewerVisible.value) selected.value = undefined;
+  if (open) showCurrentPage();
+});
+
+// 内联历史仅在选中节点后检查目录，媒体仍在展开后按页读取。
+const shouldReadHistory = computed(() => props.inline ? !props.hideHistory && !props.disabled : visible.value);
+watch([shouldReadHistory, () => props.inline ? currentUrl.value : undefined], async ([active, url], _previous, onCleanup) => {
+  if (!active) {
+    loading.value = false;
+    return;
+  }
+  // 切换到面板中已有的版本时保留当前页和缩略图。
+  if (props.inline && visible.value && !loading.value && historyFiles.value.some(file => file.url === url)) return;
   let cancelled = false;
   onCleanup(() => { cancelled = true; });
-  if (!viewerVisible.value) selected.value = undefined;
   loadError.value = "";
-  page.value = 1;
-  loading.value = false;
-  if (!open) return;
-  items.value = [];
   loading.value = true;
   try {
     const { entries } = await files.getWorkspaceFiles().list(`assets/${id}`).catch((error: { response?: { data?: { data?: { code?: string } } } }) => {
@@ -169,20 +191,15 @@ watch([visible, () => props.inline ? props.current?.url : undefined], async ([op
       return { entries: [] };
     });
     if (cancelled) return;
-    const results = new Map<string, NodeMediaValue>();
-    for (const entry of entries) {
+    historyFiles.value = entries.flatMap(entry => {
       const mimeType = getMediaMimeType({ name: entry.name, type: "" });
-      if (entry.type === "file" && mimeType?.startsWith(`${props.mediaType}/`)) {
-        const url = entry.path.replaceAll("\\", "/");
-        results.set(url, { url, mimeType });
-      }
+      return entry.type === "file" && mimeType?.startsWith(`${props.mediaType}/`)
+        ? [{ url: entry.path.replaceAll("\\", "/"), mimeType }] : [];
+    });
+    if (!props.inline) {
+      selected.value = currentFile.value ?? items.value[0];
+      showCurrentPage();
     }
-    // ACT: 副本使用新 ID，但当前结果仍可能引用原节点文件；只补当前结果，不继承原目录的全部历史。
-    const current = props.current && { ...props.current, url: props.current.url.replaceAll("\\", "/") };
-    if (current) results.set(current.url, current);
-    items.value = [...results.values()].sort((left, right) => left.url.localeCompare(right.url, "zh-CN", { numeric: true }));
-    selected.value = props.inline ? undefined : current ?? items.value[0];
-    page.value = Math.floor(Math.max(0, items.value.findIndex(item => item.url === current?.url)) / pageSize) + 1;
   } catch (error) {
     if (!cancelled) {
       const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -191,7 +208,7 @@ watch([visible, () => props.inline ? props.current?.url : undefined], async ([op
   } finally {
     if (!cancelled) loading.value = false;
   }
-});
+}, { immediate: true });
 
 function chooseMedia(item: NodeMediaValue, preview = false) {
   if (props.disabled || loading.value || (!preview && item.url === currentUrl.value)) return;
@@ -218,12 +235,19 @@ function previewFailed(event: Event) {
   handleError(event);
 }
 
-function selectOutput() {
+async function selectOutput() {
   if (props.disabled || loading.value || !selected.value || !previewUrl.value || !previewReady.value || previewError.value) return;
-  emit("select", { ...selected.value });
+  const item = selected.value;
+  emit("select", { ...item });
+  if (!props.inline) {
+    visible.value = false;
+    return;
+  }
+  // 让节点先接手文件 URL，随后才释放历史预览。
+  await nextTick();
+  if (selected.value !== item) return;
   canvasVisible.value = false;
-  if (props.inline) selected.value = undefined;
-  else visible.value = false;
+  selected.value = undefined;
 }
 </script>
 
@@ -249,6 +273,7 @@ function selectOutput() {
   --el-button-hover-text-color: #fff;
 
   &::before { content: ""; position: absolute; inset: -3px; border-radius: 8px; }
+  &.historyToggle:disabled { opacity: 0.5; }
   &.replaceTrigger { right: 34px; }
 }
 
@@ -301,7 +326,7 @@ function selectOutput() {
   .pendingPreview { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 }
 
-.imageHistoryPanel {
+.historyPanel {
   .historyHeader {
     display: flex;
     align-items: center;
@@ -313,47 +338,80 @@ function selectOutput() {
   }
 
   .historyEmpty { padding: 16px 4px; color: var(--el-text-color-secondary); text-align: center; }
-  .imageHistoryList {
-    max-height: 320px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
+  .historyGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
 
-    .imageHistoryRow {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px;
-      border: 1px solid transparent;
+    .historyTile {
+      position: relative;
+      aspect-ratio: 1;
+      min-width: 0;
+      border: 1px solid var(--el-border-color-lighter);
       border-radius: 8px;
+      background: var(--el-fill-color-light);
 
-      & + .imageHistoryRow { margin-top: 4px; }
-      &:hover { background: var(--el-fill-color); }
-      &.current { background: var(--el-fill-color-light); border-color: var(--el-border-color-light); }
+      &:hover,
+      &.current { border-color: var(--el-color-primary); }
 
       .selectHistory {
-        display: flex;
-        flex: 1;
-        align-items: center;
-        gap: 10px;
-        min-width: 0;
-        padding: 3px;
+        position: absolute;
+        inset: 0;
+        display: block;
+        width: 100%;
+        padding: 0;
         border: 0;
-        border-radius: 5px;
+        border-radius: 7px;
         background: transparent;
-        color: var(--el-text-color-primary);
         font: inherit;
-        text-align: left;
         cursor: pointer;
 
         &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: -2px; }
         &:disabled { cursor: default; opacity: 0.5; }
-        .historyThumbnail { width: 42px; height: 42px; border-radius: 6px; }
-        .historyName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .currentBadge { flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: var(--el-color-primary-light-9); color: var(--el-color-primary); font-size: 11px; }
+        .historyThumbnail {
+          width: 100%;
+          height: 100%;
+          border-radius: inherit;
+          background: transparent;
+
+          :deep(img),
+          :deep(video) { object-fit: contain; }
+        }
+
+        .currentBadge {
+          position: absolute;
+          bottom: 4px;
+          left: 4px;
+          padding: 1px 5px;
+          border-radius: 4px;
+          background: rgb(20 22 27 / 84%);
+          color: #fff;
+          font-size: 11px;
+        }
       }
 
-      .expandHistory { flex-shrink: 0; width: 32px; height: 32px; padding: 0; margin: 0; }
+      .expandHistory {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 24px;
+        height: 24px;
+        margin: 0;
+        padding: 0;
+        border-radius: 5px;
+        background: rgb(20 22 27 / 78%);
+        color: #fff;
+        opacity: 0;
+
+        &:hover,
+        &:focus-visible { background: rgb(20 22 27 / 94%); }
+      }
+
+      &:hover .expandHistory,
+      &:focus-within .expandHistory { opacity: 1; }
+      @media (hover: none) {
+        .expandHistory { opacity: 1; }
+      }
     }
   }
 

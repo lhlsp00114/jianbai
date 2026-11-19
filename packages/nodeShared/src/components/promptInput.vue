@@ -46,6 +46,7 @@ const props = defineProps<{
   selectMaterial?: (id: string) => Promise<Reference | undefined>;
   selectAsset?: () => Promise<Reference | undefined>;
   expandable?: boolean;
+  highlightImageMentions?: boolean;
   placeholder?: string;
 }>();
 const model = defineModel<AnyTagProps[][]>({ required: true });
@@ -74,7 +75,25 @@ const previewUrl = computed(() => {
 let sender: xSender | undefined;
 let resetTask: Promise<void> | undefined;
 
-defineExpose({ insertPreset });
+defineExpose({ insertPreset, insertReferenceAtCursor });
+
+async function insertReferenceAtCursor(id: string) {
+  const instance = sender;
+  if (!instance || selectingReference.value || instance.chatEditor.isComposition) return;
+  selectingReference.value = true;
+  try {
+    await instance.nextTick();
+    if (resetTask) await resetTask;
+    const reference = props.references.find(item => item.id === id);
+    if (sender !== instance || !reference || instance.chatEditor.isComposition) return;
+    closeMentionMenu();
+    instance.bus.emit(xSender.EventSet.EVENT_COMMON_DIALOG_CLOSE);
+    instance.focus("mark");
+    await instance.setHtml(referenceHtml(reference));
+  } finally {
+    selectingReference.value = false;
+  }
+}
 
 async function insertPreset(id: string) {
   const instance = sender;
@@ -228,7 +247,9 @@ function referenceHtml(reference: Reference) {
     tag.append(image);
   }
   const imageNumber = reference.dataType === "IMAGE" ? /^\{\{ref (\d+)\}\}$/.exec(reference.value)?.[1] : undefined;
-  tag.append(document.createTextNode(imageNumber ? `图片${imageNumber}` : reference.label || reference.name));
+  const highlighted = !!imageNumber && props.highlightImageMentions;
+  if (highlighted) tag.classList.add("highlightedImageMention");
+  tag.append(document.createTextNode(imageNumber ? `${highlighted ? "@" : ""}图片${imageNumber}` : reference.label || reference.name));
   return tag.outerHTML;
 }
 
@@ -613,6 +634,10 @@ function handleMentionKey(event: KeyboardEvent) {
     line-height: 18px;
     white-space: nowrap;
     vertical-align: middle;
+
+    &.highlightedImageMention {
+      color: light-dark(#426c17, #c1f77d);
+    }
 
     &.previewable {
       cursor: zoom-in;

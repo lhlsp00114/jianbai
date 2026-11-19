@@ -54,14 +54,87 @@ body,
   .panelSwitcher,
   .toolMenu,
   .sideToolbar,
-  .selectionToolbar,
-  .nodeSkeleton:not(.documentNode) :is(.mediaToolbar, .paintToolbar, .cropToolbar, .rotationToolbar)
+  .nodeSkeleton:not(.documentNode) :is(.paintToolbar, .cropToolbar, .rotationToolbar)
 ),
 .floatingAgent {
   background: color-mix(in srgb, var(--el-bg-color-overlay) 70%, transparent);
   backdrop-filter: blur(6px);
   border-color: var(--el-border-color-light);
   box-shadow: var(--el-box-shadow-light);
+}
+
+.workspacePage {
+  --nodeToolbarGap: 6px;
+
+  .nodeSkeleton:not(.documentNode) {
+    // 右键菜单使用虚拟锚点，空的下拉外壳不应在标题上方占一行。
+    > .el-dropdown:first-child { position: absolute; }
+
+    > .floatingSlot.topSlot:has(> .mediaToolbar) {
+      bottom: calc(100% + var(--nodeToolbarGap));
+    }
+  }
+
+  :is(.canvasToolbar, .nodeSkeleton:not(.documentNode) .mediaToolbar).el-card {
+    --el-card-padding: 6px;
+    --el-card-border-radius: 12px;
+    --toolbarHover: var(--el-fill-color);
+    overflow: visible;
+    background: var(--el-bg-color-overlay);
+    border-color: var(--el-border-color-light);
+    box-shadow: 0 4px 14px rgb(0 0 0 / 15%);
+    transition-property: background-color, border-color, box-shadow;
+
+    > .el-card__body,
+    .toolbarActions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      white-space: nowrap;
+    }
+
+    .el-button {
+      flex-shrink: 0;
+      width: auto;
+      min-width: 28px;
+      height: 28px;
+      margin: 0;
+      padding: 0 7px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+
+      > .el-icon { font-size: 16px; }
+      > .el-icon + span { margin-left: 5px; }
+      > span { display: inline-flex; align-items: center; gap: 3px; }
+
+      &.is-text:not(.is-disabled):is(:hover, :focus-visible, [aria-expanded="true"], [aria-pressed="true"]) {
+        background-color: var(--toolbarHover);
+      }
+    }
+
+    :is(.toolbarDivider, .el-divider--vertical) {
+      flex: 0 0 auto;
+      width: 0;
+      height: 16px;
+      margin: 0 4px;
+      border-left: 1px solid var(--el-border-color-light);
+    }
+
+    .el-select__wrapper {
+      min-height: 28px;
+      border-radius: 6px;
+      font-size: 13px;
+
+      &:not(.is-disabled, .is-focused) {
+        background: transparent;
+        box-shadow: none;
+
+        &:hover { background: var(--toolbarHover); }
+      }
+    }
+  }
 }
 
 .stream-markdown [data-stream-markdown="tooltip"] {

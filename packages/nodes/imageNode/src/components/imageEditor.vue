@@ -68,6 +68,7 @@ import { IconBrush, IconEraser, IconSquare, IconCircle, IconTypography, IconArro
 import { uploadNodeFile, useNodeFiles } from "@toonflow/nodes-scaffold/runtime";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
 import { useMediaPreview } from "@toonflow/node-shared/mediaPreview";
+import { getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 import { useImageVariationNode } from "../useImageVariationNode";
 import { buildInpaintPrompt, type InpaintDraftInput } from "../imageInpaint";
 import { getOutpaintLayout, type OutpaintDraftInput } from "../imageOutpaint";
@@ -401,8 +402,9 @@ async function saveEditedImage(edit: { kind: "crop"; rect: { x: number; y: numbe
       controller.signal.throwIfAborted();
       if (findNode(node.id) !== node || getCanvas?.()?.id !== canvasId || props.src !== source) throw new Error("原图片或画布已变化，请重新编辑");
       if (!nodeTypes?.value?.["remote-imageNode"]) throw new Error("图片节点插件已停用");
-      const outputWidth = 240 * width / height + 6;
-      const outputHeight = 278;
+      const previewSize = getMediaPreviewSize(width, height);
+      const outputWidth = previewSize.width + 6;
+      const outputHeight = previewSize.height + 38;
       const x = node.computedPosition.x + (node.dimensions.width || 320) + 80;
       let y = node.computedPosition.y;
       for (const other of [...getNodes.value].sort((left, right) => left.computedPosition.y - right.computedPosition.y)) {
@@ -683,7 +685,7 @@ defineExpose({ mode, busy, start, cancel, createInpaint, createOutpaint, createS
     }
   }
 
-  img { display: block; width: 100%; max-height: 240px; object-fit: contain; border-radius: var(--el-border-radius-base); }
+  img { display: block; width: 100%; object-fit: contain; border-radius: var(--el-border-radius-base); }
   &:has(.colorPreview.ready) > img { visibility: hidden; }
   &.cropping img { border-radius: 0; }
   .paintCanvas { position: absolute; max-width: 100%; max-height: 100%; height: 100%; touch-action: none; cursor: crosshair; }

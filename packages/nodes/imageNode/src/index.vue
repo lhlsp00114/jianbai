@@ -6,14 +6,14 @@
     :bottomVisible="node.selected && (lightingVisible || multiAngleVisible || outpaintVisible || editor?.mode === 'inpaint' || editor?.mode === 'smartEdit')"
     :bottomWidth="660"
     contentPadding="2px"
-    :resizeAspectRatio="previewUrl && imageWidth ? imageWidth / 240 : undefined"
+    :resizeAspectRatio="previewUrl ? imagePreviewRatio : undefined"
     selectionFrame
     topWidth="max-content"
     toolbarAction="focus"
     :downloadUrl="previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
     @fullscreen="previewVisible = true"
-    :style="{ width: previewUrl && imageWidth ? `${imageWidth + 6}px` : undefined }">
+    :style="{ width: !outputFile && !data.rotationDraft ? `${emptyMediaCardWidth}px` : previewUrl && imageWidth ? `${imageWidth + 6}px` : undefined }">
     <template v-if="imageResolution" #titleMeta><span :title="`${imageResolution} 像素`" :aria-label="`图片分辨率：${imageResolution}`">{{ imageResolution }}</span></template>
     <template v-if="(editor?.mode && editor.mode !== 'smartEdit') || data.rotationDraft" #top><div ref="paintToolbar" /></template>
     <template #topActions>
@@ -24,20 +24,12 @@
       <el-button :icon="IconSun" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="打光" aria-label="打光" @click.stop="openLighting">打光</el-button>
       <el-button :icon="IconCameraRotate" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="多角度" aria-label="多角度" @click.stop="openMultiAngle">多角度</el-button>
       <el-button :icon="IconLayoutGrid" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl" :loading="gridSplit?.splitting" text title="宫格切分" aria-label="宫格切分" @click.stop="gridSplit?.open($event)">宫格切分</el-button>
-      <el-button
-        :icon="IconTransfer"
-        :loading="uploading"
-        :disabled="lighting?.generating || multiAngle?.generating || panorama?.busy"
-        text
-        title="替换图片"
-        aria-label="替换图片"
-        @click.stop="fileInput?.click()">替换图片</el-button>
       <imageEditMenu :loading="creatingRotation" :disabled="uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting || inpaintPrompt?.creating" @rotate="createRotation(outputFile)" @crop="startEditor('crop')" @color="startEditor('color')" />
     </template>
     <template #topRightActions>
       <el-button :icon="IconPencil" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="标记" aria-label="标记" @click.stop="startEditor('mark')" />
     </template>
-    <div class="imageContent" :class="{ empty: !outputFile, outpainting: outpaintVisible, nopan: !outpaintVisible }">
+    <div class="imageContent" :class="{ empty: !outputFile && !data.rotationDraft, outpainting: outpaintVisible, nopan: !outpaintVisible }">
       <imageRotation
         v-if="data.rotationDraft"
         ref="rotationEditor"
@@ -70,6 +62,16 @@
         aria-label="上传图片"
         @dblclick.stop
         @click.stop="fileInput?.click()">上传</el-button>
+      <mediaHistory
+        v-if="node.selected && outputFile && !data.rotationDraft && !editor?.mode && !outpaintVisible"
+        mediaType="image"
+        inline
+        replaceable
+        hideHistory
+        :current="outputFile"
+        :disabled="uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || gridSplit?.splitting || inpaintPrompt?.creating"
+        @select="outputs.image = { dataType: 'IMAGE', value: $event }"
+        @upload="fileInput?.click()" />
     </div>
     <template v-if="lightingVisible || multiAngleVisible || outpaintVisible || editor?.mode === 'inpaint' || editor?.mode === 'smartEdit'" #bottom>
       <div v-if="lightingVisible" ref="lightingTarget" />
@@ -97,10 +99,11 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { IconPhoto, IconUpload, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconSparkles, IconArrowsMaximize } from "@tabler/icons-vue";
+import { IconPhoto, IconUpload, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconSparkles, IconArrowsMaximize } from "@tabler/icons-vue";
 import { ElButton, ElMessage } from "element-plus";
 import { nodeSkeleton, nodeTools, useNode, uploadNodeFile, z, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
+import { emptyMediaCardWidth, getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 import imageGridSplit from "./components/imageGridSplit.vue";
 import imageEditor from "./components/imageEditor.vue";
 import imageEditMenu from "./components/imageEditMenu.vue";
@@ -115,6 +118,7 @@ import imageOutpaint from "./components/imageOutpaint.vue";
 import type { OutpaintDraftInput } from "./imageOutpaint";
 import { useImageRotation, type ImageRotation } from "./useImageRotation";
 import imageViewer from "@toonflow/node-shared/imageViewer";
+import mediaHistory from "@toonflow/node-shared/mediaHistory";
 
 defineOptions({
   inheritAttrs: false,
@@ -150,12 +154,13 @@ const uploading = ref(false);
 const previewVisible = ref(false);
 const smartEditToolbar = ref<HTMLElement>();
 const imageWidth = ref(0);
+const imagePreviewRatio = ref<number>();
 const imageResolution = ref("");
 const imageNaturalWidth = ref(0);
 const imageNaturalHeight = ref(0);
 
 const outputFile = computed(() => outputs.value.image?.dataType === "IMAGE" ? outputs.value.image.value : undefined);
-watch(outputFile, () => { imageResolution.value = ""; imageNaturalWidth.value = imageNaturalHeight.value = 0; outpaintVisible.value = false; }, { flush: "sync" });
+watch(outputFile, () => { imageResolution.value = ""; imageWidth.value = imageNaturalWidth.value = imageNaturalHeight.value = 0; outpaintVisible.value = false; }, { flush: "sync" });
 const previewUrl = files.useFileUrl(
   outputFile,
   (error) => showError(error, "图片读取失败")
@@ -207,14 +212,16 @@ async function resizeImage(event: Event) {
   imageResolution.value = `${image.naturalWidth} × ${image.naturalHeight}`;
   imageNaturalWidth.value = image.naturalWidth;
   imageNaturalHeight.value = image.naturalHeight;
-  imageWidth.value = 240 * image.naturalWidth / image.naturalHeight;
+  imageWidth.value = getMediaPreviewSize(image.naturalWidth, image.naturalHeight).width;
+  imagePreviewRatio.value = image.naturalWidth / image.naturalHeight;
   await nextTick();
   updateNodeInternals();
 }
 
 async function resizeRotation(size: { width: number; height: number }) {
   imageResolution.value = `${size.width} × ${size.height}`;
-  imageWidth.value = 240 * size.width / size.height;
+  imageWidth.value = getMediaPreviewSize(size.width, size.height).width;
+  imagePreviewRatio.value = size.width / size.height;
   await nextTick();
   updateNodeInternals();
 }
@@ -322,6 +329,7 @@ function showError(error: unknown, fallback: string) {
   }
 
   &.empty {
+    .nodeSkeleton:not(.resized) & { min-height: 234px; }
     display: flex;
     align-items: center;
     justify-content: center;

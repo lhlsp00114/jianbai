@@ -86,6 +86,7 @@ import { useNodeFiles, useNodeFfmpeg, useNodeEvent, type WorkspaceFiles, type No
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
 import { processVideo } from "../videoProcessing";
 import { useMediaPreview } from "@toonflow/node-shared/mediaPreview";
+import { getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 
 const props = defineProps<{ file?: NodeMediaValue; src: string; disabled?: boolean }>();
 const { node } = useNode();
@@ -382,9 +383,11 @@ async function process() {
       end: clipEnd,
     }, current.signal);
     current.signal.throwIfAborted();
-    const width = Math.max(320, media.width && media.height ? 240 * media.width / media.height + 18 : 320);
+    const previewSize = media.width && media.height ? getMediaPreviewSize(media.width, media.height) : undefined;
+    const width = Math.max(320, (previewSize?.width ?? 0) + 18);
+    const rowHeight = (previewSize?.height ?? 240) + 80;
     const x = node.computedPosition.x + node.dimensions.width + 80;
-    const height = outputs.length * 320;
+    const height = outputs.length * rowHeight;
     let y = node.computedPosition.y;
     for (const other of [...getNodes.value].sort((left, right) => left.computedPosition.y - right.computedPosition.y)) {
       const position = other.computedPosition;
@@ -393,7 +396,7 @@ async function process() {
     const nodes: Node[] = outputs.map((output, index) => ({
       id: output.id,
       type: output.type,
-      position: { x, y: y + index * 320 },
+      position: { x, y: y + index * rowHeight },
       data: {
         label: `${node.data.label || "视频"} · ${output.audio ? "音轨" : operation === "separate" ? "静音视频" : `${clipStart.toFixed(2)}–${clipEnd.toFixed(2)} 秒`}`,
         outputs: { [output.audio ? "audio" : "video"]: { dataType: output.audio ? "AUDIO" : "VIDEO", value: { url: output.path, mimeType: output.audio ? "audio/mp4" : "video/mp4" } } },

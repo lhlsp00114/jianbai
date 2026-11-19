@@ -1,5 +1,5 @@
 <template>
-  <div v-if="viewportEmpty && !dismissed" class="canvasViewportHint" @pointerdown.stop @click.stop @dblclick.stop @wheel.stop>
+  <div v-if="!moving && viewportEmpty && !dismissed" class="canvasViewportHint" @pointerdown.stop @click.stop @dblclick.stop @wheel.stop>
     <span class="hintText" role="status">当前视窗没有节点</span>
     <el-button class="returnButton" type="primary" text @click="fitView({ duration: 250 })">返回节点</el-button>
     <el-button class="closeButton" text aria-label="关闭提示" @click="dismissed = true">
@@ -9,17 +9,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import { getNodesInside, useVueFlow } from "@vue-flow/core";
 import { IconX } from "@tabler/icons-vue";
 
 const { nodes, dimensions, viewport, fitView } = useVueFlow();
 const dismissed = ref(false);
+const settledViewport = shallowRef({ ...viewport.value });
+const moving = ref(false);
+watch(() => [viewport.value.x, viewport.value.y, viewport.value.zoom], (_, __, onCleanup) => {
+  moving.value = true;
+  const timer = window.setTimeout(() => {
+    settledViewport.value = { ...viewport.value };
+    moving.value = false;
+  }, 120);
+  onCleanup(() => window.clearTimeout(timer));
+});
 const viewportEmpty = computed(() => {
   const { width, height } = dimensions.value;
   return width > 0 && height > 0
     && nodes.value.some(node => !node.hidden)
-    && !getNodesInside(nodes.value, { x: 0, y: 0, width, height }, viewport.value, true).length;
+    && !getNodesInside(nodes.value, { x: 0, y: 0, width, height }, settledViewport.value, true).length;
 });
 
 watch(viewportEmpty, empty => {

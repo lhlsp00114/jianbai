@@ -1,4 +1,17 @@
-import type { GraphNode } from "@vue-flow/core";
+import type { GraphNode, Node, Rect } from "@vue-flow/core";
+
+export function createGroupNode(bounds: Rect, parentNode?: string): Node {
+  return {
+    id: crypto.randomUUID(),
+    type: "canvasGroup",
+    parentNode,
+    position: { x: bounds.x - 24, y: bounds.y - 40 },
+    style: { width: `${bounds.width + 48}px`, height: `${bounds.height + 64}px` },
+    connectable: false,
+    expandParent: false,
+    data: { label: "分组" },
+  };
+}
 
 export function getSelectionRoots(selection: GraphNode[], nodes: GraphNode[]) {
   const selected = new Map(selection.map(node => [node.id, node]));

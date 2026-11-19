@@ -20,7 +20,7 @@
       </div>
       <div v-else-if="!outputs.text.value.trim() && textReady" class="emptyState">
         <div class="emptyIcon">
-          <icon-menu-2 :size="34" />
+          <textNodeIcon :size="34" stroke="1.4" />
         </div>
         <div class="emptyLabel">尝试：</div>
         <div class="quickActions">
@@ -86,7 +86,8 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
 import { ElAlert, ElButton, ElCard, ElSelect, ElDialog, ElOption, ElOptionGroup, ElMessage, ElMessageBox } from "element-plus";
-import { IconEdit, IconFileText, IconSparkles, IconArrowUp, IconMenu2, IconPencil, IconVideo, IconPhoto, IconMusic, IconCopy } from "@tabler/icons-vue";
+import { IconEdit, IconSparkles, IconArrowUp, IconPencil, IconVideo, IconPhoto, IconMusic, IconCopy } from "@tabler/icons-vue";
+import textNodeIcon from "@toonflow/node-shared/textNodeIcon";
 import { getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, validateConnection, z, type NodeAiModel, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { useVueFlow } from "@vue-flow/core";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
@@ -103,7 +104,7 @@ type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["model
 
 defineOptions({
   inheritAttrs: false,
-  icon: IconFileText,
+  icon: textNodeIcon,
   handles: [
     { id: "in", type: "target", dataType: ["VIDEO", "IMAGE", "STRING", "FILE"], label: "视频、图片、文本、文件输入" },
     { id: "text", type: "source", dataType: "STRING", label: "文本输出" },

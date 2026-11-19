@@ -1,3 +1,5 @@
+export const storyboardNodeType = "canvasStoryboard";
+
 export type NodeMenuItem = {
   id: string;
   label: string;
@@ -96,7 +98,7 @@ export function serializeNodeMenu(items: NodeMenuItem[], installedTypes?: Readon
   function serialize(items: NodeMenuItem[]): StoredNodeMenuItem[] {
     return items.flatMap((item): StoredNodeMenuItem[] => {
       if (item.type) {
-        if (installedTypes && !installedTypes.has(item.type)) return [];
+        if (installedTypes && item.type !== storyboardNodeType && !installedTypes.has(item.type)) return [];
         return [item.alias || item.hidden
           ? { type: item.type, ...(item.alias ? { alias: item.alias } : {}), ...(item.hidden ? { hidden: true as const } : {}) }
           : item.type];

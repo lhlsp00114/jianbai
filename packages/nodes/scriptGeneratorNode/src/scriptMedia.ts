@@ -1,4 +1,5 @@
 import { inject, nextTick } from "vue";
+import { emptyMediaCardWidth } from "@toonflow/node-shared/mediaPreviewSize";
 import { useNode, useVueFlow, type Node, type Edge } from "@vue-flow/core";
 import { useNodeToolsContext, useNodeInputs, validateConnection, type NodeMediaModel, type NodeOutput, getNodeModelIdentity, getNodeModelKey } from "@toonflow/nodes-scaffold/runtime";
 import { isNodeOutput } from "@toonflow/nodes-scaffold/values";
@@ -89,7 +90,7 @@ export function useScriptMedia() {
     // 生成节点出图后按 240 高度等比显示，横幅比例会宽于默认列距；按画幅加宽列距，避免相邻节点互相遮挡。
     const [ratioWidth, ratioHeight] = ratio.split(":").map(Number);
     const aspect = ratioWidth! / ratioHeight!;
-    const columnWidth = Number.isFinite(aspect) && aspect > 0 ? Math.max(420, Math.ceil(240 * aspect) + 60) : 420;
+    const columnWidth = Number.isFinite(aspect) && aspect > 0 ? Math.max(emptyMediaCardWidth, Math.ceil(240 * aspect)) + 60 : emptyMediaCardWidth + 60;
     const x = assetsOnly && kind === "image" ? node.computedPosition.x - columns * columnWidth - 100 : node.computedPosition.x + (node.dimensions.width || 340) + 100;
     let y = node.computedPosition.y;
     const totalHeight = Math.ceil(newCount / columns) * 400;

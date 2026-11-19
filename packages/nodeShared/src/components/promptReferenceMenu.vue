@@ -43,7 +43,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { IconChevronRight, IconFileText, IconFolder, IconMusic, IconPhoto, IconSearch, IconVideo } from "@tabler/icons-vue";
+import { IconChevronRight, IconFolder, IconMusic, IconPhoto, IconSearch, IconVideo } from "@tabler/icons-vue";
+import textNodeIcon from "./textNodeIcon.vue";
 import type { MaterialMention, ReferenceMention } from "../useNodeReferences";
 import promptReferenceThumbnail from "./promptReferenceThumbnail.vue";
 
@@ -69,7 +70,7 @@ const categories = [
   { type: "IMAGE", label: "图片", icon: IconPhoto },
   { type: "VIDEO", label: "视频", icon: IconVideo },
   { type: "AUDIO", label: "音频", icon: IconMusic },
-  { type: "STRING", label: "文本", icon: IconFileText },
+  { type: "STRING", label: "文本", icon: textNodeIcon },
 ] as const;
 const groups = computed(() => categories.map(group => ({ ...group, items: props.materials.filter(item => item.dataType === group.type) })));
 const matches = (name: string) => name.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase());

@@ -123,6 +123,6 @@ export function useNodeReferences(handleId = "in") {
   return { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference };
 }
 
-function referenceKey(item: { source: string; sourceHandle: string }) {
+export function referenceKey(item: { source: string; sourceHandle: string }) {
   return encodeURIComponent(JSON.stringify([item.source, item.sourceHandle]));
 }

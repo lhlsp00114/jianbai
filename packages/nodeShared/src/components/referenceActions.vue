@@ -10,6 +10,7 @@
       </template>
     </el-dropdown>
     <el-button :icon="IconPhoto" :disabled="disabled || busy" text @click="startPicking">画布参考</el-button>
+    <el-button v-if="presetPrompts && openOfficialPrompts" :icon="IconMessage" :disabled="disabled || busy" text @click="openOfficialPrompts(id)">预设提示词</el-button>
     <input ref="fileInput" type="file" accept="image/*" hidden aria-label="上传本地参考图片" :disabled="disabled || busy" @change="uploadReference" />
   </div>
   <teleport to="body">
@@ -26,11 +27,12 @@
 import { inject, nextTick, onScopeDispose, ref, watch, type Ref } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
 import { ElButton, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage, useZIndex } from "element-plus";
-import { IconPlus, IconUpload, IconFolder, IconPhoto, IconX } from "@tabler/icons-vue";
+import { IconPlus, IconUpload, IconFolder, IconPhoto, IconMessage, IconX } from "@tabler/icons-vue";
 import { uploadNodeFile, useNodeFiles } from "@toonflow/nodes-scaffold/workspaceFiles";
 import type { NodeHandle } from "@toonflow/nodes-scaffold/connection";
 import type { MaterialMention, ReferenceMention } from "../useNodeReferences";
 import { getMediaMimeType } from "../mediaTypes";
+import { getMediaPreviewSize } from "../mediaPreviewSize";
 import { showNodeError } from "../showNodeError";
 
 const props = defineProps<{
@@ -38,8 +40,10 @@ const props = defineProps<{
   selectMaterial: (id: string) => Promise<ReferenceMention | undefined>;
   selectAsset: () => Promise<ReferenceMention | undefined>;
   disabled?: boolean;
+  presetPrompts?: boolean;
 }>();
 const { id, node } = useNode();
+const openOfficialPrompts = inject<(targetId: string) => void>("openOfficialPrompts");
 const flow = useVueFlow();
 const files = useNodeFiles();
 const batchHistory = inject<(action: () => Promise<void>) => Promise<void>>("batchCanvasHistory", action => action());
@@ -93,13 +97,15 @@ async function uploadReference(event: Event) {
     await image.decode();
     if (!image.naturalWidth || !image.naturalHeight) throw new Error("无法读取该图片");
     if (disposed || getCanvas?.()?.id !== canvasId || flow.findNode(id) !== node) return;
-    const width = 240 * image.naturalWidth / image.naturalHeight + 18;
+    const previewSize = getMediaPreviewSize(image.naturalWidth, image.naturalHeight);
+    const width = previewSize.width + 18;
+    const height = previewSize.height + 60;
     const x = node.computedPosition.x - width - 80;
     let y = node.computedPosition.y;
     for (const other of [...flow.getNodes.value].sort((left, right) => left.computedPosition.y - right.computedPosition.y)) {
       const position = other.computedPosition;
       if (position.x < x + width && position.x + (other.dimensions.width || 320) > x
-        && position.y < y + 300 && position.y + (other.dimensions.height || 300) > y) y = position.y + (other.dimensions.height || 300) + 40;
+        && position.y < y + height && position.y + (other.dimensions.height || 300) > y) y = position.y + (other.dimensions.height || 300) + 40;
     }
     const url = await uploadNodeFile(workspace, sourceId, file);
     if (disposed || getCanvas?.()?.id !== canvasId || flow.findNode(id) !== node) return;
@@ -189,12 +195,13 @@ onScopeDispose(() => { disposed = true; finishPicking(false); });
 <style scoped lang="scss">
 .referenceActions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   margin-bottom: 10px;
   padding-right: 34px;
 
-  .el-button { height: 30px; margin: 0; padding: 0 9px; border-radius: 6px; color: var(--el-text-color-regular); background: var(--el-fill-color-light); }
+  .el-button { height: 30px; margin: 0; padding: 0 9px; border-radius: 6px; background: var(--el-fill-color-light); }
 }
 .referencePickBanner {
   position: fixed;

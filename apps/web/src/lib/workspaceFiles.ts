@@ -8,7 +8,34 @@ type WorkspaceEntry = { name: string; path: string; type: "file" | "directory" }
 export type TextSnapshot = { text: string; revision: string; encoding: "utf-8" | "utf-8-bom" | "utf-16le" | "utf-16be" };
 const client = axios.create({ baseURL: "/api/workspaces/files", headers: { "x-toonflow-workspace": "1" } });
 registerApiLanguage(client);
-const fileUrls = new Map<string, { directory: string; path: string; url: Promise<string>; users: number }>();
+const fileUrls = new Map<string, { directory: string; path: string; url: Promise<string>; users: number; controller: AbortController }>();
+const canvasPreviewConcurrency = 4;
+const canvasPreviewQueue: (() => void)[] = [];
+let activeCanvasPreviews = 0;
+
+function queueCanvasPreview(read: () => Promise<string>, signal: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const cancel = () => {
+      const index = canvasPreviewQueue.indexOf(start);
+      if (index >= 0) canvasPreviewQueue.splice(index, 1);
+      reject(signal.reason);
+    };
+    const start = () => {
+      signal.removeEventListener("abort", cancel);
+      activeCanvasPreviews++;
+      void read().then(resolve, reject).finally(() => {
+        activeCanvasPreviews--;
+        canvasPreviewQueue.shift()?.();
+      });
+    };
+    // ACT: 按进入视口的顺序读取，限制同时读取的完整媒体文件数。
+    if (activeCanvasPreviews < canvasPreviewConcurrency) start();
+    else {
+      canvasPreviewQueue.push(start);
+      signal.addEventListener("abort", cancel, { once: true });
+    }
+  });
+}
 
 function cachePath(path: string) {
   return path.replaceAll("\\", "/").split("/").filter(part => part && part !== ".").join("/").toLowerCase();
@@ -24,7 +51,7 @@ function invalidateUrls(directory: string, path: string) {
   }
 }
 
-export default function useWorkspaceFiles(directory?: MaybeRefOrGetter<string | undefined>) {
+export default function useWorkspaceFiles(directory?: MaybeRefOrGetter<string | undefined>, { queueCanvasPreviews = false } = {}) {
   const workspace = directory === undefined ? useWorkspaceStore() : undefined;
   function getDirectory() {
     const path = directory === undefined ? workspace?.project?.directory : toValue(directory);
@@ -62,9 +89,14 @@ export default function useWorkspaceFiles(directory?: MaybeRefOrGetter<string | 
     const key = JSON.stringify([directory, path, mimeType]);
     let entry = fileUrls.get(key);
     if (!entry) {
-      const url = client.get<Blob>("/read", { params: { directory, path }, responseType: "blob" })
-        .then(({ data }) => URL.createObjectURL(mimeType ? new Blob([data], { type: mimeType }) : data));
-      entry = { directory, path, url, users: 0 };
+      const controller = new AbortController();
+      const read = async () => {
+        const { data } = await client.get<Blob>("/read", { params: { directory, path }, responseType: "blob", signal: controller.signal });
+        controller.signal.throwIfAborted();
+        return URL.createObjectURL(mimeType && data.type !== mimeType ? new Blob([data], { type: mimeType }) : data);
+      };
+      const url = queueCanvasPreviews ? queueCanvasPreview(read, controller.signal) : read();
+      entry = { directory, path, url, users: 0, controller };
       fileUrls.set(key, entry);
       const current = entry;
       void url.catch(() => { if (fileUrls.get(key) === current) fileUrls.delete(key); });
@@ -79,7 +111,8 @@ export default function useWorkspaceFiles(directory?: MaybeRefOrGetter<string | 
         released = true;
         if (--current.users) return;
         if (fileUrls.get(key) === current) fileUrls.delete(key);
-        // 等待中的读取也要在最后一个使用者离开后释放，不撤销其他节点仍使用的 URL。
+        current.controller.abort();
+        // 已完成的 URL 在最后一个使用者离开后释放。
         void current.url.then(url => URL.revokeObjectURL(url), () => {});
       },
     };

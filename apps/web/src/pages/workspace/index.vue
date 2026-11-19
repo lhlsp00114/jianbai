@@ -470,6 +470,8 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
   position: relative;
   width: 100%;
   height: 100dvh;
+  // 画布的选区端口和工具条可以移出视口，不能把工作区变成浏览器滚动区域。
+  overflow: clip;
   background-color: var(--el-bg-color);
 
   .canvasPanel {

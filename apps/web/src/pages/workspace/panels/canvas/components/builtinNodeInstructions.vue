@@ -1,7 +1,7 @@
 <template>
   <div class="builtinInstructions">
     <el-alert v-if="error" :title="error" type="error" :closable="false" showIcon />
-    <div v-if="!comic" class="instructionMode">
+    <div v-if="!isComic && !section" class="instructionMode">
       <span class="modeLabel">节点类型</span>
       <el-segmented :modelValue="nodeType" class="modeSwitch" :options="nodeTypeOptions" :disabled="saving" block aria-label="节点类型" @change="selectNodeType" />
     </div>
@@ -20,7 +20,7 @@
             <span class="nodeLabel">{{ selectedInstruction.nodeLabel }}</span>
             <h3>{{ selectedInstruction.label }}</h3>
           </div>
-          <label :for="editorId">{{ comic || nodeType === "image" ? "内置提示词" : "内置生成指令" }}</label>
+          <label :for="editorId">{{ isComic || nodeType === "image" ? "内置提示词" : "内置生成指令" }}</label>
         </header>
         <div class="instructionDescription">
           <p>{{ selectedInstruction.description }}</p>
@@ -47,11 +47,12 @@ import { defaultOutpaintPromptInstruction, outpaintPromptInstructionId, readOutp
 import { comicScriptInstructionId, scriptSystemPrompt, readComicScriptInstruction } from "@/pages/infiniteComic/comicProject";
 import { saveSettings, settings } from "@/stores/settings";
 
-const props = defineProps<{ comic?: boolean }>();
+const props = defineProps<{ comic?: boolean; section?: "text" | "image" | "comic" }>();
+const isComic = computed(() => props.section === "comic" || props.comic === true);
 const editorId = useId();
 type Instruction = { id: string; label: string; nodeLabel: string; description: string; help: string; defaultContent: string; read: (stores: unknown) => string; group?: string; icon?: Component };
 type NodeType = "text" | "image";
-const nodeType = ref<NodeType>("text");
+const nodeType = ref<NodeType>(props.section === "image" ? "image" : "text");
 const nodeTypeOptions = [
   { value: "text", label: "文本节点" },
   { value: "image", label: "图片生成节点" },
@@ -97,7 +98,7 @@ const comicInstructions: Instruction[] = [{
   read: readComicScriptInstruction,
 }];
 const instructions = computed(() => {
-  if (props.comic) return comicInstructions;
+  if (isComic.value) return comicInstructions;
   return nodeType.value === "image" ? imageInstructions : textInstructions;
 });
 const instructionGroups = computed(() => nodeType.value === "image"

@@ -1,10 +1,11 @@
 <template>
   <nodeSkeleton
+    ref="skeleton"
     v-bind="nodeProps"
     v-model:bottomVisible="node.selected"
     :topVisible="node.selected"
     contentPadding="2px"
-    :resizeAspectRatio="previewUrl && videoWidth ? videoWidth / 240 : undefined"
+    :resizeAspectRatio="previewUrl && videoPreviewSize ? videoPreviewSize.width / videoPreviewSize.height : undefined"
     selectionFrame
     topWidth="max-content"
     toolbarAction="focus"
@@ -20,8 +21,6 @@
       <el-button :icon="IconLayersSubtract" text :disabled="!outputFile || generating || deleting || uploading || actions?.processing" @click.stop="actions?.open('separate')">分离音视频</el-button>
       <el-button :icon="IconScissors" text :disabled="!outputFile || generating || deleting || uploading || actions?.processing" @click.stop="actions?.open('trim')">截取片段</el-button>
       <el-button :icon="IconMovie" text :loading="actions?.creatingAnalysis" :disabled="!outputFile || generating || deleting || uploading || actions?.processing || actions?.creatingAnalysis" @click.stop="actions?.createFrameAnalysis()">逐帧拉片</el-button>
-      <el-button :icon="IconTransfer" :loading="uploading" :disabled="generating || deleting" text title="替换视频" aria-label="替换视频" @click.stop="fileInput?.click()">替换视频</el-button>
-      <input ref="fileInput" type="file" accept="video/*" hidden aria-label="选择替换视频" :disabled="generating || deleting || uploading" @change="replaceOutput" />
     </template>
     <template #topRightActions>
       <el-dropdown trigger="click" placement="bottom-end" :disabled="!player?.ready || player?.capturing || generating || deleting || uploading" @command="player?.captureFrame($event)">
@@ -35,7 +34,8 @@
         </template>
       </el-dropdown>
     </template>
-    <div v-loading="generating || uploading" class="videoContent nopan" :aria-busy="generating || uploading">
+    <div v-loading="generating || uploading" class="videoContent nopan" :class="{ empty: !outputFile }" :aria-busy="generating || uploading">
+      <input ref="fileInput" type="file" accept="video/*" hidden aria-label="选择替换视频" :disabled="generating || deleting || uploading" @change="replaceOutput" />
       <videoPlayer
         v-if="previewUrl"
         ref="player"
@@ -43,9 +43,9 @@
         label="生成视频"
         @loadedmetadata="resizeVideo" />
       <div v-else class="videoEmpty" role="img" aria-label="暂无生成视频">
-        <icon-video :size="30" stroke="1.4" aria-hidden="true" />
+        <videoGenerationIcon :size="30" stroke="1.4" />
       </div>
-      <mediaHistory v-if="node.selected" mediaType="video" inline replaceable :current="outputFile" :disabled="generating || deleting || uploading || player?.capturing || actions?.processing" @select="outputs.video = { dataType: 'VIDEO', value: $event }" @upload="fileInput?.click()" />
+      <mediaHistory v-if="node.selected" mediaType="video" inline replaceable :current="outputFile" :disabled="generating || deleting || uploading || player?.capturing || actions?.processing" @open="skeleton?.focusNode()" @select="outputs.video = { dataType: 'VIDEO', value: $event }" @upload="fileInput?.click()" />
     </div>
     <template #bottom>
       <generationPromptPanel>
@@ -54,7 +54,7 @@
           <taskRecovery compact :visible="generationState.recoveryVisible.value" :label="generationState.recoveryLabel.value" :action="generationState.recoverResult" :disabled="cancelling || deleting || uploading" />
         </template>
         <el-card class="promptCard" shadow="never" :bodyStyle="{ padding: '14px 16px 12px' }">
-          <referenceActions :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" :disabled="generating || deleting || uploading" />
+          <referenceActions presetPrompts :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" :disabled="generating || deleting || uploading" />
           <referenceItem
             v-if="refList.length"
             v-model="refList"
@@ -111,7 +111,8 @@
 import taskRecovery from "@toonflow/node-shared/taskRecovery";
 import { computed, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch } from "vue";
 import { ElButton, ElCard, ElLoading, ElDropdown, ElDropdownMenu, ElDropdownItem } from "element-plus";
-import { IconCameraAi, IconVideo, IconArrowUp, IconPlayerStop, IconTransfer, IconMusic, IconLayersSubtract, IconScissors, IconMovie, IconPhotoScan, IconPlayerSkipBack, IconPlayerSkipForward } from "@tabler/icons-vue";
+import { IconArrowUp, IconPlayerStop, IconMusic, IconLayersSubtract, IconScissors, IconMovie, IconPhotoScan, IconPlayerSkipBack, IconPlayerSkipForward } from "@tabler/icons-vue";
+import videoGenerationIcon from "@toonflow/node-shared/videoGenerationIcon";
 import { findNodeModel, getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, z, type NodeMediaModel, type NodeVideoRequest, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
 import { readLastNodeModel, rememberNodeModel } from "@toonflow/node-shared/modelPreference";
@@ -127,6 +128,7 @@ import promptPresets from "@toonflow/node-shared/promptPresets";
 import generationPromptPanel from "@toonflow/node-shared/generationPromptPanel";
 import videoPlayer from "@toonflow/node-video/videoPlayer";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
+import { emptyMediaCardWidth, getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 import videoActions from "@toonflow/node-video/videoActions";
 import referenceItem from "@toonflow/node-shared/referenceItem";
 import referenceActions from "@toonflow/node-shared/referenceActions";
@@ -136,7 +138,7 @@ import generationSettings from "./components/generationSettings.vue";
 
 defineOptions({
   inheritAttrs: false,
-  icon: IconCameraAi,
+  icon: videoGenerationIcon,
   handles: [
     { id: "in", type: "target", dataType: ["IMAGE", "VIDEO", "AUDIO", "STRING"], label: "图片、视频、音频、文本输入" },
     { id: "video", type: "source", dataType: "VIDEO", label: "视频输出" },
@@ -165,9 +167,10 @@ const uploading = ref(false);
 const fileInput = ref<HTMLInputElement>();
 let disposed = false;
 const deleting = ref(false);
+const skeleton = ref<InstanceType<typeof nodeSkeleton>>();
 const player = ref<InstanceType<typeof videoPlayer>>();
 const actions = ref<InstanceType<typeof videoActions>>();
-const videoWidth = ref(0);
+const videoPreviewSize = ref<ReturnType<typeof getMediaPreviewSize>>();
 const videoResolution = ref("");
 let generationController: AbortController | undefined;
 const generationState = useNodeGeneration(outputs, () => generationController?.abort(), { ai });
@@ -295,7 +298,7 @@ function getGenerationInput(prompt: string): Omit<NodeVideoRequest, "directory">
 }
 const outputFile = computed(() => outputs.value.video?.dataType === "VIDEO" ? outputs.value.video.value : undefined);
 watch(outputFile, () => {
-  videoWidth.value = 0;
+  videoPreviewSize.value = undefined;
   videoResolution.value = "";
   const style = typeof node.style === "function" ? node.style(node) : node.style;
   if (style?.width === undefined && style?.height === undefined) return;
@@ -303,7 +306,8 @@ watch(outputFile, () => {
   node.style = rest;
 }, { flush: "sync" });
 const nodePreviewStyle = computed(() => ({
-  width: outputFile.value ? (videoWidth.value ? `${videoWidth.value + 6}px` : undefined) : undefined,
+  width: outputFile.value ? (videoPreviewSize.value ? `${videoPreviewSize.value.width + 6}px` : undefined) : `${emptyMediaCardWidth}px`,
+  "--videoPreviewHeight": videoPreviewSize.value ? `${videoPreviewSize.value.height}px` : undefined,
 }));
 watch(() => data.value.ratio, async () => {
   if (outputFile.value) return;
@@ -457,7 +461,7 @@ async function resizeVideo(event: Event) {
   const video = event.currentTarget as HTMLVideoElement;
   if (!video.videoWidth || !video.videoHeight) return;
   videoResolution.value = `${video.videoWidth} × ${video.videoHeight}`;
-  videoWidth.value = (240 * video.videoWidth) / video.videoHeight;
+  videoPreviewSize.value = getMediaPreviewSize(video.videoWidth, video.videoHeight);
   await nextTick();
   updateNodeInternals();
 }
@@ -577,6 +581,8 @@ nodeTools.register({
   min-height: 144px;
   overflow: hidden;
   border-radius: var(--el-border-radius-base);
+
+  .nodeSkeleton:not(.resized) &.empty .videoEmpty { height: 234px; }
 
   .videoEmpty {
     display: grid;

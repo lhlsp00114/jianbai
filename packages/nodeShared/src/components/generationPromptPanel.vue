@@ -55,6 +55,13 @@ function handleKeydown(event: KeyboardEvent) {
       .el-icon { font-size: 14px; }
     }
 
+    .referenceActions .el-button:not(.is-disabled),
+    .promptFooter .settingsButton:not(.is-disabled) {
+      color: var(--el-text-color-secondary);
+
+      &:hover, &:focus-visible { color: var(--el-text-color-primary); }
+    }
+
     .referenceList { gap: 6px; }
     .promptInputWrap { margin: 10px 0 12px; }
     .referenceHint { font-size: 12px; line-height: 1.5; }

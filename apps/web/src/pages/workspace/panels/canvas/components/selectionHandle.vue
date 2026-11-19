@@ -15,14 +15,13 @@
     @mousedown.stop
     @click.stop
     @keydown.esc.stop="clear">
-    <icon-circle-dashed :size="18" />
+    <span class="handlePlus" aria-hidden="true" />
   </button>
 </template>
 
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, ref, shallowRef, watchEffect, type ShallowRef } from "vue";
 import { getBezierPath, getRectOfNodes, Position, useVueFlow, type GraphNode } from "@vue-flow/core";
-import { IconCircleDashed } from "@tabler/icons-vue";
 import type { NodeConnectionFeedback, NodeHandle } from "@toonflow/nodes-scaffold/connection";
 import { getSelectionConnections } from "../selectionConnections";
 import { getSelectionTree } from "../selectionNodes";
@@ -40,7 +39,7 @@ const dragNodes = shallowRef<GraphNode[]>([]);
 const connectionNodes = computed(() => getSelectionTree(
   dragNodes.value.length ? dragNodes.value : sourceNodes.value,
   flow.getNodes.value,
-).filter(node => node.type !== "canvasGroup"));
+).filter(node => node.type !== "canvasGroup" && node.type !== "canvasStack"));
 const pointer = ref<{ x: number; y: number }>();
 const target = shallowRef<{ node: GraphNode; handleId?: string; handleType?: NodeHandle["type"] }>();
 const dragging = ref(false);
@@ -165,11 +164,34 @@ defineExpose({ clear });
   width: 24px;
   height: 24px;
   padding: 0;
-  border: 0;
+  box-sizing: border-box;
+  border: 1.5px solid currentColor;
   border-radius: 50%;
   color: var(--el-text-color-secondary);
   background: var(--el-bg-color);
   cursor: crosshair;
   touch-action: none;
+
+  &:hover,
+  &:active {
+    color: var(--el-color-primary);
+  }
+
+  &:focus-visible {
+    color: var(--el-color-primary);
+    outline: 2px solid var(--el-color-primary);
+    outline-offset: 2px;
+  }
+
+  .handlePlus {
+    position: relative;
+    width: 10px;
+    height: 10px;
+    pointer-events: none;
+
+    &::before, &::after { content: ""; position: absolute; background: currentColor; border-radius: 1px; }
+    &::before { width: 10px; height: 1.5px; left: 0; top: 4.25px; }
+    &::after { width: 1.5px; height: 10px; left: 4.25px; top: 0; }
+  }
 }
 </style>

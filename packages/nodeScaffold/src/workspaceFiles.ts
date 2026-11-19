@@ -1,4 +1,4 @@
-import { inject, ref, toValue, watch, type MaybeRefOrGetter } from "vue";
+import { inject, onScopeDispose, ref, toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { NodeMediaValue } from "./values";
 import { useNodePreviewReady } from "./useNodePreviewReady";
 
@@ -58,33 +58,50 @@ export function useNodeFiles() {
     });
   }
 
-  function useFileUrl(file: MaybeRefOrGetter<NodeMediaValue | undefined>, onError: (error: unknown) => void) {
+  function useFileUrl(file: MaybeRefOrGetter<NodeMediaValue | undefined>, onError: (error: unknown) => void, prepareReplacement?: (url: string) => Promise<void>) {
     const fileUrl = ref("");
     const previewReady = useNodePreviewReady();
+    let releaseDisplayed: (() => void) | undefined;
+    function clearDisplayed() {
+      releaseDisplayed?.();
+      releaseDisplayed = undefined;
+      fileUrl.value = "";
+    }
+    onScopeDispose(clearDisplayed);
     watch([() => toValue(file), previewReady], async ([value, ready], _previous, onCleanup) => {
       let cancelled = false;
       let url = "";
       let shared: ReturnType<NonNullable<WorkspaceFiles["acquireUrl"]>> | undefined;
-      onCleanup(() => {
-        cancelled = true;
+      function release() {
         shared?.release();
         if (url) URL.revokeObjectURL(url);
+      }
+      onCleanup(() => {
+        cancelled = true;
+        if (releaseDisplayed !== release) release();
       });
-      fileUrl.value = "";
+      if (!prepareReplacement || !value || !ready) clearDisplayed();
       if (!value || !ready) return;
       try {
         const files = getWorkspaceFiles();
         shared = files.acquireUrl?.(value.url, value.mimeType);
-        if (shared) {
-          const sharedUrl = await shared.url;
-          if (!cancelled) fileUrl.value = sharedUrl;
-          return;
+        let nextUrl: string;
+        if (shared) nextUrl = await shared.url;
+        else {
+          const content = await files.read(value.url);
+          if (cancelled) return;
+          nextUrl = url = URL.createObjectURL(new Blob([content], { type: value.mimeType }));
         }
-        const content = await files.read(value.url);
+        if (!cancelled && fileUrl.value && prepareReplacement && nextUrl !== fileUrl.value) await prepareReplacement(nextUrl);
         if (cancelled) return;
-        fileUrl.value = url = URL.createObjectURL(new Blob([content], { type: value.mimeType }));
+        releaseDisplayed?.();
+        releaseDisplayed = release;
+        fileUrl.value = nextUrl;
       } catch (error) {
-        if (!cancelled) onError(error);
+        if (!cancelled) {
+          clearDisplayed();
+          onError(error);
+        }
       }
     }, { immediate: true });
     return fileUrl;

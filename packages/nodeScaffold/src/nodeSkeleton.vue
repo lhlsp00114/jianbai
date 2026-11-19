@@ -20,6 +20,7 @@
           <slot name="contextActions" />
           <el-dropdown-item :divided="!!(assetOutputs.length && (saveNodeToAssets || sendNodeToAgent))" command="copy" :icon="IconCopy">复制节点</el-dropdown-item>
           <el-dropdown-item command="duplicate" :icon="IconCopyPlus">创建副本</el-dropdown-item>
+          <el-dropdown-item v-if="reloadRemoteNode" command="reload" :icon="IconRefresh" :disabled="loading || reloading">重新加载插件</el-dropdown-item>
           <el-dropdown-item command="delete" :icon="IconTrash">删除节点</el-dropdown-item>
           <el-dropdown-item divided command="clipboard" :icon="IconCopy" :disabled="!copyNodeToClipboard || copyingToClipboard">
             复制到剪贴板
@@ -77,7 +78,7 @@
       <slot name="bottom" />
     </div>
     <div v-show="!documentTarget" class="titleBar">
-      <component :is="icon ?? IconBox" class="titleIcon" :size="16" aria-hidden="true" />
+      <component :is="icon ?? IconBox" class="titleIcon" :size="14" aria-hidden="true" />
       <input
         v-if="editingLabel && !readOnly"
         ref="labelInput"
@@ -100,17 +101,9 @@
         @keydown.enter.stop.prevent="editLabel">
         {{ label }}
       </span>
-      <div v-if="$slots.titleMeta || !readOnly" class="titleControls">
-        <div v-if="$slots.titleMeta" class="titleMeta"><slot name="titleMeta" /></div>
-        <div v-if="!readOnly" class="nodeActions nodrag nopan" @pointerdown.stop @mousedown.stop @dblclick.stop>
-          <el-button
-            :icon="IconRefresh"
-            :loading="loading || reloading"
-            :disabled="loading || !reloadRemoteNode"
-            text
-            title="刷新节点"
-            aria-label="刷新节点"
-            @click.stop="reloadNode" />
+      <div v-if="$slots.titleMeta || !readOnly" class="nodeTitleTools">
+        <div v-if="$slots.titleMeta" class="nodeTitleResolution"><slot name="titleMeta" /></div>
+        <div v-if="!readOnly" class="nodeTitleRemove nodrag nopan" @pointerdown.stop @mousedown.stop @dblclick.stop>
           <el-button :icon="IconTrash" text title="移除节点" aria-label="移除节点" @click.stop="deleteNode" :loading="deleting" />
         </div>
       </div>
@@ -356,7 +349,7 @@ function startResize(event: PointerEvent) {
 }
 
 function setNodeSize(width: number, height: number, primary: "width" | "height" = "width") {
-  const titleHeight = skeletonElement.value?.querySelector<HTMLElement>(".titleBar")?.offsetHeight ?? 32;
+  const titleHeight = skeletonElement.value?.querySelector<HTMLElement>(".titleBar")?.offsetHeight ?? 24;
   const style = typeof node.style === "function" ? node.style(node) : node.style;
   const ratio = props.resizeAspectRatio;
   const body = skeletonElement.value?.querySelector<HTMLElement>(".cardContainer > .contentCard > .el-card__body");
@@ -457,10 +450,12 @@ async function focusNode() {
       width: (Math.max(...rects.map((rect) => rect.right)) - left) / viewport.value.zoom,
       height: (Math.max(...rects.map((rect) => rect.bottom)) - top) / viewport.value.zoom,
     },
-    flowRect.width, flowRect.height, minZoom.value, maxZoom.value, 0.2
+    flowRect.width, flowRect.height, minZoom.value, maxZoom.value, 0.1
   );
   await setViewport(targetViewport, { duration: 300 });
 }
+
+defineExpose({ focusNode });
 
 function zoomCanvas(event: WheelEvent) {
   if (documentTarget.value) return;
@@ -505,7 +500,7 @@ onNodeContextMenu(({ event, node }) => {
 });
 
 async function reloadNode() {
-  if (props.readOnly || !reloadRemoteNode || reloading.value) return;
+  if (props.readOnly || props.loading || !reloadRemoteNode || reloading.value) return;
   reloading.value = true;
   try {
     await reloadRemoteNode(node.type);
@@ -584,6 +579,7 @@ async function handleCommand(command: string) {
       copyingToClipboard.value = false;
     }
   }
+  if (command === "reload") void reloadNode();
   if (command === "delete") void deleteNode();
   if (command === "copy" || command === "duplicate") {
     let data: NodeData;
@@ -762,8 +758,8 @@ watch(
     opacity: 1;
   }
 
-  &:hover .titleBar .titleControls {
-    visibility: visible;
+  &:hover .titleBar .nodeTitleTools {
+    display: flex;
   }
 
   &.hasTitleMeta:hover .titleBar .labelText {
@@ -785,7 +781,7 @@ watch(
       bottom: calc(100% + 1px);
     }
     &.bottomSlot {
-      top: calc(100% + 12px);
+      top: calc(100% + 6px);
     }
 
     .mediaToolbar {
@@ -803,19 +799,26 @@ watch(
   .titleBar {
     position: relative;
     display: flex;
-    min-height: 32px;
+    min-height: 24px;
     box-sizing: border-box;
     align-items: center;
     gap: 4px;
-    padding: 3px 0 5px 4px;
-    font-size: 14px;
+    padding: 0 0 0 4px;
+    font-size: 13px;
     line-height: 20px;
 
-    .titleControls {
+    .nodeTitleTools {
       position: absolute;
-      inset: 0;
-      visibility: hidden;
-      pointer-events: none;
+      top: 50%;
+      right: -4px;
+      transform: translateY(-50%);
+      display: none;
+      align-items: center;
+      gap: 1px;
+
+      .nodeTitleResolution + .nodeTitleRemove .el-button {
+        justify-content: flex-start;
+      }
     }
 
     .titleIcon {
@@ -852,25 +855,16 @@ watch(
       line-height: inherit;
     }
 
-    .titleMeta {
-      position: absolute;
-      top: 10px;
-      right: 50px;
+    .nodeTitleResolution {
       color: var(--el-text-color-secondary);
       font-size: 9px;
       line-height: 12px;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
-      pointer-events: auto;
     }
 
-    .nodeActions {
-      position: absolute;
-      top: 4px;
-      right: -4px;
+    .nodeTitleRemove {
       display: flex;
-      gap: 2px;
-      pointer-events: auto;
 
       .el-button {
         width: 24px;

@@ -1,13 +1,29 @@
 <template>
-  <el-dialog v-model="visible" class="creationLibraryDialog" :title="draft ? (draft.kind === 'skill' ? '编辑 Skill' : '编辑提示词') : '创作收藏'" width="min(1120px, calc(100vw - 32px))" alignCenter appendToBody :closeOnClickModal="false" :beforeClose="close" @closed="resetDraft">
+  <el-dialog v-model="visible" class="creationLibraryDialog" :title="draft ? (draft.kind === 'skill' ? '编辑 Skill' : '编辑提示词') : '创作收藏'" width="min(1200px, calc(100vw - 32px))" alignCenter appendToBody :closeOnClickModal="false" :beforeClose="close" @closed="resetDraft">
+    <template v-if="!draft" #header="{ titleId, titleClass }">
+      <div class="libraryHeader">
+        <span :id="titleId" :class="titleClass">创作收藏</span>
+        <nav class="libraryViewTabs" aria-label="当前分类视图">
+          <template v-if="builtinCategory">
+            <button v-for="item in instructionTabs" :key="item.value" type="button" :aria-pressed="instructionType === item.value" @click="switchInstruction(item.value)">{{ item.label }}</button>
+          </template>
+          <template v-else>
+            <button type="button" :aria-pressed="libraryView === 'mine'" @click="selectView('mine')">{{ category === 'skill' ? '我的 Skill' : '我的提示词' }}</button>
+            <button type="button" :aria-pressed="libraryView === 'official'" @click="selectView('official')">{{ category === 'skill' ? '官方 Skill' : '官方提示词' }}</button>
+            <button type="button" :aria-pressed="libraryView === 'recent'" @click="selectView('recent')">最近使用</button>
+          </template>
+        </nav>
+      </div>
+    </template>
     <div class="creationLibrary" @keydown.stop @pointerdown.stop @wheel.stop>
-      <el-tabs v-if="!draft" v-model="category" :beforeLeave="changeCategory">
-        <el-tab-pane label="Skill 收藏" name="skill" />
-        <el-tab-pane label="提示词收藏" name="prompt" />
-        <el-tab-pane label="内置节点提示词" name="nodes" />
-        <el-tab-pane label="内置漫画" name="comic" />
-      </el-tabs>
-      <builtinNodeInstructions v-if="visible && builtinCategory" :key="category" ref="builtinEditor" :comic="category === 'comic'" />
+      <div v-if="!draft" class="libraryNavigation">
+        <nav class="libraryCategories" aria-label="收藏分类">
+          <button type="button" :class="{ active: builtinCategory }" :aria-pressed="builtinCategory" @click="selectCategory('builtin')"><icon-adjustments :size="16" />内置提示词</button>
+          <button type="button" :class="{ active: category === 'prompt' }" :aria-pressed="category === 'prompt'" @click="selectCategory('prompt')"><icon-message :size="16" />提示词</button>
+          <button type="button" :class="{ active: category === 'skill' }" :aria-pressed="category === 'skill'" @click="selectCategory('skill')"><icon-book :size="16" />Skill</button>
+        </nav>
+      </div>
+      <builtinNodeInstructions v-if="visible && builtinCategory" :key="instructionType" ref="builtinEditor" :section="instructionType" />
       <el-alert v-if="!builtinCategory && (library.error || operationError)" :title="library.error || operationError" type="error" :closable="false" showIcon />
       <div v-if="draft" class="editorNavigation">
         <el-button text :icon="IconArrowLeft" :disabled="busy" @click="backToGrid">返回收藏</el-button>
@@ -15,21 +31,40 @@
       </div>
       <div v-else-if="!builtinCategory" class="libraryToolbar">
         <el-input v-model="search" clearable :prefixIcon="IconSearch" placeholder="搜索收藏名称或内容" aria-label="搜索收藏" />
-        <el-button :icon="IconPlus" :disabled="busy || !!library.error" @click="createEntry">新增收藏</el-button>
-        <el-button :icon="IconUpload" :disabled="busy || !!library.error" @click="fileInput?.click()">导入文件</el-button>
+        <el-button v-if="libraryView === 'mine'" :icon="IconPlus" :disabled="busy || !!library.error" @click="createEntry">新增收藏</el-button>
+        <el-button v-if="libraryView === 'mine'" :icon="IconUpload" :disabled="busy || !!library.error" @click="fileInput?.click()">导入文件</el-button>
+        <el-popover placement="bottom-end" trigger="click" :width="200" title="视图密度">
+          <template #reference><el-button :icon="IconAdjustments" title="视图密度" aria-label="视图密度" /></template>
+          <input v-model.number="gridDensity" class="densitySlider" type="range" min="0" max="4" step="1" aria-label="视图密度" />
+        </el-popover>
         <input ref="fileInput" type="file" accept=".md,.markdown,.txt" hidden aria-label="导入 Skill 或提示词文本" @change="importEntry" />
       </div>
-      <div v-if="!builtinCategory" class="libraryBody">
-        <nav v-if="!draft" class="entryList" aria-label="收藏列表">
-          <button class="entryItem createEntryCard" type="button" :disabled="busy || !!library.error" @click="createEntry">
+      <div v-if="category === 'skill' && libraryView === 'official'" class="officialEmpty" role="status">暂无官方 Skill</div>
+      <div v-else-if="!builtinCategory" class="libraryBody">
+        <nav v-if="!draft" class="entryList" :style="{ '--cardWidth': `${204 - gridDensity * 28}px` }" aria-label="收藏列表">
+          <button v-if="libraryView === 'mine'" class="entryItem createEntryCard" type="button" :disabled="busy || !!library.error" @click="createEntry">
             <icon-plus :size="28" aria-hidden="true" />
             <span>{{ category === "skill" ? "创建 Skill" : "创建提示词" }}</span>
           </button>
-          <button v-for="entry in filteredEntries" :key="entry.id" class="entryItem" :class="{ hasCover: !!entry.cover, dragging: draggedId === entry.id, dropBefore: dropTarget?.id === entry.id && !dropTarget.after, dropAfter: dropTarget?.id === entry.id && dropTarget.after }" type="button" :disabled="busy" :draggable="!busy" title="点击编辑，按住拖动排序；也可使用 Alt + 左右方向键排序" @click="selectEntry(entry)" @dragstart.stop="startSort($event, entry)" @dragover.stop="overSort($event, entry)" @drop.stop="dropSort($event, entry)" @dragend.stop="endSort" @keydown.alt.left.prevent.stop="moveEntry(entry, -1)" @keydown.alt.right.prevent.stop="moveEntry(entry, 1)">
-            <img v-if="entry.cover" class="entryCover" :src="entry.cover" alt="" draggable="false" />
-            <span class="entryTitle">{{ entry.title }}</span>
-            <span class="entryExcerpt">{{ entry.content }}</span>
-          </button>
+          <div v-for="{ entry, title, excerpt } in filteredEntries" :key="entry.id" class="entryCard">
+            <button class="entryItem" :class="{ hasCover: !!entry.cover && !excerpt.hit, dragging: draggedId === entry.id, dropBefore: dropTarget?.id === entry.id && !dropTarget.after, dropAfter: dropTarget?.id === entry.id && dropTarget.after }" type="button" :disabled="busy" :draggable="!busy && libraryView === 'mine'" title="点击编辑，按住拖动排序；也可使用 Alt + 左右方向键排序" @click="selectEntry(entry)" @dragstart.stop="startSort($event, entry)" @dragover.stop="overSort($event, entry)" @drop.stop="dropSort($event, entry)" @dragend.stop="endSort" @keydown.alt.left.prevent.stop="moveEntry(entry, -1)" @keydown.alt.right.prevent.stop="moveEntry(entry, 1)">
+              <span class="entryPreview">
+                <img v-if="entry.cover && !excerpt.hit" class="entryCover" :src="entry.cover" alt="" draggable="false" />
+                <span v-else class="entryExcerpt">{{ excerpt.before }}<mark v-if="excerpt.hit">{{ excerpt.hit }}</mark>{{ excerpt.after }}</span>
+              </span>
+              <span class="entryTitle">{{ title.before }}<mark v-if="title.hit">{{ title.hit }}</mark>{{ title.after }}</span>
+            </button>
+            <button class="starEntry" type="button" :aria-pressed="starred.has(entry.id)" :title="starred.has(entry.id) ? '取消置顶' : '加星置顶'" :aria-label="`加星置顶：${entry.title}`" @click="toggleStar(entry.id)"><icon-star :size="14" /></button>
+            <div class="entryActions">
+              <button v-if="sendToCanvas" type="button" title="发送到画布" :aria-label="`${translate('发送到画布')}：${entry.title}`" :disabled="busy || !entry.content" @click="sendEntry(entry)"><icon-send :size="15" /></button>
+              <button type="button" title="复制正文" :aria-label="`${translate('复制正文')}：${entry.title}`" :disabled="busy || !entry.content" @click="copyContent(entry.content, entry.id)"><icon-copy :size="15" /></button>
+            </div>
+          </div>
+          <div v-if="search.trim() && !filteredEntries.length && !library.error" class="searchEmpty">
+            <span role="status">当前分类没有匹配项</span>
+            <el-button text @click="search = ''">清除搜索</el-button>
+          </div>
+          <div v-else-if="libraryView === 'recent' && !filteredEntries.length && !library.error" class="searchEmpty" role="status">当前分类暂无最近使用记录</div>
         </nav>
         <div v-else class="entryEditor">
           <template v-if="draft">
@@ -58,7 +93,7 @@
               <el-button v-if="original" text type="danger" :icon="IconStarOff" :disabled="busy" @click="removeEntry">取消收藏</el-button>
               <span class="actionSpacer" />
               <el-button text :icon="IconDownload" :loading="exporting" :disabled="busy || !draft.content.trim()" @click="exportEntry">导出文本</el-button>
-              <el-button text :icon="IconCopy" :disabled="busy || !draft.content" @click="copyContent">复制内容</el-button>
+              <el-button text :icon="IconCopy" :disabled="busy || !draft.content" @click="copyContent(draft.content)">复制内容</el-button>
               <el-button type="primary" :loading="saving" :disabled="busy || !dirty || !draft.content.trim()" @click="saveEntry">保存</el-button>
             </div>
           </template>
@@ -72,18 +107,43 @@
 import axios from "axios";
 import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { IconArrowLeft, IconCopy, IconDownload, IconPlus, IconSearch, IconStarOff, IconUpload } from "@tabler/icons-vue";
+import { IconAdjustments, IconArrowLeft, IconBook, IconCopy, IconDownload, IconMessage, IconPlus, IconSearch, IconSend, IconStar, IconStarOff, IconUpload } from "@tabler/icons-vue";
 import { translate } from "@toonflow/i18n/vue";
-import { saveSettings, settings } from "@/stores/settings";
+import { saveSettings, settings, settingsStorage } from "@/stores/settings";
 import { writeClipboardText } from "@/lib/clipboard";
 import saveFile from "@/lib/saveFile";
 import { currentUser } from "@/stores/multiTenant";
 import builtinNodeInstructions from "./builtinNodeInstructions.vue";
+import { officialPrompts } from "./officialPrompts";
 
 type Entry = { id: string; kind: "skill" | "prompt"; title: string; content: string; cover?: string };
 const visible = defineModel<boolean>({ default: false });
-const category = ref<"skill" | "prompt" | "nodes" | "comic">("skill");
-const builtinCategory = computed(() => category.value === "nodes" || category.value === "comic");
+const props = defineProps<{ sendToCanvas?: (entry: Entry) => Promise<void>; officialPromptsOnOpen?: boolean }>();
+const category = ref<"skill" | "prompt" | "builtin">("builtin");
+const instructionTabs = [{ value: "text", label: translate("文本节点") }, { value: "comic", label: translate("漫画提示词") }, { value: "image", label: translate("图片生成节点") }] as const;
+const instructionType = ref<(typeof instructionTabs)[number]["value"]>("text");
+const libraryView = ref<"mine" | "official" | "recent">("mine");
+const builtinCategory = computed(() => category.value === "builtin");
+const recentIds = ref<string[]>([]);
+const preferences = computed(() => settings.value.stores as Record<string, unknown> | undefined);
+const starred = computed(() => {
+  const ids = preferences.value?.creationLibraryStars;
+  return new Set<string>(Array.isArray(ids) ? ids.filter(id => typeof id === "string") : []);
+});
+const gridDensity = computed({
+  get() {
+    const value = preferences.value?.creationLibraryDensity;
+    return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4 ? value : 2;
+  },
+  set(value: number) { settingsStorage.setItem("creationLibraryDensity", JSON.stringify(value)); },
+});
+
+function toggleStar(id: string) {
+  const ids = new Set(starred.value);
+  if (ids.has(id)) ids.delete(id);
+  else ids.add(id);
+  settingsStorage.setItem("creationLibraryStars", JSON.stringify([...ids]));
+}
 const builtinEditor = ref<InstanceType<typeof builtinNodeInstructions>>();
 const search = ref("");
 const draft = ref<Entry>();
@@ -145,9 +205,23 @@ const library = computed(() => {
   catch (error) { return { entries: [] as Entry[], error: error instanceof Error ? error.message : translate("读取收藏失败") }; }
 });
 const filteredEntries = computed(() => {
-  const query = search.value.trim().toLocaleLowerCase();
-  return library.value.entries.filter(entry => entry.kind === category.value
-    && (!query || entry.title.toLocaleLowerCase().includes(query) || entry.content.toLocaleLowerCase().includes(query)));
+  const query = search.value.trim();
+  const pattern = query ? new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "iu") : undefined;
+  function preview(text: string, context: number) {
+    const match = pattern?.exec(text);
+    if (!match) return { before: text, hit: "", after: "" };
+    const start = Math.max(0, match.index - context);
+    const end = match.index + match[0].length;
+    return { before: (start ? "…" : "") + text.slice(start, match.index).replace(/\s+/g, " "), hit: match[0], after: text.slice(end, end + 180) };
+  }
+  const source: Entry[] = libraryView.value === "official" ? officialPrompts
+    : libraryView.value === "recent" ? [...library.value.entries, ...officialPrompts] : library.value.entries;
+  const entries = source.filter(entry => entry.kind === category.value
+    && (libraryView.value !== "recent" || recentIds.value.includes(entry.id)));
+  return entries.sort((left, right) => Number(starred.value.has(right.id)) - Number(starred.value.has(left.id)) || (libraryView.value === "recent"
+    ? recentIds.value.indexOf(left.id) - recentIds.value.indexOf(right.id) : 0)).map(entry => ({
+    entry, title: preview(entry.title, 4), excerpt: preview(entry.content, 12),
+  })).filter(item => !query || item.title.hit || item.excerpt.hit);
 });
 
 function resetDraft() {
@@ -155,6 +229,14 @@ function resetDraft() {
   original.value = "";
   operationError.value = "";
 }
+
+watch(visible, open => {
+  if (!open || !props.officialPromptsOnOpen) return;
+  resetDraft();
+  search.value = "";
+  category.value = "prompt";
+  libraryView.value = "official";
+});
 
 async function saveBeforeLeaving() {
   if (builtinCategory.value) return await builtinEditor.value?.saveBeforeLeaving() ?? true;
@@ -172,11 +254,23 @@ async function backToGrid() {
   if (await saveBeforeLeaving()) resetDraft();
 }
 
-async function changeCategory() {
-  if (!await saveBeforeLeaving()) return false;
+async function selectCategory(next: typeof category.value) {
+  if (next === category.value || !await saveBeforeLeaving()) return;
   resetDraft();
   search.value = "";
-  return true;
+  category.value = next;
+  libraryView.value = "mine";
+}
+
+async function switchInstruction(next: typeof instructionType.value) {
+  if (next !== instructionType.value && await saveBeforeLeaving()) instructionType.value = next;
+}
+
+async function selectView(next: typeof libraryView.value) {
+  if (next === libraryView.value || !await saveBeforeLeaving()) return;
+  resetDraft();
+  search.value = "";
+  libraryView.value = next;
 }
 
 async function createEntry() {
@@ -188,6 +282,11 @@ async function createEntry() {
 
 async function selectEntry(entry: Entry) {
   if (Date.now() < suppressClickUntil || entry.id === draft.value?.id || !await saveBeforeLeaving()) return;
+  recordRecent(entry.id);
+  if (officialPrompts.some(prompt => prompt === entry)) {
+    await ElMessageBox.alert(entry.content, entry.title, { confirmButtonText: translate("关闭") }).catch(() => {});
+    return;
+  }
   resetDraft();
   draft.value = { ...entry };
   original.value = JSON.stringify(entry);
@@ -257,7 +356,7 @@ async function importCover(event: Event) {
 function startSort(event: DragEvent, entry: Entry) {
   if (busy.value || draft.value || !event.dataTransfer) { event.preventDefault(); return; }
   draggedId.value = entry.id;
-  sortIds = filteredEntries.value.map(item => item.id);
+  sortIds = filteredEntries.value.map(item => item.entry.id).filter(id => starred.value.has(id) === starred.value.has(entry.id));
   sortSnapshot = JSON.stringify(library.value.entries.map(item => item.id));
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData("text/plain", entry.id);
@@ -265,7 +364,7 @@ function startSort(event: DragEvent, entry: Entry) {
 
 function overSort(event: DragEvent, entry: Entry) {
   if (!draggedId.value || busy.value) return;
-  if (entry.id === draggedId.value) { dropTarget.value = undefined; return; }
+  if (entry.id === draggedId.value || !sortIds.includes(entry.id)) { dropTarget.value = undefined; return; }
   event.preventDefault();
   if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
   const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
@@ -294,8 +393,8 @@ async function dropSort(event: DragEvent, entry: Entry) {
 }
 
 async function moveEntry(entry: Entry, direction: number) {
-  if (busy.value || draggedId.value) return;
-  const orderedIds = filteredEntries.value.map(item => item.id);
+  if (busy.value || draggedId.value || libraryView.value !== "mine") return;
+  const orderedIds = filteredEntries.value.map(item => item.entry.id).filter(id => starred.value.has(id) === starred.value.has(entry.id));
   const index = orderedIds.indexOf(entry.id);
   const targetIndex = index + direction;
   if (index < 0 || targetIndex < 0 || targetIndex >= orderedIds.length) return;
@@ -384,9 +483,27 @@ async function removeEntry() {
   if (confirmed) await persistEntry(true);
 }
 
-async function copyContent() {
-  if (!draft.value) return;
-  try { await writeClipboardText(draft.value.content); ElMessage.success(translate("已复制")); }
+async function sendEntry(entry: Entry) {
+  if (!props.sendToCanvas || busy.value) return;
+  saving.value = true;
+  try {
+    await props.sendToCanvas(entry);
+    recordRecent(entry.id);
+    visible.value = false;
+  } catch (error) { showError(error); }
+  finally { saving.value = false; }
+}
+
+function recordRecent(id: string) {
+  recentIds.value = [id, ...recentIds.value.filter(previous => previous !== id)].slice(0, 30);
+}
+
+async function copyContent(content: string, entryId?: string) {
+  try {
+    await writeClipboardText(content);
+    if (entryId) recordRecent(entryId);
+    ElMessage.success(translate("已复制"));
+  }
   catch (error) { showError(error); }
 }
 
@@ -402,10 +519,16 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
 </script>
 
 <style scoped lang="scss">
-:global(.creationLibraryDialog) {
+.densitySlider { width: 100%; margin: 4px 0; accent-color: var(--el-text-color-primary); }
+:global(.el-dialog.creationLibraryDialog) {
+  --librarySelectedText: var(--el-text-color-primary);
+  --libraryMutedText: color-mix(in srgb, var(--el-text-color-primary) 72%, var(--el-bg-color));
+  --el-dialog-border-radius: 30px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 30px;
   display: flex;
   flex-direction: column;
-  height: min(800px, 85dvh);
+  height: min(740px, 85dvh);
   max-height: calc(100dvh - 32px);
   overflow: hidden;
 }
@@ -416,13 +539,66 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
   overflow: hidden;
 }
 
+:global(.dark .creationLibraryDialog) { --librarySelectedText: #fff; }
+.libraryHeader {
+  display: grid; grid-template-columns: 174px minmax(0, 1fr); align-items: center; gap: 0;
+  .el-dialog__title { color: var(--libraryMutedText); font-size: 13px; font-weight: 500; }
+  .libraryViewTabs {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px;
+    button {
+      min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--libraryMutedText); font: inherit; font-size: 13px; font-weight: 400; cursor: pointer;
+      &:hover { color: var(--el-text-color-regular); }
+      &[aria-pressed="true"] { color: var(--librarySelectedText); font-weight: 600; }
+      &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 3px; }
+    }
+  }
+  @media (max-width: 640px) { grid-template-columns: 1fr; gap: 6px; }
+}
 .creationLibrary {
+  .officialEmpty { padding: 64px 12px; text-align: center; color: var(--el-text-color-secondary); border: 1px dashed var(--el-border-color); border-radius: 16px; }
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   gap: 12px;
-  > :deep(.el-tabs), > :deep(.el-alert) { flex-shrink: 0; }
+  > :deep(.el-alert) { flex-shrink: 0; }
+  .libraryNavigation {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 155px;
+    box-sizing: border-box;
+    padding-right: 12px;
+    border-right: 1px solid var(--el-border-color-lighter);
+    .libraryCategories {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 36px;
+        padding: 4px 6px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--libraryMutedText);
+        font: inherit;
+        font-size: 13px;
+        svg { box-sizing: content-box; padding: 5px; border-radius: 8px; background: var(--el-fill-color-light); }
+        cursor: pointer;
+        &:hover { color: color-mix(in srgb, var(--el-text-color-primary) 82%, transparent); }
+        &[aria-pressed="true"], &.active {
+          background: var(--el-fill-color);
+          color: var(--librarySelectedText);
+          font-weight: 600;
+        }
+        &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: -2px; }
+      }
+    }
+  }
+  &:has(.libraryNavigation) { padding-left: 174px; box-sizing: border-box; }
   .editorNavigation {
     display: flex;
     flex-shrink: 0;
@@ -440,8 +616,11 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
     flex-wrap: wrap;
     flex-shrink: 0;
     gap: 8px;
-    :deep(.el-input) { flex: 1; min-width: 120px; }
-    :deep(.el-button) { margin: 0; }
+    margin-bottom: 10px;
+    :deep(.el-input) { flex: 1; min-width: 120px; max-width: 240px; margin-right: auto; }
+    :deep(.el-input__wrapper) { background: var(--el-fill-color-light); border-radius: 10px; box-shadow: none; }
+    :deep(.el-input__wrapper.is-focus) { box-shadow: inset 0 0 0 1px var(--el-color-primary); }
+    :deep(.el-button) { margin: 0; border-radius: 9px; }
   }
   .libraryBody {
     flex: 1;
@@ -449,11 +628,29 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
     overflow: hidden;
     .entryList {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--cardWidth)), 1fr));
       align-content: start;
       gap: 12px;
       height: 100%;
       overflow-y: auto;
+      .entryCard {
+        position: relative;
+        min-width: 0;
+        mark { background: var(--el-color-warning-light-8); color: var(--el-text-color-primary); }
+        align-self: start;
+        .entryActions { position: absolute; inset: 0 0 auto; aspect-ratio: 4 / 5; display: flex; align-items: end; justify-content: end; padding: 5px; box-sizing: border-box; pointer-events: none; }
+        .starEntry, .entryActions button {
+          display: grid; place-items: center; pointer-events: auto;
+          width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
+          background: transparent; color: var(--el-text-color-secondary); cursor: pointer;
+          &:hover { background: var(--el-fill-color); color: var(--el-text-color-primary); }
+        }
+        .starEntry {
+          position: absolute; inset: 4px 4px auto auto; background: var(--el-fill-color-light);
+          &[aria-pressed="true"] { color: var(--el-color-warning); svg { fill: currentColor; } }
+        }
+      }
+      .searchEmpty { grid-column: 1 / -1; text-align: center; color: var(--el-text-color-secondary); }
       .entryItem {
         position: relative;
         display: flex;
@@ -461,12 +658,10 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
         gap: 6px;
         width: 100%;
         min-width: 0;
-        aspect-ratio: 1;
-        padding: 12px;
+        padding: 0;
         overflow: hidden;
-        border: 1px solid var(--el-border-color-lighter);
-        border-radius: 6px;
-        background: var(--el-fill-color-light);
+        border: 0;
+        background: transparent;
         color: var(--el-text-color-primary);
         text-align: left;
         font: inherit;
@@ -476,17 +671,22 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
         &.dragging { opacity: 0.4; }
         &.dropBefore { box-shadow: inset 4px 0 var(--el-color-primary); }
         &.dropAfter { box-shadow: inset -4px 0 var(--el-color-primary); }
-        .entryCover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+        .entryPreview, &.createEntryCard {
+          width: 100%; aspect-ratio: 4 / 5; box-sizing: border-box;
+          overflow: hidden; border: 1px solid var(--el-border-color-lighter);
+          border-radius: var(--ui-radius-large, 16px); background: var(--el-fill-color-light);
+        }
+        .entryCover { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
         &.hasCover {
           padding: 0;
-          .entryTitle { position: absolute; bottom: 0; padding: 24px 12px 12px; background: linear-gradient(transparent, rgb(0 0 0 / 85%)); color: #fff; pointer-events: none; }
           .entryExcerpt { display: none; }
           &.dropBefore::after, &.dropAfter::after { content: ""; position: absolute; top: 0; bottom: 0; width: 4px; background: var(--el-color-primary); pointer-events: none; }
           &.dropBefore::after { left: 0; }
           &.dropAfter::after { right: 0; }
         }
-        &:hover { border-color: var(--el-color-primary); }
+        &:hover .entryPreview { border-color: var(--el-border-color-darker); }
         &.createEntryCard {
+          align-self: start;
           align-items: center;
           justify-content: center;
           gap: 12px;
@@ -498,8 +698,11 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
           &:hover:not(:disabled) { color: var(--el-color-primary); border-color: var(--el-color-primary); background: var(--el-fill-color-light); }
           &:disabled { cursor: not-allowed; opacity: 0.5; }
         }
-        .entryTitle { width: 100%; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-        .entryExcerpt { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
+        .entryPreview { position: relative; }
+        .entryPreview .entryExcerpt { position: absolute; inset: 0 0 23px; }
+        .entryTitle { width: 100%; line-height: 24px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 500; }
+        .entryExcerpt { display: block; margin: 10px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.65; }
+        .entryExcerpt::before { content: ""; float: right; width: 22px; height: 20px; }
       }
     }
     .entryEditor {
@@ -553,9 +756,13 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
     }
   }
   @media (max-width: 640px) {
+    &:has(.libraryNavigation) { padding-left: 0; }
+    .libraryNavigation {
+      position: static; width: 100%; padding: 0; border: 0;
+      .libraryCategories { flex-direction: row; flex-wrap: wrap; margin: 4px 0 0; padding: 0; border: 0; }
+    }
     .libraryToolbar { flex-wrap: wrap; }
     .libraryBody {
-      .entryList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .entryEditor .editorLayout {
         display: flex;
         flex-direction: column;

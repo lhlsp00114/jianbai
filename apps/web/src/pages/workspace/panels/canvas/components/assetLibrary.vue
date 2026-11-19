@@ -58,12 +58,15 @@
     </div>
   </el-dialog>
 
-  <el-dialog v-model="saveVisible" title="保存到素材库" width="460px" alignCenter appendToBody :closeOnClickModal="false" @opened="assetNameInput?.select()">
+  <el-dialog v-model="saveVisible" title="保存到素材库" width="460px" alignCenter appendToBody :closeOnClickModal="false" :closeOnPressEscape="!saving" :showClose="!saving" @opened="assetNameInput?.select()">
     <el-form class="saveForm" labelPosition="top" @submit.prevent="saveAsset">
-      <el-form-item label="素材名称">
+      <el-form-item v-if="!saveAll" label="素材名称">
         <el-input ref="assetNameInput" v-model="assetName" aria-label="素材名称" placeholder="输入完整文件名" :disabled="saving" @keydown.enter.prevent="saveAsset" />
       </el-form-item>
-      <el-form-item v-if="outputs.length > 1" label="节点输出">
+      <el-form-item v-if="saveAll" :label="`全部图片（${outputs.length} 张）`">
+        <div class="batchNames"><div v-for="(item, index) in outputs" :key="index">{{ item.label }}</div></div>
+      </el-form-item>
+      <el-form-item v-else-if="outputs.length > 1" label="节点输出">
         <el-select v-model="selectedOutput" aria-label="节点输出" :disabled="saving">
           <el-option v-for="(item, index) in outputs" :key="index" :label="item.label" :value="index" />
         </el-select>
@@ -90,7 +93,7 @@
     </el-form>
     <template #footer>
       <el-button :disabled="saving" @click="saveVisible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" :disabled="!assetName.trim() || /[\\/]/.test(assetName) || saveFolderName !== undefined" @click="saveAsset">保存</el-button>
+      <el-button type="primary" :loading="saving" :disabled="(saveAll ? !outputs.length : !assetName.trim() || /[\\/]/.test(assetName)) || saveFolderName !== undefined" @click="saveAsset">{{ saveAll ? '保存全部' : '保存' }}</el-button>
     </template>
   </el-dialog>
 </template>
@@ -110,6 +113,7 @@ import assetMenu from "./assetMenu.vue";
 import assetBrowser from "./assetBrowser.vue";
 import { useMediaPreview } from "@toonflow/node-shared/mediaPreview";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
+import { getStackFileNames } from "../nodeStacks";
 
 type AssetEntry = { name: string; path: string; type: "file" | "directory"; children?: AssetEntry[]; draft?: boolean };
 type AssetOutput = { label: string; output: NodeOutput };
@@ -119,6 +123,7 @@ const emit = defineEmits<{ select: [entry: AssetEntry] }>();
 const visible = defineModel<boolean>({ default: false });
 const saveVisible = ref(false);
 const saving = ref(false);
+const saveAll = ref(false);
 const entries = ref<AssetEntry[]>([]);
 const loading = ref(false);
 const uploading = ref(false);
@@ -330,8 +335,11 @@ async function createAssetFolder(parent: string, name: string) {
   return path;
 }
 
-async function openSave(label: string, items: AssetOutput[]) {
-  outputs.value = items;
+async function openSave(label: string, items: AssetOutput[], all = false) {
+  if (saving.value) return;
+  saveAll.value = all;
+  const names = all ? getStackFileNames(items) : [];
+  outputs.value = items.map((item, index) => ({ ...item, label: names[index] ?? item.label }));
   selectedOutput.value = 0;
   assetName.value = label.endsWith(extension.value) ? label : `${label}${extension.value}`;
   saveDirectory.value = folder.value;
@@ -346,6 +354,7 @@ async function openSave(label: string, items: AssetOutput[]) {
 }
 
 async function saveAsset() {
+  if (saveAll.value) return saveAllAssets();
   const output = outputs.value[selectedOutput.value]?.output;
   const name = assetName.value.trim();
   if (!output || !name || /[\\/]/.test(name) || saving.value || saveFolderName.value !== undefined) return;
@@ -366,10 +375,56 @@ async function saveAsset() {
   }
 }
 
+async function saveAllAssets() {
+  if (!outputs.value.length || saving.value || saveFolderName.value !== undefined || !sourceDirectory) return;
+  const files = useWorkspaceFiles(sourceDirectory);
+  const directory = saveDirectory.value;
+  const total = outputs.value.length;
+  let saved = 0;
+  saving.value = true;
+  try {
+    while (outputs.value.length) {
+      const item = outputs.value[0]!;
+      const content = typeof item.output.value === "object" ? await files.read(item.output.value.url) : new Blob([String(item.output.value)]);
+      const dot = item.label.lastIndexOf(".");
+      const base = dot > 0 ? item.label.slice(0, dot) : item.label;
+      const extension = dot > 0 ? item.label.slice(dot) : "";
+      for (let copy = 1; ; copy++) {
+        const name = copy === 1 ? item.label : `${base} (${copy})${extension}`;
+        const path = directory === "." ? name : `${directory}/${name}`;
+        try {
+          await axios.put("/api/assets/save", content, { params: { path }, headers: { "Content-Type": "application/octet-stream" } });
+          break;
+        } catch (error) {
+          if (!axios.isAxiosError<{ data?: { code?: string } }>(error) || error.response?.status !== 409 || error.response.data.data?.code !== "EEXIST") throw error;
+        }
+      }
+      // 成功项立即移出待保存列表，失败重试时不重复保存，也不删除已保存的素材。
+      outputs.value = outputs.value.slice(1);
+      saved++;
+    }
+    saveVisible.value = false;
+    ElMessage.success(`已将全部 ${total} 张图片保存到素材库`);
+  } catch (error) {
+    const message = axios.isAxiosError<{ message?: string }>(error) ? error.response?.data.message || error.message : error instanceof Error ? error.message : "保存失败";
+    ElMessage.error(`已保存 ${saved} 张，剩余 ${outputs.value.length} 张未保存：${message}`);
+  } finally {
+    saving.value = false;
+    try { await loadEntries(); } catch (error) { showError(error); }
+  }
+}
+
 defineExpose({ openSave });
 </script>
 
 <style lang="scss" scoped>
+.batchNames {
+  max-height: 160px;
+  overflow: auto;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .assetLibrary {
   display: flex;
   flex-direction: column;

@@ -4,8 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./directorIcon": "./src/components/directorIcon.vue",
+    "./textNodeIcon": "./src/components/textNodeIcon.vue",
+    "./videoIcon": "./src/components/videoIcon.vue",
+    "./videoGenerationIcon": "./src/components/videoGenerationIcon.vue",
     "./canvasTextHistory": "./src/canvasTextHistory.ts",
     "./mediaPreview": "./src/mediaPreview.ts",
+    "./mediaPreviewSize": "./src/mediaPreviewSize.ts",
     "./eagleMenuItem": "./src/components/eagleMenuItem.vue",
     "./mediaTypes": "./src/mediaTypes.ts",
     "./pcmPreview": "./src/pcmPreview.ts",

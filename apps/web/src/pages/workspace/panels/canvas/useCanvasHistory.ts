@@ -2,6 +2,7 @@ import { computed, nextTick, onScopeDispose, ref, shallowRef, watch } from "vue"
 import { debounce } from "lodash-es";
 import { useVueFlow, type Node, type Edge } from "@vue-flow/core";
 import { useNodeEvent } from "@toonflow/nodes-scaffold/nodeEvent";
+import { storyboardNodeType } from "@toonflow/server/nodeMenu";
 
 type CanvasSnapshot = { nodes: Node[]; edges: Edge[]; key: string };
 
@@ -27,7 +28,10 @@ export function useCanvasHistory(flow: ReturnType<typeof useVueFlow>, binding: (
     );
     // ACT: 只复制结构和名称；删除后恢复内容由上面的节点、连线引用保留。
     const key = JSON.stringify({
-      nodes: flow.getNodes.value.map(node => ({ ...fields(node, nodeRuntimeFields), data: { label: node.data?.label } })),
+      nodes: flow.getNodes.value.map(node => ({
+        ...fields(node, nodeRuntimeFields),
+        data: { label: node.data?.label, ...(node.type === storyboardNodeType ? { storyboard: node.data?.storyboard } : {}) },
+      })),
       edges: flow.getEdges.value.map(edge => fields(edge, edgeRuntimeFields)),
     });
     return { ...JSON.parse(key), key };
@@ -81,13 +85,11 @@ export function useCanvasHistory(flow: ReturnType<typeof useVueFlow>, binding: (
         const node = flow.findNode(saved.id);
         if (node) {
           restoreFields(node, saved, nodeRuntimeFields);
-          if (Object.hasOwn(saved.data ?? {}, "label")) node.data.label = saved.data!.label;
-          else delete node.data.label;
+          restoreNodeData(node.data, saved);
           return node;
         }
         const data = JSON.parse(JSON.stringify(nodeReferences.get(saved.id)?.data ?? saved.data ?? {}));
-        if (Object.hasOwn(saved.data ?? {}, "label")) data.label = saved.data!.label;
-        else delete data.label;
+        restoreNodeData(data, saved);
         const restored = { ...saved, data };
         Reflect.deleteProperty(restored, "initialized");
         return restored;
@@ -110,6 +112,14 @@ export function useCanvasHistory(flow: ReturnType<typeof useVueFlow>, binding: (
         applying.value = false;
         commit();
       }
+    }
+  }
+
+  function restoreNodeData(data: NonNullable<Node["data"]>, saved: Node) {
+    const keys = saved.type === storyboardNodeType ? ["label", "storyboard"] : ["label"];
+    for (const key of keys) {
+      if (Object.hasOwn(saved.data ?? {}, key)) data[key] = saved.data![key];
+      else delete data[key];
     }
   }
 

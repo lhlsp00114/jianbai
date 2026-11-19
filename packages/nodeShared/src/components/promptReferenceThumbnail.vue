@@ -11,6 +11,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { IconFileText, IconMusic, IconPhoto, IconVideo } from "@tabler/icons-vue";
+import textNodeIcon from "./textNodeIcon.vue";
 import { useNodeFiles } from "@toonflow/nodes-scaffold/workspaceFiles";
 import type { NodeMediaValue } from "@toonflow/nodes-scaffold/values";
 import { useMediaPreview } from "../mediaPreview";
@@ -21,7 +22,7 @@ const { useFileUrl } = useNodeFiles();
 const fileUrl = useFileUrl(() => !props.avatar && (props.dataType === "IMAGE" || props.dataType === "VIDEO") ? props.media : undefined, () => { failed.value = true; });
 const previewKind = computed(() => !props.avatar && props.dataType === "VIDEO" ? "video" : "image");
 const { src: mediaSrc, preparing: preparingPreview, error: previewError, handleError, handleLoaded } = useMediaPreview(() => String(props.avatar || fileUrl.value), previewKind);
-const typeIcon = computed(() => props.dataType === "IMAGE" ? IconPhoto : props.dataType === "VIDEO" ? IconVideo : props.dataType === "AUDIO" ? IconMusic : IconFileText);
+const typeIcon = computed(() => props.dataType === "IMAGE" ? IconPhoto : props.dataType === "VIDEO" ? IconVideo : props.dataType === "AUDIO" ? IconMusic : props.dataType === "STRING" ? textNodeIcon : IconFileText);
 watch([() => props.avatar, () => props.media, () => props.dataType], () => { failed.value = false; }, { flush: "sync" });
 </script>
 

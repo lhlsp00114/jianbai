@@ -1,5 +1,5 @@
 <template>
-  <g class="flowingEdge">
+  <g v-if="!internalStackEdge" class="flowingEdge">
     <base-edge
       :id="id"
       class="edgeBasePath"
@@ -26,10 +26,20 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { BaseEdge, getBezierPath, type EdgeProps, type GraphNode } from "@vue-flow/core";
+import { BaseEdge, getBezierPath, Position, useVueFlow, type EdgeProps, type GraphNode } from "@vue-flow/core";
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps<EdgeProps & { motionEnabled: boolean }>();
+const flow = useVueFlow();
+const sourceStack = computed(() => {
+  const parent = flow.findNode(props.sourceNode.parentNode);
+  return parent?.type === "canvasStack" ? parent : undefined;
+});
+const targetStack = computed(() => {
+  const parent = flow.findNode(props.targetNode.parentNode);
+  return parent?.type === "canvasStack" ? parent : undefined;
+});
+const internalStackEdge = computed(() => !!sourceStack.value && sourceStack.value === targetStack.value);
 const trailOpacities = [0.025, 0.05, 0.09, 0.15, 0.24, 0.36, 0.5, 0.65];
 function getNodeBoundary(node: GraphNode, x: number, y: number) {
   return {
@@ -39,18 +49,26 @@ function getNodeBoundary(node: GraphNode, x: number, y: number) {
 }
 
 const path = computed(() => {
-  const source = getNodeBoundary(props.sourceNode, props.sourceX, props.sourceY);
-  const target = getNodeBoundary(props.targetNode, props.targetX, props.targetY);
+  const source = sourceStack.value ? {
+    x: sourceStack.value.computedPosition.x + sourceStack.value.dimensions.width,
+    y: sourceStack.value.computedPosition.y + sourceStack.value.dimensions.height / 2,
+  } : getNodeBoundary(props.sourceNode, props.sourceX, props.sourceY);
+  const target = targetStack.value ? {
+    x: targetStack.value.computedPosition.x,
+    y: targetStack.value.computedPosition.y + targetStack.value.dimensions.height / 2,
+  } : getNodeBoundary(props.targetNode, props.targetX, props.targetY);
   // 按接口朝向向外弯出，目标位于后方时也保留两端可见的弧线。
   return getBezierPath({
     ...props,
+    sourcePosition: sourceStack.value ? Position.Right : props.sourcePosition,
+    targetPosition: targetStack.value ? Position.Left : props.targetPosition,
     sourceX: source.x,
     sourceY: source.y,
     targetX: target.x,
     targetY: target.y,
   });
 });
-const flowing = computed(() => props.motionEnabled && (props.sourceNode.selected || props.sourceNode.dragging || props.targetNode.selected || props.targetNode.dragging));
+const flowing = computed(() => props.motionEnabled && [props.sourceNode, props.targetNode, sourceStack.value, targetStack.value].some(node => node?.selected || node?.dragging));
 </script>
 
 <style scoped lang="scss">

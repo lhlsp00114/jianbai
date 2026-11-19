@@ -1,12 +1,13 @@
 <template>
   <nodeSkeleton
+    ref="skeleton"
     v-bind="nodeProps"
     :class="{ outpaintNode: outpaintVisible }"
     v-model:bottomVisible="node.selected"
     :topVisible="node.selected && !outpaintVisible"
     topWidth="max-content"
     contentPadding="2px"
-    :resizeAspectRatio="(previewUrl || inpaintGuideUrl) && imageWidth ? imageWidth / 240 : undefined"
+    :resizeAspectRatio="(previewUrl || inpaintGuideUrl) && imageNaturalHeight ? imageNaturalWidth / imageNaturalHeight : undefined"
     selectionFrame
     toolbarAction="focus"
     :downloadUrl="previewUrl"
@@ -25,13 +26,12 @@
       <el-button :icon="IconSun" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="打光" aria-label="打光" @click.stop="openLighting">打光</el-button>
       <el-button :icon="IconCameraRotate" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="多角度" aria-label="多角度" @click.stop="openMultiAngle">多角度</el-button>
       <el-button :icon="IconLayoutGrid" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl" :loading="gridSplit?.splitting" text title="宫格切分" aria-label="宫格切分" @click.stop="gridSplit?.open($event)">宫格切分</el-button>
-      <el-button :icon="IconTransfer" :loading="uploading" :disabled="generating || deleting || lighting?.generating || multiAngle?.generating || panorama?.busy" text title="替换图片" aria-label="替换图片" @click.stop="fileInput?.click()">替换图片</el-button>
       <imageEditMenu :loading="creatingRotation" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" @rotate="createRotation(outputFile)" @crop="startEditor('crop')" @color="startEditor('color')" />
     </template>
     <template #topRightActions>
       <el-button :icon="IconPencil" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="标记" aria-label="标记" @click.stop="startEditor('mark')" />
     </template>
-    <div v-loading="generating || uploading" class="imageContent" :class="{ outpainting: outpaintVisible, nopan: !outpaintVisible }" :aria-busy="generating || uploading">
+    <div v-loading="generating || uploading" class="imageContent" :class="{ empty: !outputFile && !data.inpaint?.guide, outpainting: outpaintVisible, nopan: !outpaintVisible }" :aria-busy="generating || uploading">
       <input ref="fileInput" type="file" accept="image/*" hidden aria-label="选择替换图片" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy" @change="replaceOutput" />
       <div v-if="previewUrl" class="editorPreview" :style="{ visibility: outpaintVisible ? 'hidden' : undefined }">
         <imageEditor
@@ -59,6 +59,7 @@
         replaceable
         :current="outputFile"
         :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || gridSplit?.splitting"
+        @open="skeleton?.focusNode()"
         @select="outputs.image = { dataType: 'IMAGE', value: $event }"
         @upload="fileInput?.click()" />
     </div>
@@ -76,15 +77,17 @@
           <taskRecovery compact :visible="generationState.recoveryVisible.value" :label="generationState.recoveryLabel.value" :action="generationState.recoverResult" :disabled="cancelling || deleting || uploading" />
         </template>
         <el-card class="promptCard" shadow="never" :bodyStyle="{ padding: '14px 16px 12px' }">
-          <referenceActions :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" :disabled="generating || deleting || uploading || editor?.busy" />
+          <referenceActions presetPrompts :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" :disabled="generating || deleting || uploading || editor?.busy" />
           <el-button v-if="inpaintGuideUrl && editor?.mode !== 'inpaint'" class="inpaintInfo" text :icon="data.inpaint?.mode === 'outpaint' ? IconArrowsMaximize : IconBrush" @click="inpaintPreviewVisible = true">{{ data.inpaint?.mode === 'outpaint' ? '查看扩图范围' : '查看重绘标注' }}</el-button>
           <referenceItem
             v-if="refList.length"
             v-model="refList"
+            insertImages
+            @insert="generationPromptInput?.insertReferenceAtCursor(referenceKey($event)).catch(error => showNodeError(error, '插入图片引用失败'))"
             @preview="setReferencePreview"
             @remove="removeReference" />
-          <promptInput v-if="editor?.mode === 'inpaint'" v-model="data.inpaintPromptModel" v-model:text="data.inpaintPrompt" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" expandable />
-          <promptInput v-else ref="generationPromptInput" v-model="data.promptModel" v-model:text="data.prompt" :presets="imagePromptPresets" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" expandable />
+          <promptInput v-if="editor?.mode === 'inpaint'" ref="generationPromptInput" highlightImageMentions v-model="data.inpaintPromptModel" v-model:text="data.inpaintPrompt" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" expandable />
+          <promptInput v-else ref="generationPromptInput" highlightImageMentions v-model="data.promptModel" v-model:text="data.prompt" :presets="imagePromptPresets" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" expandable />
           <div class="promptFooter">
             <providerModelSelect
               v-if="editor?.mode !== 'inpaint'"
@@ -140,17 +143,18 @@ import taskRecovery from "@toonflow/node-shared/taskRecovery";
 import { computed, inject, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch } from "vue";
 import { useVueFlow } from "@vue-flow/core";
 import { ElButton, ElCard, ElLoading } from "element-plus";
-import { IconCheck, IconPhotoAi, IconPhoto, IconArrowUp, IconPlayerStop, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconSparkles, IconArrowsMaximize } from "@tabler/icons-vue";
+import { IconCheck, IconPhotoSpark, IconPhoto, IconArrowUp, IconPlayerStop, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconSparkles, IconArrowsMaximize } from "@tabler/icons-vue";
 import { findNodeModel, getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, z, type NodeMediaModel, type NodeImageRequest, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { useNodePersistence } from "@toonflow/nodes-scaffold/nodeDocument";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
 import { readLastNodeModel, rememberNodeModel } from "@toonflow/node-shared/modelPreference";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
+import { emptyMediaCardWidth, getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 import providerModelSelect from "@toonflow/node-shared/providerModelSelect";
 import eagleMenuItem from "@toonflow/node-shared/eagleMenuItem";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
 import { useNodeGeneration } from "@toonflow/node-shared/useNodeGeneration";
-import { useNodeReferences } from "@toonflow/node-shared/useNodeReferences";
+import { referenceKey, useNodeReferences } from "@toonflow/node-shared/useNodeReferences";
 import { getModelFormValues, useImageModelForm } from "@toonflow/node-shared/useModelForm";
 import promptInput from "@toonflow/node-shared/promptInput";
 import promptPresets from "@toonflow/node-shared/promptPresets";
@@ -177,7 +181,7 @@ import { imagePromptPresets, imagePromptPresetColumns, readImagePresetPrompt } f
 
 defineOptions({
   inheritAttrs: false,
-  icon: IconPhotoAi,
+  icon: IconPhotoSpark,
   handles: [
     { id: "in", type: "target", dataType: ["IMAGE", "STRING"], label: "图片、文本输入" },
     { id: "image", type: "source", dataType: "IMAGE", label: "图片输出" },
@@ -192,6 +196,7 @@ const { findNode, nodeTypes, updateNode } = useVueFlow();
 const getPersistence = useNodePersistence();
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
 const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; inpaintPrompt: string; inpaintPromptModel: PromptModel; model: string; size: string; ratio: string; other: Record<string, unknown>; inpaint?: ImageInpaint; mediaTask?: { state: string; applied?: boolean } });
+const skeleton = ref<InstanceType<typeof nodeSkeleton>>();
 const generationPromptInput = ref<InstanceType<typeof promptInput>>();
 data.value.prompt ??= "";
 data.value.promptModel ??= [];
@@ -316,9 +321,14 @@ const priceInput = computed(() => {
   return inpaint ? buildInpaintRequest(input, inpaint, inpaint.mode === "outpaint" ? readOutpaintInstruction() : undefined) : input;
 });
 const outputFile = computed(() => outputs.value.image?.dataType === "IMAGE" ? outputs.value.image.value : undefined);
-watch([outputFile, () => data.value.inpaint?.guide], () => { imageResolution.value = ""; imageNaturalWidth.value = imageNaturalHeight.value = 0; outpaintVisible.value = false; }, { flush: "sync" });
+watch([outputFile, () => data.value.inpaint?.guide], ([file, guide], [previousFile, previousGuide]) => {
+  outpaintVisible.value = false;
+  if (file && previousFile && guide === previousGuide) return;
+  imageResolution.value = "";
+  imageWidth.value = imageNaturalWidth.value = imageNaturalHeight.value = 0;
+}, { flush: "sync" });
 const nodePreviewStyle = computed(() => ({
-  width: outputFile.value || data.value.inpaint?.guide ? (imageWidth.value ? `${imageWidth.value + 6}px` : undefined) : undefined,
+  width: outputFile.value || data.value.inpaint?.guide ? (imageWidth.value ? `${imageWidth.value + 6}px` : undefined) : `${emptyMediaCardWidth}px`,
 }));
 watch(() => data.value.ratio, async () => {
   if (outputFile.value || data.value.inpaint?.guide) return;
@@ -336,7 +346,13 @@ const inpaintGuideUrl = files.useFileUrl(
 );
 const previewUrl = files.useFileUrl(
   outputFile,
-  (error) => showNodeError(error, "图片读取失败")
+  (error) => showNodeError(error, "图片读取失败"),
+  async url => {
+    const image = new Image();
+    image.src = url;
+    // 原格式无法解码时仍交给图片编辑器生成兼容预览。
+    await image.decode().catch(() => {});
+  }
 );
 const imagePreviewUrl = computed(() => editor.value?.previewSrc || previewUrl.value);
 let convertingResult = false;
@@ -509,7 +525,7 @@ async function resizeImage(event: Event) {
   imageResolution.value = `${image.naturalWidth} × ${image.naturalHeight}`;
   imageNaturalWidth.value = image.naturalWidth;
   imageNaturalHeight.value = image.naturalHeight;
-  imageWidth.value = (240 * image.naturalWidth) / image.naturalHeight;
+  imageWidth.value = getMediaPreviewSize(image.naturalWidth, image.naturalHeight).width;
   await nextTick();
   updateNodeInternals();
 }
@@ -674,6 +690,8 @@ nodeTools.register({
     img { display: block; width: 100%; }
     span { position: absolute; bottom: 8px; left: 8px; padding: 4px 8px; border-radius: 4px; background: #0009; color: #fff; font-size: 12px; }
   }
+
+  .nodeSkeleton:not(.resized) &.empty .imageEmpty { height: 234px; }
 
   .imageEmpty {
     display: grid;

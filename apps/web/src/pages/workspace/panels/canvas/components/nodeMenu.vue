@@ -101,8 +101,8 @@ import nodeMenuItems from "./nodeMenuItems.vue";
 import { generalSettings } from "@/stores/settings";
 import { filterNodeMenu, resolveNodeMenu } from "@toonflow/server/nodeMenu";
 import { getSelectionConnections } from "../selectionConnections";
-import { getSelectionRoots, getSelectionTree } from "../selectionNodes";
-import { arrangeSelection } from "../arrangeSelection";
+import { getSelectionTree } from "../selectionNodes";
+import { arrangeSelection, getArrangeTargets } from "../arrangeSelection";
 import {
   IconClipboard,
   IconCopyPlus,
@@ -153,7 +153,7 @@ const groupHandleRefs = ref<InstanceType<typeof selectionHandle>[]>([]);
 const groups = computed(() => flow.getNodes.value.filter(node => node.type === "canvasGroup" && !node.hidden));
 const singleGroupSelected = computed(() => flow.getSelectedNodes.value.length === 1 && flow.getSelectedNodes.value[0]?.type === "canvasGroup");
 const canArrangeSelection = computed(() => {
-  const nodes = getSelectionRoots(selectedNodes.value, flow.getNodes.value);
+  const nodes = getArrangeTargets(selectedNodes.value, flow.getNodes.value);
   return !selectionBusy && !deleting.value && nodes.length > 1
     && nodes.every(node => flow.findNode(node.id) === node && node.draggable !== false
       && Number.isFinite(node.dimensions.width) && node.dimensions.width > 0

@@ -3,6 +3,7 @@ import { useNode, useVueFlow, type Node } from "@vue-flow/core";
 import { ElMessage } from "element-plus";
 import { uploadNodeFile, useNodeFiles } from "@toonflow/nodes-scaffold/runtime";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
+import { getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 import type { PanoramaCapture } from "./imagePanorama";
 
 export function usePanoramaCapture(source: () => string) {
@@ -56,9 +57,10 @@ export function usePanoramaCapture(source: () => string) {
       }
       const columns = grouped ? payload.columns : 1;
       const rows = Math.ceil(createdNodes.length / columns);
-      const nodeWidth = Math.max(...payload.images.map(image => 240 * image.width / image.height + 18));
-      // ACT: 图片节点预览高 240，预留 300 高含标题；最多 12 张，按整体矩形向下避让已有节点。
-      const nodeHeight = 300;
+      const previewSizes = payload.images.map(image => getMediaPreviewSize(image.width, image.height));
+      const nodeWidth = Math.max(...previewSizes.map(size => size.width)) + 18;
+      // ACT: 最多 12 张，按最大节点尺寸组成矩形，向下避让已有节点。
+      const nodeHeight = Math.max(...previewSizes.map(size => size.height)) + 60;
       const paddingX = grouped ? 24 : 0;
       const paddingTop = grouped ? 40 : 0;
       const width = columns * (nodeWidth + 40) - 40 + paddingX * 2;

@@ -1,5 +1,6 @@
 import { inject, nextTick } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
+import { emptyMediaCardWidth, getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 import type { ImageInpaint } from "./imageInpaint";
 
 export function useImageVariationNode() {
@@ -16,12 +17,14 @@ export function useImageVariationNode() {
     const edgeId = crypto.randomUUID();
     const { label, prompt, model, size, ratio } = input;
     const [ratioWidth = 0, ratioHeight = 0] = ratio.split(":").map(Number);
-    const outputWidth = Number.isFinite(ratioWidth / ratioHeight) && ratioWidth > 0 && ratioHeight > 0 ? Math.max(320, 240 * ratioWidth / ratioHeight + 18) : 320;
+    const previewSize = ratioWidth > 0 && ratioHeight > 0 && Number.isFinite(ratioWidth) && Number.isFinite(ratioHeight) ? getMediaPreviewSize(ratioWidth, ratioHeight) : undefined;
+    const outputWidth = Math.max(emptyMediaCardWidth, (previewSize?.width ?? 0) + 18);
+    const outputHeight = Math.max(300, previewSize?.height ?? 0) + 60;
     const x = node.computedPosition.x + (node.dimensions.width || 320) + 80;
     let y = node.computedPosition.y;
     for (const other of [...getNodes.value].sort((left, right) => left.computedPosition.y - right.computedPosition.y)) {
       const position = other.computedPosition;
-      if (position.x < x + outputWidth && position.x + (other.dimensions.width || 320) > x && position.y < y + 300 && position.y + (other.dimensions.height || 300) > y) {
+      if (position.x < x + outputWidth && position.x + (other.dimensions.width || 320) > x && position.y < y + outputHeight && position.y + (other.dimensions.height || 300) > y) {
         y = position.y + (other.dimensions.height || 300) + 40;
       }
     }

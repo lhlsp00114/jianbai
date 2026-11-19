@@ -61,6 +61,7 @@ import { useNode, useVueFlow, type Node } from "@vue-flow/core";
 import { ElButton, ElInputNumber, ElMessage, ElPopover } from "element-plus";
 import { uploadNodeFile, useNodeFiles } from "@toonflow/nodes-scaffold/runtime";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
+import { getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 
 const props = defineProps<{ src: string; disabled?: boolean; active: boolean }>();
 const { node } = useNode();
@@ -156,9 +157,11 @@ async function splitImage() {
       }
     }
     if (findNode(node.id) !== node || !nodeTypes?.value?.["remote-imageNode"]) throw new Error("画布节点已变化，请重新切分");
-    const tileWidth = Math.ceil(width / columnCount) / Math.floor(height / rowCount) * 240 + 18;
+    const tileSize = getMediaPreviewSize(Math.ceil(width / columnCount), Math.floor(height / rowCount));
+    const tileWidth = tileSize.width + 18;
+    const rowHeight = getMediaPreviewSize(Math.floor(width / columnCount), Math.ceil(height / rowCount)).height + 80;
     const gridWidth = columnCount * (tileWidth + 40) - 40;
-    const gridHeight = rowCount * 320 - 20;
+    const gridHeight = rowCount * rowHeight - 20;
     const x = node.computedPosition.x + node.dimensions.width + 80;
     let y = node.computedPosition.y;
     for (const other of [...getNodes.value].sort((left, right) => left.computedPosition.y - right.computedPosition.y)) {
@@ -168,7 +171,7 @@ async function splitImage() {
       }
     }
     nodes.forEach((item, index) => {
-      item.position = { x: x + index % columnCount * (tileWidth + 40), y: y + Math.floor(index / columnCount) * 320 };
+      item.position = { x: x + index % columnCount * (tileWidth + 40), y: y + Math.floor(index / columnCount) * rowHeight };
     });
     await batchHistory(async () => {
       controller.signal.throwIfAborted();

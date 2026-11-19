@@ -73,6 +73,7 @@ import { ElButton, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage, ElPopo
 import { IconPlayerPlay, IconPlayerPause, IconVolume, IconVolumeOff, IconPhotoScan, IconPlayerSkipBack, IconPlayerSkipForward } from "@tabler/icons-vue";
 import { useNodeFiles } from "@toonflow/nodes-scaffold/workspaceFiles";
 import { useMediaPreview } from "@toonflow/node-shared/mediaPreview";
+import { getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 
 const { src, label = "节点视频", readOnly = false } = defineProps<{ src: string; label?: string; readOnly?: boolean }>();
 const emit = defineEmits<{ loadedmetadata: [event: Event] }>();
@@ -292,10 +293,12 @@ async function captureFrame(command: "current" | "first" | "last") {
     if (findNode(node.id) !== node || !nodeTypes?.value?.["remote-imageNode"]) throw new Error("画布节点已变化，请重新截帧");
     const x = node.computedPosition.x + node.dimensions.width + 40;
     let y = node.computedPosition.y;
-    const width = 240 * canvas.width / canvas.height + 18;
+    const previewSize = getMediaPreviewSize(canvas.width, canvas.height);
+    const width = previewSize.width + 18;
+    const height = previewSize.height + 60;
     for (const other of [...getNodes.value].sort((a, b) => a.computedPosition.y - b.computedPosition.y)) {
       const position = other.computedPosition;
-      if (position.x < x + width && position.x + other.dimensions.width > x && position.y < y + 300 && position.y + other.dimensions.height > y) y = position.y + other.dimensions.height + 24;
+      if (position.x < x + width && position.x + other.dimensions.width > x && position.y < y + height && position.y + other.dimensions.height > y) y = position.y + other.dimensions.height + 24;
     }
     addNodes({ id, type: "remote-imageNode", position: { x, y }, data: { label: name, outputs: { image: { dataType: "IMAGE", value: { url: path, mimeType: "image/png" } } } } });
     committed = true;
@@ -373,7 +376,7 @@ async function captureFrame(command: "current" | "first" | "last") {
     display: block;
     width: 100%;
     height: var(--nodeMediaHeight, auto);
-    max-height: var(--nodeMediaHeight, 240px);
+    max-height: var(--nodeMediaHeight, var(--videoPreviewHeight, 240px));
     object-fit: contain;
     border-radius: var(--el-border-radius-base);
     pointer-events: none;
