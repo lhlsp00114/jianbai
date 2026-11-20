@@ -66,6 +66,7 @@
       <el-button v-if="canGroup" text :icon="IconBoxMultiple" :disabled="busy || disabled" @click="operate('group')">打组</el-button>
       <el-button v-if="storyboardGroup" text :icon="IconLayoutGrid" :disabled="busy || disabled || !storyboardMembers" :title="storyboardMembers ? undefined : '仅支持由未连线且已有图片的普通图片节点组成的分组'" @click="operate('storyboard')">转分镜组</el-button>
       <el-button v-if="hasGroup" text :icon="IconDeselect" :disabled="busy || disabled" @click="operate('ungroup')">解组</el-button>
+      <el-button text :icon="IconDownload" :disabled="busy || disabled || !downloadImages.length" title="将选中图片逐张下载为独立文件" @click="downloadSelectionImages">下载图片</el-button>
       </template>
   </canvasToolbar>
 </template>
@@ -82,7 +83,7 @@ import { useNodeEvent } from "@toonflow/nodes-scaffold/nodeEvent";
 import { createGroupNode, finishGroupDrag, getSelectionRoots, getSelectionTree } from "../selectionNodes";
 import { arrangeSelection, getArrangeTargets, type ArrangeSelectionMode } from "../arrangeSelection";
 import { remapNodeReferences } from "../canvasFiles";
-import { getStackFileNames, getStackImage, getStackMembers, type StackMember } from "../nodeStacks";
+import { getStackFileNames, getStackImage, getStackMedia, getStackMembers, type StackMember } from "../nodeStacks";
 import { readStoryboard, storyboardMaxSide, storyboardOption } from "../storyboard";
 import type { NodeOutput } from "@toonflow/nodes-scaffold/values";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
@@ -98,6 +99,33 @@ const props = defineProps<{
 const flow = useVueFlow();
 const busy = ref(false);
 const colorMenuVisible = ref(false);
+const downloadImages = computed(() => getSelectionTree(flow.getSelectedNodes.value, flow.getNodes.value).flatMap(node => {
+  const image = getStackImage(node);
+  return image ? [{ label: String(node.data.label || "图片"), output: image.output }] : [];
+}));
+
+async function downloadSelectionImages() {
+  const directory = workspaceStore.project?.directory;
+  if (!directory || busy.value || props.disabled) return;
+  const items = downloadImages.value;
+  const names = getStackFileNames(items);
+  const files = useWorkspaceFiles(directory);
+  const signal = props.getSignal();
+  busy.value = true;
+  try {
+    for (const [index, item] of items.entries()) {
+      signal.throwIfAborted();
+      const saved = await saveFile(async () => {
+        const content = await files.read(item.output.value.url);
+        signal.throwIfAborted();
+        return new Blob([content], { type: item.output.value.mimeType });
+      }, names[index]!);
+      if (!saved) break;
+    }
+  } catch (error) {
+    if (!signal.aborted) ElMessage.error(error instanceof Error ? error.message : "下载图片失败");
+  } finally { busy.value = false; }
+}
 const colors = [
   { label: "灰色", value: "#808080" },
   { label: "红色", value: "#ef4444" },
@@ -121,7 +149,7 @@ const canGroup = computed(() => selectionRoots.value.length > 1);
 const selectedStack = computed(() => selectionRoots.value.length === 1 && selectionRoots.value[0]?.type === "canvasStack" ? selectionRoots.value[0] : undefined);
 const canStack = computed(() => canGroup.value && selectionRoots.value.every(node =>
   node.type !== "canvasGroup" && node.type !== "canvasStack" && node.draggable !== false && !node.hidden
-  && node.parentNode === selectionRoots.value[0]?.parentNode && node.dimensions.width > 0 && node.dimensions.height > 0 && getStackImage(node)));
+  && node.parentNode === selectionRoots.value[0]?.parentNode && node.dimensions.width > 0 && node.dimensions.height > 0 && getStackMedia(node)));
 const sendNodeToAgent = inject<((nodeId: string, outputIds: string[]) => Promise<void>) | undefined>("sendNodeToAgent", undefined);
 const saveNodeToAssets = inject<((label: string, outputs: { label: string; output: NodeOutput }[], all?: boolean) => void) | undefined>("saveNodeToAssets", undefined);
 const workspaceStore = useWorkspaceStore();
@@ -168,7 +196,7 @@ const toolbarStyle = computed(() => {
   const bounds = getRectOfNodes(flow.getSelectedNodes.value);
   const { x, y, zoom } = flow.viewport.value;
   const left = x + (bounds.x + bounds.width / 2) * zoom;
-  const top = y + (bounds.y - 12 - (hasGroup.value ? 30 : 0)) * zoom;
+  const top = y + (bounds.y - (flow.nodesSelectionActive.value ? 20 : 12) - (hasGroup.value ? 30 : 0)) * zoom;
   // 与节点工具条一样锚定内容，不再因视口边缘或工具条宽度变化偏移。
   return { left: `${left}px`, top: `${top}px`, "--selectionToolbarZoom": zoom };
 });
@@ -241,7 +269,7 @@ function groupNodes(selection: GraphNode[]) {
 }
 
 function stackNodes(selection: GraphNode[]) {
-  if (!canStack.value) throw new Error("请选中同一分组内至少两个有图片输出的节点");
+  if (!canStack.value) throw new Error("请选中同一分组内至少两个有图片或视频输出的节点");
   const roots = getSelectionRoots(selection, flow.getNodes.value);
   const bounds = getRectOfNodes(roots);
   const first = roots[0]!;
@@ -259,7 +287,7 @@ function stackNodes(selection: GraphNode[]) {
     position: { x: bounds.x - parentPosition.x, y: bounds.y - parentPosition.y },
     style: { width: `${first.dimensions.width}px`, height: `${first.dimensions.height}px` },
     connectable: false, expandParent: false,
-    data: { label: "图片堆叠", stackMembers: members, stackIndex: 0 },
+    data: { label: roots.some(node => getStackMedia(node)?.output.dataType === "VIDEO") ? "素材堆叠" : "图片堆叠", stackMembers: members, stackIndex: 0 },
   };
   const ids = new Set(members.map(member => member.id));
   const nodes: Node[] = flow.getNodes.value.map(node => ids.has(node.id) ? {
@@ -296,7 +324,7 @@ async function sendStack() {
     for (const member of getStackMembers(stack)) {
       signal.throwIfAborted();
       const node = flow.findNode(member.id);
-      const image = node?.parentNode === stack.id ? getStackImage(node) : undefined;
+      const image = node?.parentNode === stack.id ? getStackMedia(node) : undefined;
       if (image) await sendNodeToAgent(member.id, [image.id]);
     }
   } catch (error) {
@@ -307,8 +335,8 @@ async function sendStack() {
 function stackOutputs(stack: GraphNode) {
   return getStackMembers(stack).flatMap(member => {
     const node = flow.findNode(member.id);
-    const image = node?.parentNode === stack.id ? getStackImage(node) : undefined;
-    return image ? [{ label: node?.data.label || "图片", output: image.output }] : [];
+    const image = node?.parentNode === stack.id ? getStackMedia(node) : undefined;
+    return image ? [{ label: node?.data.label || (image.output.dataType === "VIDEO" ? "视频" : "图片"), output: image.output }] : [];
   });
 }
 
@@ -341,7 +369,7 @@ async function downloadStack() {
         if (final) finished = true;
       });
       try {
-        // 图片已压缩，逐张读取并直接打包，避免再次压缩阻塞界面。
+        // 媒体已压缩，逐个读取并直接打包，避免再次压缩阻塞界面。
         for (const [index, item] of outputs.entries()) {
           signal.throwIfAborted();
           const content = await files.read(item.output.value.url);
@@ -353,10 +381,10 @@ async function downloadStack() {
         }
         archive.end();
         if (zipError) throw zipError;
-        if (!finished) throw new Error("图片打包未完成，请重试");
+        if (!finished) throw new Error("素材打包未完成，请重试");
         return new Blob(chunks, { type: "application/zip" });
       } finally { archive.terminate(); }
-    }, "堆叠图片.zip");
+    }, outputs.some(item => item.output.dataType === "VIDEO") ? "堆叠素材.zip" : "堆叠图片.zip");
   } catch (error) {
     if (!signal.aborted) ElMessage.error(error instanceof Error ? error.message : "全部下载失败");
   } finally { busy.value = false; }

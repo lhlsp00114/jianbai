@@ -10,14 +10,17 @@
       popperClass="agentModelPopover"
       :popperStyle="{ padding: '20px', maxWidth: 'calc(100vw - 24px)' }">
       <template #reference>
-        <el-button class="modelButton" text :disabled="disabled" aria-label="模型与思考强度设置">
-          <modelIcon v-if="selectedModelChoice" :model="selectedModelChoice.modelId" :size="14" />
-          <modelLabel class="modelName" :label="selectedModelChoice?.label ?? '选择模型'" :providerId="selectedModelChoice?.providerId" />
-          <template v-if="reasoningLevels.length">
-            ·
-            <span class="reasoningLabel">{{ reasoningLabel }}</span>
+        <el-button class="modelButton" :class="{ iconOnly }" text :disabled="disabled" aria-label="模型与思考强度设置" :aria-expanded="visible" :title="iconOnly ? modelButtonTitle : undefined">
+          <icon-sparkles v-if="iconOnly" :size="17" aria-hidden="true" />
+          <template v-else>
+            <modelIcon v-if="selectedModelChoice" :model="selectedModelChoice.modelId" :size="14" />
+            <modelLabel class="modelName" :label="selectedModelChoice?.label ?? '选择模型'" :providerId="selectedModelChoice?.providerId" />
+            <template v-if="reasoningLevels.length">
+              ·
+              <span class="reasoningLabel">{{ reasoningLabel }}</span>
+            </template>
+            <component :is="visible ? IconChevronUp : IconChevronDown" :size="14" aria-hidden="true" />
           </template>
-          <component :is="visible ? IconChevronUp : IconChevronDown" :size="14" aria-hidden="true" />
         </el-button>
       </template>
       <el-form class="modelOptions" labelPosition="top">
@@ -53,7 +56,7 @@
 
 <script setup lang="ts">
 import { computed, ref, useId, watch } from "vue";
-import { IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
+import { IconChevronDown, IconChevronUp, IconSparkles } from "@tabler/icons-vue";
 import { modelIcon } from "@toonflow/model-icons";
 import { useNodeModelSelection } from "@toonflow/nodes-scaffold/nodeAi";
 import modelLabel from "@toonflow/node-shared/modelLabel";
@@ -62,7 +65,7 @@ import { modelChoices, refreshModelChoices } from "@/stores/settings";
 
 const selectedModel = defineModel<string>({ default: "" });
 const reasoningEffort = defineModel<string>("reasoningEffort", { default: "" });
-const props = withDefaults(defineProps<{ active?: boolean; disabled?: boolean }>(), { active: true, disabled: false });
+const props = withDefaults(defineProps<{ active?: boolean; disabled?: boolean; iconOnly?: boolean }>(), { active: true, disabled: false });
 const visible = ref(false);
 const reasoningId = useId();
 const reasoningLabels: Record<ThinkingLevel, string> = { off: "关闭", minimal: "最小", low: "低", medium: "中", high: "高", xhigh: "极高", max: "最高" };
@@ -80,6 +83,11 @@ const reasoningLevels = computed(() => selectedModelChoice.value?.reasoningLevel
 const reasoningOptions = computed(() => [{ label: "默认", value: "" }, ...reasoningLevels.value.map(value => ({ label: reasoningLabels[value], value }))]);
 const reasoningColumns = computed(() => Math.min(4, reasoningOptions.value.length > 4 ? Math.ceil(reasoningOptions.value.length / 2) : reasoningOptions.value.length));
 const reasoningLabel = computed(() => reasoningOptions.value.find(item => item.value === reasoningEffort.value)?.label ?? "默认");
+const modelButtonTitle = computed(() => {
+  const model = selectedModelChoice.value;
+  if (!model) return "选择模型";
+  return reasoningLevels.value.length ? `${model.label} · ${reasoningLabel.value}` : model.label;
+});
 watch(modelChoices, items => {
   if (!selectedModel.value) selectedModel.value = items[0]?.value ?? "";
 }, { immediate: true });
@@ -102,6 +110,12 @@ watch(visible, value => { if (value) void refreshModelChoices().catch(() => {});
     height: 28px;
     padding: 0 8px;
     color: var(--el-text-color-regular);
+
+    &.iconOnly {
+      width: 32px;
+      padding: 0;
+      border-radius: 8px;
+    }
 
     > span {
       display: flex;

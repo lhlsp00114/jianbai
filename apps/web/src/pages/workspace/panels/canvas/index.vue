@@ -316,6 +316,8 @@ const nodePanelVisible = ref(false);
 const assetLibraryRef = ref<InstanceType<typeof assetLibrary>>();
 const edgeDisconnect = ref<{ id: string; x: number; y: number }>();
 const flow = useVueFlow(props.runtimeKey);
+const nodeFocusActions = new Map<string, () => Promise<void>>();
+provide("nodeFocusActions", nodeFocusActions);
 const snapGuideStyle = ref<{ left: number; top: number }>();
 const canvasNodeIds = computed(() => flow.getNodes.value.map(node => node.id));
 const generationHistoryNodes = computed(() => flow.getNodes.value.map(node => ({
@@ -1512,7 +1514,16 @@ function updateCanvasKeys(event: KeyboardEvent) {
     const node = nodeElement && canvasElement.value?.contains(nodeElement) ? flow.findNode(nodeElement.dataset.id) : undefined;
     if (node && !node.hidden) {
       event.preventDefault();
-      void flow.fitView({ nodes: [node.id], padding: 0.1, maxZoom: 1.4, duration: 250 });
+      const focusNode = nodeFocusActions.get(node.id);
+      if (focusNode) {
+        if (!node.selected || flow.getSelectedNodes.value.length !== 1) {
+          flow.removeSelectedElements();
+          flow.addSelectedNodes([node]);
+          flow.nodesSelectionActive.value = false;
+        }
+        void focusNode();
+      }
+      else void flow.fitView({ nodes: [node.id], padding: 0.1, maxZoom: 1.4, duration: 250 });
       return;
     }
   }
@@ -1525,13 +1536,14 @@ function updateCanvasKeys(event: KeyboardEvent) {
   panKeyPressed.value = !!inCanvas && !editing && !event.isComposing
     && shortcutPressed(event, getShortcutBindings(shortcuts.pan).filter(binding => binding !== "None").join(" / "), pressedCodes);
   updateCanvasSelection(event);
-  if (event.type === "keyup" || event.defaultPrevented || event.isComposing || !inCanvas || editing) return;
+  if (event.type === "keyup" || event.defaultPrevented || event.isComposing || !inCanvas || textEditing) return;
   const action = ([
     "group", "mergeGroup", "ungroup", "addNode", "moveTool", "handTool", "arrange", "search",
     "delete", "copy", "cut", "paste", "undo", "redo", "zoomIn", "zoomOut", "fitView",
   ] as const).find((action) =>
     shortcutMatches(event, shortcuts[action])
   );
+  if (editing && action !== "paste") return;
   if (!action) {
     const nativeClipboardKey = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
       && (event.code === "KeyV" || event.code === "KeyX" && flow.getSelectedNodes.value.length && !window.getSelection()?.toString()
@@ -1792,6 +1804,7 @@ const defaultEdgeOptions = markRaw({
 }
 
 .canvas {
+  --canvasSelectionColor: #fff;
   position: relative;
   width: 100%;
   height: 100%;
@@ -1922,10 +1935,17 @@ const defaultEdgeOptions = markRaw({
     opacity: 1;
   }
 
+  :deep(.vue-flow__selection),
+  :deep(.vue-flow__nodesselection-rect) {
+    border-style: dashed;
+    border-width: 1.5px;
+    border-color: var(--canvasSelectionColor);
+  }
+
   :deep(.vue-flow__nodesselection-rect) {
     box-sizing: content-box;
-    padding: 8px;
-    margin: -8px;
+    padding: 16px;
+    margin: -16px;
     border-radius: 4px;
   }
 

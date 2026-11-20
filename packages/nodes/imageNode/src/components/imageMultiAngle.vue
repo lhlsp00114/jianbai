@@ -36,15 +36,15 @@
       <div class="parameterRow">
         <div class="rangeControl">
           <div class="rangeHeader"><span>水平环绕</span><label class="numberControl"><input :value="Math.round(settings.azimuth)" type="number" min="-180" max="180" step="1" :disabled="busy" aria-label="水平环绕数值" @change="setParameter($event, 'azimuth')" /><span>°</span></label></div>
-          <input v-model.number="settings.azimuth" type="range" min="-180" max="180" step="1" :disabled="busy" aria-label="相机水平环绕" />
+          <input v-model.number="settings.azimuth" type="range" :style="{ '--rangeProgress': `${(settings.azimuth + 180) / 360 * 100}%` }" min="-180" max="180" step="1" :disabled="busy" aria-label="相机水平环绕" />
         </div>
         <div class="rangeControl">
           <div class="rangeHeader"><span>垂直俯仰</span><label class="numberControl"><input :value="Math.round(settings.elevation)" type="number" min="-80" max="80" step="1" :disabled="busy" aria-label="垂直俯仰数值" @change="setParameter($event, 'elevation')" /><span>°</span></label></div>
-          <input v-model.number="settings.elevation" type="range" min="-80" max="80" step="1" :disabled="busy" aria-label="相机垂直俯仰" />
+          <input v-model.number="settings.elevation" type="range" :style="{ '--rangeProgress': `${(settings.elevation + 80) / 160 * 100}%` }" min="-80" max="80" step="1" :disabled="busy" aria-label="相机垂直俯仰" />
         </div>
         <div class="rangeControl">
           <div class="rangeHeader"><span>拍摄距离</span><label class="numberControl"><input :value="settings.distance.toFixed(1)" type="number" min="2" max="10" step="0.1" :disabled="busy" aria-label="拍摄距离数值" @change="setParameter($event, 'distance')" /><span>{{ getMultiAngleShot(settings.distance) }}</span></label></div>
-          <input v-model.number="settings.distance" type="range" min="2" max="10" step="0.1" :disabled="busy" aria-label="相机拍摄距离" />
+          <input v-model.number="settings.distance" type="range" :style="{ '--rangeProgress': `${(settings.distance - 2) / 8 * 100}%` }" min="2" max="10" step="0.1" :disabled="busy" aria-label="相机拍摄距离" />
         </div>
       </div>
       <div class="lensRow">
@@ -57,6 +57,7 @@
         :source="source"
         :aspectRatio="sourceRatio"
         :prompt="buildMultiAnglePrompt(settings)"
+        compactPrompt="multiAngle"
         :disabled="props.disabled"
         label="多角度"
         buttonLabel="生成新视角"
@@ -110,13 +111,11 @@ function reset() {
 </script>
 
 <style scoped lang="scss">
+@use "@toonflow/node-shared/imageToolStyles.scss" as tools;
+
 .multiAnglePanel {
+  @include tools.surface;
   padding: 14px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 14px;
-  background: var(--el-bg-color-overlay);
-  color: var(--el-text-color-primary);
-  box-shadow: var(--el-box-shadow-light);
   font-size: 12px;
 
   .panelHeader {
@@ -133,9 +132,7 @@ function reset() {
     .presetColumn {
       display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 28px repeat(5, minmax(0, 1fr)); gap: 7px;
       > span { grid-column: 1 / -1; display: flex; align-items: center; color: var(--el-text-color-secondary); }
-      button { min-height: 39px; padding: 7px 4px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; color: inherit; background: var(--el-fill-color-light); font: inherit; cursor: pointer; }
-      button[aria-pressed="true"] { border-color: var(--el-color-primary); color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
-      button:disabled { opacity: .5; cursor: default; }
+      button { @include tools.choice; min-height: 39px; padding: 7px 4px; }
     }
     .stageColumn {
       min-width: 0;
@@ -143,10 +140,8 @@ function reset() {
         display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px;
         > span { color: var(--el-text-color-secondary); }
         .viewSwitch {
-          display: flex; gap: 3px; padding: 3px; border-radius: 8px; background: var(--el-fill-color-light);
-          button { padding: 4px 10px; border: 0; border-radius: 5px; color: var(--el-text-color-secondary); background: transparent; font: inherit; cursor: pointer; }
-          button[aria-pressed="true"] { color: var(--el-color-primary); background: var(--el-bg-color-overlay); box-shadow: 0 1px 3px #0001; }
-          button:disabled { opacity: .5; cursor: default; }
+          display: flex; gap: 3px;
+          button { @include tools.choice; padding: 4px 10px; }
         }
       }
     }
@@ -159,13 +154,12 @@ function reset() {
         display: flex; align-items: center; justify-content: space-between; gap: 4px; white-space: nowrap;
         .numberControl {
           display: flex; align-items: center; gap: 4px; color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums;
-          input { width: 62px; min-width: 0; box-sizing: border-box; padding: 3px 4px; border: 1px solid var(--el-border-color); border-radius: 5px; color: inherit; background: var(--el-bg-color); font: inherit; }
+          input { width: 62px; min-width: 0; box-sizing: border-box; padding: 3px 4px; border: 1px solid transparent; border-bottom-color: var(--el-border-color); border-radius: 5px; color: inherit; background: transparent; font: inherit; }
           input:focus { outline: 1px solid var(--el-color-primary); border-color: var(--el-color-primary); }
           input:disabled { opacity: .5; }
         }
       }
-      > input { width: 100%; margin: 0; accent-color: var(--el-color-primary); cursor: pointer; }
-      input:disabled { cursor: default; }
+      > input { @include tools.range; width: 100%; }
     }
   }
   .lensRow {
@@ -173,10 +167,8 @@ function reset() {
     .lensControl {
       display: flex; align-items: center; gap: 12px;
       .lensSwitch {
-        display: flex; gap: 3px; padding: 3px; border-radius: 8px; background: var(--el-fill-color-light);
-        button { min-width: 54px; padding: 5px 8px; border: 0; border-radius: 5px; color: var(--el-text-color-secondary); background: transparent; font: inherit; cursor: pointer; }
-        button[aria-pressed="true"] { color: var(--el-color-primary); background: var(--el-bg-color-overlay); box-shadow: 0 1px 3px #0001; }
-        button:disabled { opacity: .5; cursor: default; }
+        display: flex; gap: 3px;
+        button { @include tools.choice; min-width: 54px; padding: 5px 8px; }
       }
     }
     .angleSummary { color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }

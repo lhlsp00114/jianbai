@@ -16,6 +16,7 @@ const inputSchema = z.object({
   mentions: u.agent.agentMentionsSchema.optional(),
   providerId: z.string().min(1), modelId: z.string().min(1),
   thinkingLevel: z.enum(thinkingLevels).optional(),
+  generationMode: z.enum(["ask", "auto"]).optional(),
   sessionFile: z.string().regex(/^[\w-]+\.jsonl$/).optional(),
   resendFrom: z.string().min(1).max(128).optional(),
   streamingBehavior: z.enum(["steer", "followUp"]).optional(),

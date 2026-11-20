@@ -46,7 +46,7 @@ const dragging = ref(false);
 const anchor = computed(() => {
   const bounds = getRectOfNodes(dragNodes.value.length ? dragNodes.value : sourceNodes.value);
   const { x, y, zoom } = viewport.value;
-  return { x: x + (bounds.x + bounds.width + 8) * zoom, y: y + (bounds.y + bounds.height / 2) * zoom };
+  return { x: x + (bounds.x + bounds.width + (props.nodes === undefined ? 16 : 8)) * zoom, y: y + (bounds.y + bounds.height / 2) * zoom };
 });
 const handleStyle = computed(() => ({
   left: `${anchor.value.x}px`,
@@ -174,12 +174,12 @@ defineExpose({ clear });
 
   &:hover,
   &:active {
-    color: var(--el-color-primary);
+    color: var(--canvasSelectionColor, #fff);
   }
 
   &:focus-visible {
-    color: var(--el-color-primary);
-    outline: 2px solid var(--el-color-primary);
+    color: var(--canvasSelectionColor, #fff);
+    outline: 2px solid var(--canvasSelectionColor, #fff);
     outline-offset: 2px;
   }
 

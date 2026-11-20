@@ -15,7 +15,7 @@
             <template #label>{{ expansionScale }}x</template>
             <el-option v-for="scale in scaleOptions" :key="scale" :label="scale + 'x'" :value="scale" />
           </el-select>
-          <el-button v-for="ratio in ratioOptions" :key="ratio" :type="targetRatio === ratio ? 'primary' : 'default'" text :disabled="disabled || creating" @click="selectRatio(ratio)">{{ ratio }}</el-button>
+          <el-button v-for="ratio in ratioOptions" :key="ratio" :aria-pressed="targetRatio === ratio" text :disabled="disabled || creating" @click="selectRatio(ratio)">{{ ratio }}</el-button>
           <el-button class="closeButton" text :icon="IconX" :disabled="creating" title="关闭扩图" aria-label="关闭扩图" @click="emit('close')" />
         </div>
         <div class="outpaintPromptBar">
@@ -24,7 +24,7 @@
           </div>
           <div class="promptRow">
             <el-input v-model="prompt" class="promptField" type="textarea" :autosize="{ minRows: 1, maxRows: 4 }" resize="none" :disabled="disabled || creating" placeholder="补充扩图要求（可选）" aria-label="扩图提示词" />
-            <el-button class="generateButton" type="primary" :icon="IconArrowUp" :loading="creating" :disabled="disabled || creating || !selectedModel" title="生成扩图" aria-label="生成扩图" @click="confirm" />
+            <el-button class="generateButton" :icon="IconArrowUp" :loading="creating" :disabled="disabled || creating || !selectedModel" title="生成扩图" aria-label="生成扩图" @click="confirm" />
           </div>
         </div>
       </div>
@@ -220,6 +220,7 @@ function closestRatio() {
 </script>
 
 <style scoped lang="scss">
+@use "@toonflow/node-shared/imageToolStyles.scss" as tools;
 :global(.nodeSkeleton.outpaintNode) { pointer-events: none; }
 :global(.nodeSkeleton.outpaintNode > .titleBar),
 :global(.nodeSkeleton.outpaintNode > .cardContainer > .nodeHandle),
@@ -275,22 +276,15 @@ function closestRatio() {
   width: 100%;
   color: var(--el-text-color-primary);
   .ratioToolbar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 2px;
+    @include tools.toolbar;
     max-width: 100%;
-    padding: 5px 8px;
-    border: 1px solid var(--el-border-color-lighter);
-    border-radius: 12px;
-    background: var(--el-bg-color-overlay);
-    box-shadow: var(--el-box-shadow-light);
     .scaleSelect { width: 76px; :deep(.el-select__wrapper) { box-shadow: none; } }
     .el-button { margin: 0; padding: 8px; }
+    .el-button[aria-pressed="true"] { @include tools.selected; border-radius: 8px; }
     .closeButton { color: var(--el-text-color-secondary); }
   }
   .outpaintPromptBar {
+    @include tools.surface;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -298,10 +292,6 @@ function closestRatio() {
     box-sizing: border-box;
     min-width: 0;
     padding: 10px 14px;
-    border: 1px solid var(--el-border-color-lighter);
-    border-radius: 16px;
-    background: var(--el-bg-color-overlay);
-    box-shadow: var(--el-box-shadow-light);
     .modelToolbar {
       display: flex;
       align-items: center;
@@ -314,7 +304,7 @@ function closestRatio() {
       align-items: center;
       gap: 12px;
       .promptField { flex: 1; min-width: 0; :deep(.el-textarea__inner) { padding: 8px 0; box-shadow: none; background: transparent; } }
-      .generateButton { flex: none; width: 36px; height: 36px; margin: 0; padding: 0; border-radius: 50%; --el-button-bg-color: var(--el-text-color-primary); --el-button-border-color: transparent; --el-button-text-color: var(--el-bg-color); --el-button-hover-bg-color: var(--el-text-color-regular); --el-button-hover-border-color: transparent; --el-button-hover-text-color: var(--el-bg-color); }
+      .generateButton { @include tools.sendButton; width: 36px; height: 36px; border-radius: 50%; }
     }
   }
 }

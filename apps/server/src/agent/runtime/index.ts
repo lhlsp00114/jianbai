@@ -7,7 +7,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { CanvasContext, QuestionContext } from "@toonflow/tools-scaffold/runtime";
-import type { AgentEvent, AgentMention, AgentPeerMessage, AgentToolCall } from "@/agent/runtime/types";
+import type { AgentEvent, AgentGenerationMode, AgentMention, AgentPeerMessage, AgentToolCall } from "@/agent/runtime/types";
 import { agentMentionsSchema, mentionPrompt, snapshotMentions, validateMentionTokens } from "@/agent/runtime/mentions";
 import { readAiReferences, referenceContent } from "@/utils/ai";
 import { createAgentTools } from "@/agent/tools";
@@ -40,6 +40,7 @@ type AgentOptions = {
   providerId: string;
   modelId: string;
   thinkingLevel?: ThinkingLevel;
+  generationMode?: AgentGenerationMode;
   sessionFile?: string;
   runId?: string;
   expectedRunId?: string;
@@ -61,6 +62,7 @@ export async function run(
     providerId,
     modelId,
     thinkingLevel,
+    generationMode = "ask",
     sessionFile,
     runId,
     expectedRunId,
@@ -188,7 +190,7 @@ export async function run(
         return await runDelegatedAgent({
           cwd, parentFile: member.parentFile, name: member.name, task: message.content, message,
           providerId: member.providerId, modelId: member.modelId, thinkingLevel: member.thinkingLevel,
-          canvas, signal: taskSignal, send, onReady,
+          generationMode, canvas, signal: taskSignal, send, onReady,
           onCanvasCancel: reason => { controller.abort(reason); onCanvasCancel?.(reason); },
         });
       } finally { active.waitingForAgent = undefined; }
@@ -198,15 +200,15 @@ export async function run(
       tools.push(tool);
     }
     tools.push(await createSubAgentTool({
-      cwd, tools, canvas, modelRuntime: runtime, model: runtimeModel, thinkingLevel: effectiveThinkingLevel,
+      cwd, tools, canvas, generationMode, modelRuntime: runtime, model: runtimeModel, thinkingLevel: effectiveThinkingLevel,
       runTask: (name, task, taskSignal, onProgress) => runDelegatedAgent({
-        cwd, parentFile: file, name, task, providerId, modelId, thinkingLevel, canvas, signal: taskSignal, send, onProgress,
+        cwd, parentFile: file, name, task, providerId, modelId, thinkingLevel, generationMode, canvas, signal: taskSignal, send, onProgress,
         onCanvasCancel: reason => { controller.abort(reason); onCanvasCancel?.(reason); },
       }),
     }));
     const resources = await createAgentResources(cwd, tools, undefined, child
       ? `## 子 Agent 职责\n你正在执行委派任务：${JSON.stringify({ file, name: child.name, task: child.task })}。遵守当前工作区规则与授权，用户可以进入此子会话补充要求。需要其他 Agent 配合时使用 listAgents 与 sendAgentMessage 直接沟通。重要进展与最终结论使用 report 上报父 Agent。`
-      : "");
+      : "", generationMode);
     const resendEntry = resendFrom ? history.getBranch().find((item) => item.id === resendFrom) : undefined;
     if (resendFrom && (resendEntry?.type !== "message" || resendEntry.message.role !== "user")) {
       throw Object.assign(new Error("重发消息不在当前对话中，请重新打开对话"), { status: 400 });

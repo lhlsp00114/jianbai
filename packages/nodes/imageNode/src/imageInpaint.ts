@@ -6,7 +6,6 @@ import { createMediaPreview } from "@toonflow/node-shared/mediaPreview";
 import { buildOutpaintPrompt, defaultOutpaintPromptInstruction } from "./imageOutpaint";
 
 export type ImageInpaint = { source: string; original: string; guide: string; mask: string; images: NonNullable<NodeImageRequest["images"]>; mode?: "mask" | "guide" | "outpaint"; outpaintContext?: string };
-export type InpaintDraftInput = { prompt: string; images?: NodeImageRequest["images"] };
 
 const inpaintInstruction = "对父节点提供的第一张原图片进行局部重绘。第二张图片是同一原图的标注图，红色涂抹标出了需要修改的区域；红色仅用于指示选区，不要把标注画进结果。只修改标注区域，保留原图的构图、尺寸比例和区域外内容，返回完整图片。";
 const smartEditInstruction = "根据第一张原图和第二张带标注的参考图进行图片编辑。标注中的编号、箭头、文字和笔迹用于指出修改位置与要求，不要把这些标注绘制进结果。保留未被要求修改的内容、构图和画面比例，输出完整图片。";

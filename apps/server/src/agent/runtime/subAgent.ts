@@ -4,6 +4,7 @@ import type { AgentSession, CreateAgentSessionOptions, ToolDefinition } from "@e
 import type { ToolCall } from "@toonflow/tools-scaffold/runtime";
 import { createAgentResources } from "@/agent/runtime/resources";
 import { configureAgentRequests } from "@/agent/runtime/requests";
+import type { AgentGenerationMode } from "@/agent/runtime/types";
 
 export type SubAgentModel = Pick<CreateAgentSessionOptions, "modelRuntime" | "model" | "thinkingLevel">;
 export type SubAgentResult = {
@@ -30,13 +31,14 @@ export async function runSubAgent(options: SubAgentModel & {
   task: string;
   tools: ToolDefinition[];
   instructions?: string;
+  generationMode?: AgentGenerationMode;
   signal?: AbortSignal;
   history?: SessionManager;
   inputRequired?: () => string | undefined;
   onTool?: (tool: ToolCall) => void;
   onProgress?: (message: string) => void;
 }) {
-  const { cwd, name, task, tools, instructions, signal = new AbortController().signal, history, inputRequired, onTool, onProgress, ...modelOptions } = options;
+  const { cwd, name, task, tools, instructions, generationMode, signal = new AbortController().signal, history, inputRequired, onTool, onProgress, ...modelOptions } = options;
   const result: SubAgentResult = { name, status: "running", result: "准备执行" };
   const usage = emptyUsage();
   let session: AgentSession | undefined;
@@ -71,7 +73,7 @@ export async function runSubAgent(options: SubAgentModel & {
       compaction: { enabled: false },
       // 复用 SDK 的轮次重试，覆盖响应头之后的断流；不叠加供应商层重试。
       retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000, provider: { maxRetries: 0 } },
-    }), instructions);
+    }), instructions, generationMode);
     signal.throwIfAborted();
     ({ session } = await createAgentSession({
       ...modelOptions, ...resources, cwd,

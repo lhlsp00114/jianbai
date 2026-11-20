@@ -1,0 +1,24 @@
+{
+  "created": 1793982425,
+  "data": [
+    {
+      "url": "https://nocfimgv1.817778.xyz/images/2026/11/06/1793982456_681d2db916777a0a6c56d886ebe8de14.png",
+      "revised_prompt": "A friendly orange cat sitting beside a small window at sunrise, warm natural light, detailed digital illustration"
+    }
+  ],
+  "usage": {
+    "input_tokens": 19,
+    "output_tokens": 1650,
+    "total_tokens": 1669,
+    "input_tokens_details": {
+      "text_tokens": 19,
+      "image_tokens": 0,
+      "cached_tokens": 0
+    },
+    "output_tokens_details": {
+      "text_tokens": 0,
+      "image_tokens": 1650,
+      "reasoning_tokens": 0
+    }
+  }
+}

@@ -34,6 +34,10 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
   const { findNode } = useVueFlow();
   const getPersistence = useNodePersistence();
   const savedData = computed(() => node.data as { mediaTask?: NodeGenerationTask });
+  const ownedTask = computed(() => {
+    const task = savedData.value.mediaTask;
+    return task?.nodeId === id ? task : undefined;
+  });
   const lifetime = new AbortController();
   let executionController: AbortController | undefined;
   let recoveryController: AbortController | undefined;
@@ -45,18 +49,18 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
   const generating = computed(() => status.value === "running");
   const pendingRecovery = computed(() => !generating.value && needsRecovery());
   const recoveryVisible = computed(() => {
-    const task = savedData.value.mediaTask;
+    const task = ownedTask.value;
     return !!task && !generating.value && (task.state !== "succeeded" || !task.applied);
   });
   const recoveryLabel = computed(() => {
-    const task = savedData.value.mediaTask;
+    const task = ownedTask.value;
     if (!task || task.state === "failed" || task.resumable === false && task.state !== "succeeded") return "查看详情";
     if (task.state === "succeeded" || task.recoveryStage === "result") return "显示结果";
     if (task.recoveryStage === "download") return "取回结果";
     return "复查任务";
   });
   const getStatus = () => ({ status: status.value, outputs: outputs.value, ...(error.value ? { error: error.value } : {}),
-    ...(savedData.value.mediaTask ? { task: { taskId: savedData.value.mediaTask.taskId, state: savedData.value.mediaTask.state, resumable: savedData.value.mediaTask.resumable } } : {}) });
+    ...(ownedTask.value ? { task: { taskId: ownedTask.value.taskId, state: ownedTask.value.state, resumable: ownedTask.value.resumable } } : {}) });
 
   nodeTools.register({
     name: "getGenerationStatus",
@@ -76,7 +80,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
   });
 
   function needsRecovery() {
-    const task = savedData.value.mediaTask;
+    const task = ownedTask.value;
     // ACT: applied 仅在成功后释放任务；替换输出不能放弃仍可能已接单的任务。
     return !!task && task.state !== "failed" && task.state !== "cancelled" && (task.state !== "succeeded" || !task.applied);
   }
@@ -84,7 +88,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
   function checkTask(task: NodeGenerationTask, context: NodePersistenceContext) {
     lifetime.signal.throwIfAborted();
     if (task.state === "cancelled" && !recoveryController) throw new DOMException("生成已取消", "AbortError");
-    if (findNode(id) !== node || savedData.value.mediaTask?.taskId !== task.taskId || task.directory !== context.directory || getPersistence?.()?.directory !== context.directory) {
+    if (findNode(id) !== node || ownedTask.value?.taskId !== task.taskId || task.directory !== context.directory || getPersistence?.()?.directory !== context.directory) {
       throw new Error("节点或工作区已变化，本次任务结果不再应用");
     }
   }
@@ -147,14 +151,14 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
         task.state = "failed";
         task.resumable = false;
         const current = getPersistence?.();
-        if (current?.directory === context.directory && findNode(id) === node && savedData.value.mediaTask?.taskId === task.taskId) await current.save();
+        if (current?.directory === context.directory && findNode(id) === node && ownedTask.value?.taskId === task.taskId) await current.save();
       }
       throw error;
     }
   }
 
   async function finish(signal: AbortSignal) {
-    const task = savedData.value.mediaTask;
+    const task = ownedTask.value;
     if (!options || !task) return;
     const context = getPersistence?.();
     if (!context) throw new Error("画布已关闭，生成结果将在重新打开后恢复");
@@ -181,7 +185,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
       const message = (failure as { response?: { data?: { message?: string } } })?.response?.data?.message;
       error.value = failure instanceof Error && failure.name === "AbortError" ? "生成已取消"
         : message || (failure instanceof Error ? failure.message : "生成失败");
-      const task = savedData.value.mediaTask;
+      const task = ownedTask.value;
       if (failure && typeof failure === "object" && task && task.state !== "failed" && task.state !== "cancelled") {
         Object.assign(failure, { mediaRecoveryStage: task.recoveryStage ?? (task.providerData ? "query" : "unknown") });
       }
@@ -193,7 +197,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
 
   function resume(recoverCancelled = false) {
     if (recovering) return recovering;
-    const task = savedData.value.mediaTask;
+    const task = ownedTask.value;
     const context = getPersistence?.();
     if (!options || !task || !context || (!needsRecovery() && !(recoverCancelled && task.state === "cancelled"))) return Promise.resolve();
     if (task.nodeId !== id || task.directory !== context.directory || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.taskId)
@@ -225,19 +229,19 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
   }
 
   async function recoverResult() {
-    const task = savedData.value.mediaTask;
+    const task = ownedTask.value;
     const context = getPersistence?.();
     if (!task || !context || !options || generating.value || cancelling.value) return;
     if (task.directory !== context.directory || task.nodeId !== id) throw new Error("任务不属于当前节点或工作区");
     const value = await options.ai.readMediaTask(task.directory, task.taskId, lifetime.signal);
-    if (savedData.value.mediaTask?.taskId !== task.taskId || getPersistence?.()?.directory !== task.directory || findNode(id) !== node) return;
+    if (ownedTask.value?.taskId !== task.taskId || getPersistence?.()?.directory !== task.directory || findNode(id) !== node) return;
     if (value.nodeId && value.nodeId !== id || value.canvasPath && value.canvasPath !== task.canvasPath) throw new Error("任务归属不匹配，无法取回到当前节点");
     task.state = value.state ?? task.state;
     task.resumable = value.resumable;
     task.recoveryStage = value.recoveryStage;
     task.lastError = value.result?.message;
     await context.save(lifetime.signal);
-    if (savedData.value.mediaTask?.taskId !== task.taskId || getPersistence?.()?.directory !== task.directory || findNode(id) !== node) return;
+    if (ownedTask.value?.taskId !== task.taskId || getPersistence?.()?.directory !== task.directory || findNode(id) !== node) return;
     if (task.state === "failed" || task.resumable === false && task.state !== "succeeded") {
       await ElMessageBox.alert(`${task.lastError || "无法取回原任务结果"}\n\n本地任务编号：${task.taskId}\n${task.state === "failed" ? "平台或适配器已确认失败。" : "缺少可恢复的任务凭据，或该任务不允许恢复。请在供应商后台查询任务编号或下载链接；本操作不会重新生成。"}`, "任务详情", { confirmButtonText: "知道了" });
       return;
@@ -254,14 +258,14 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
     if (cancelling.value) throw new Error("任务正在取消，请稍后重试");
     cancelling.value = true;
     try {
-      const task = savedData.value.mediaTask;
+      const task = ownedTask.value;
       const context = getPersistence?.();
       if (options && task && needsRecovery()) {
         if (!context) throw new Error("工作区已变化，无法取消此节点任务");
         // ACT: 项目移动后的旧任务仅在当前节点放弃，不请求原目录的后台任务。
         if (task.directory === context.directory) await options.ai.cancelMedia(task.directory, task.taskId);
         const current = getPersistence?.();
-        if (savedData.value.mediaTask?.taskId === task.taskId && current?.directory === context.directory && findNode(id) === node) {
+        if (ownedTask.value?.taskId === task.taskId && current?.directory === context.directory && findNode(id) === node) {
           const { state, resumable } = task;
           task.state = "cancelled";
           // 保留恢复信息；是否还能取回由后台按原任务记录确认。
@@ -279,13 +283,13 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
   }
 
   watch(() => getPersistence?.()?.canvasPath, path => {
-    const task = savedData.value.mediaTask;
+    const task = ownedTask.value;
     if (path && options && task?.state === "cancelled" && attemptedTaskId !== task.taskId && task.directory === getPersistence?.()?.directory && task.nodeId === id) {
       attemptedTaskId = task.taskId;
       // 只读取取消任务的恢复能力，不自动恢复，也不影响生成中的任务。
       void options.ai.readMediaTask(task.directory, task.taskId, lifetime.signal).then(async value => {
         const context = getPersistence?.();
-        if (lifetime.signal.aborted || savedData.value.mediaTask !== task || task.state !== "cancelled" || context?.directory !== task.directory || findNode(id) !== node) return;
+        if (lifetime.signal.aborted || ownedTask.value !== task || task.state !== "cancelled" || context?.directory !== task.directory || findNode(id) !== node) return;
         task.resumable = value.resumable;
         task.recoveryStage = value.recoveryStage;
         task.lastError = value.result?.message;
@@ -300,7 +304,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
   }, { immediate: true, flush: "post" });
   watch(outputs, () => {
     // 保留用户替换或编辑的输出；未决任务仍须复查完成或明确放弃，不能借此重新提交。
-    if (!generating.value && needsRecovery() && savedData.value.mediaTask) savedData.value.mediaTask.applied = true;
+    if (!generating.value && needsRecovery() && ownedTask.value) ownedTask.value.applied = true;
   }, { deep: true, flush: "sync" });
   onScopeDispose(() => lifetime.abort());
 

@@ -63,7 +63,7 @@
       <el-form-item v-if="!saveAll" label="素材名称">
         <el-input ref="assetNameInput" v-model="assetName" aria-label="素材名称" placeholder="输入完整文件名" :disabled="saving" @keydown.enter.prevent="saveAsset" />
       </el-form-item>
-      <el-form-item v-if="saveAll" :label="`全部图片（${outputs.length} 张）`">
+      <el-form-item v-if="saveAll" :label="`全部素材（${outputs.length} 个）`">
         <div class="batchNames"><div v-for="(item, index) in outputs" :key="index">{{ item.label }}</div></div>
       </el-form-item>
       <el-form-item v-else-if="outputs.length > 1" label="节点输出">
@@ -404,10 +404,10 @@ async function saveAllAssets() {
       saved++;
     }
     saveVisible.value = false;
-    ElMessage.success(`已将全部 ${total} 张图片保存到素材库`);
+    ElMessage.success(`已将全部 ${total} 个素材保存到素材库`);
   } catch (error) {
     const message = axios.isAxiosError<{ message?: string }>(error) ? error.response?.data.message || error.message : error instanceof Error ? error.message : "保存失败";
-    ElMessage.error(`已保存 ${saved} 张，剩余 ${outputs.value.length} 张未保存：${message}`);
+    ElMessage.error(`已保存 ${saved} 个，剩余 ${outputs.value.length} 个未保存：${message}`);
   } finally {
     saving.value = false;
     try { await loadEntries(); } catch (error) { showError(error); }

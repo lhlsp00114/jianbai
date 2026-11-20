@@ -7,12 +7,12 @@
     </div>
     <teleport v-if="toolbarTarget" :to="toolbarTarget">
       <div class="cropToolbar" role="toolbar" aria-label="裁剪图片">
-        <el-button :icon="IconX" :disabled="busy" text title="取消裁剪" aria-label="取消裁剪" @click="emit('cancel')" />
         <el-select v-model="ratio" class="cropRatio" :disabled="busy || disabled" aria-label="裁剪比例" @change="resetSelection" @visibleChange="ratioOpen = $event">
           <el-option label="原图比例" value="original" />
           <el-option v-for="item in ['1:1', '4:3', '3:4', '16:9', '9:16']" :key="item" :label="item" :value="item" />
         </el-select>
-        <el-button :loading="busy" :disabled="disabled || !!drag" type="primary" @click="emit('confirm', { ...rect })">确认</el-button>
+        <el-button class="confirmButton" :loading="busy" :disabled="disabled || !!drag" @click="emit('confirm', { ...rect })">确认</el-button>
+        <el-button :icon="IconX" :disabled="busy" text title="取消裁剪" aria-label="取消裁剪" @click="emit('cancel')" />
       </div>
     </teleport>
   </div>
@@ -132,6 +132,7 @@ onBeforeUnmount(() => { endDrag(); window.removeEventListener("keydown", handleE
 </script>
 
 <style scoped lang="scss">
+@use "@toonflow/node-shared/imageToolStyles.scss" as tools;
 :global(.nodeSkeleton .cardContainer .contentCard:has(.imageCrop)) {
   overflow: visible;
   border-color: transparent;
@@ -198,17 +199,10 @@ onBeforeUnmount(() => { endDrag(); window.removeEventListener("keydown", handleE
   }
 }
 .cropToolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: var(--el-border-radius-base);
-  background: var(--el-bg-color-overlay);
-  box-shadow: var(--el-box-shadow-light);
-  white-space: nowrap;
+  @include tools.toolbar;
 
   .cropRatio { width: 116px; }
   .el-button { height: 32px; margin: 0; }
+  .confirmButton { @include tools.action; }
 }
 </style>

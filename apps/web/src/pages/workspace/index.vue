@@ -282,7 +282,7 @@ function setDocumentPanel(value: Element | ComponentPublicInstance | null) {
 }
 provide("canvas", () => canvasPanelRef.value?.getCanvasContext());
 provide("mentionCanvas", () => canvasPanelRef.value?.mentionSource);
-provide("sendNodeToAgent", async (nodeId: string, outputIds: string[]) => {
+provide("sendNodeToAgent", async (nodeId: string, outputIds: string[], prompt?: string) => {
   const source = canvasPanelRef.value?.mentionSource;
   const canvasId = source?.currentCanvasId();
   if (!source || !canvasId) throw new Error("请先打开画布");
@@ -291,7 +291,7 @@ provide("sendNodeToAgent", async (nodeId: string, outputIds: string[]) => {
   if (!mentions.length) throw new Error("此节点没有可发送的输出");
   agentVisible.value = true;
   if (!floatingAgentRef.value) throw new Error("Agent 面板尚未准备好，请重试");
-  await floatingAgentRef.value.insertMentions(mentions);
+  await floatingAgentRef.value.insertMentions(mentions, prompt);
 });
 provide("activateCanvasPanel", () => switchPanel("canvas"));
 provide("performWorkspaceFileAction", (directory: string, action: "copy" | "rename" | "move" | "delete", path: string, target?: string, entryType: "canvas" | "directory" = "canvas") =>

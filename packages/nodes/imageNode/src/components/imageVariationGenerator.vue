@@ -1,32 +1,20 @@
 <template>
   <footer class="variationFooter">
-    <el-select :modelValue="selectedModel ? settings.model : ''" class="modelSelect" filterable :loading="modelsLoading" :disabled="busy" placeholder="选择图片模型" :aria-label="`${label}模型`" noDataText="请先在设置中添加图片模型" placement="top-start" @update:modelValue="settings.model = $event" @visible-change="visible => visible && refreshModels()">
-      <template #label="{ label }"><modelLabel :label="label" :providerId="selectedModel?.providerId" :modelId="selectedModel?.modelId" /></template>
-      <el-option-group v-for="provider in modelGroups" :key="provider.id" :label="provider.label">
-        <el-option v-for="model in provider.models" :key="model.modelId" :label="model.label" :value="getNodeModelKey(model)">
-          <modelLabel :label="model.label" :providerId="model.providerId" :modelId="model.modelId" />
-        </el-option>
-      </el-option-group>
-    </el-select>
-    <el-popover trigger="click" placement="top" :width="220" :disabled="busy || !selectedModel" :showArrow="false">
-      <template #reference><el-button class="sizeButton" text :disabled="busy || !selectedModel" :aria-label="`${label}输出设置`">{{ settings.ratio || '比例' }} · {{ settings.size || '分辨率' }}</el-button></template>
-      <div class="variationSettings nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @wheel.stop @keydown.stop>
-        <label>分辨率<el-select v-model="settings.size" :disabled="busy" :aria-label="`${label}分辨率`"><el-option v-for="size in sizeOptions" :key="size" :label="size" :value="size" /></el-select></label>
-        <label>比例<el-select v-model="settings.ratio" :disabled="busy" :aria-label="`${label}比例`" @change="ratioFromSource = false"><el-option v-for="ratio in ratioOptions" :key="ratio" :label="ratio" :value="ratio" /></el-select></label>
-      </div>
-    </el-popover>
-    <el-button type="primary" :icon="IconSparkles" :loading="generating" :disabled="busy || modelsLoading || !source || !selectedModel || !prompt.trim()" @click="generate">{{ buttonLabel ?? '生成图片' }}</el-button>
+    <providerModelSelect v-model="settings.model" :models="models" :loading="modelsLoading" :disabled="busy" noDataText="请先在设置中添加图片模型" @open="refreshModels" />
+    <imageGenerationSettings v-model:size="settings.size" :ratio="settings.ratio" :sizes="sizeOptions" :ratios="ratioOptions" :disabled="busy || !selectedModel" @update:ratio="ratioFromSource = false; settings.ratio = $event" />
+    <el-button class="generateButton" :icon="IconArrowUp" :loading="generating" :disabled="busy || modelsLoading || !source || !selectedModel || !prompt.trim()" :title="buttonLabel ?? '生成图片'" :aria-label="buttonLabel ?? '生成图片'" @click="generate" />
   </footer>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref, watch } from "vue";
+import { computed, onMounted, onScopeDispose, ref, shallowRef, watch } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
-import { ElButton, ElOption, ElOptionGroup, ElPopover, ElSelect } from "element-plus";
-import { IconSparkles } from "@tabler/icons-vue";
+import { ElButton } from "element-plus";
+import { IconArrowUp } from "@tabler/icons-vue";
 import { getNodeModelKey, useNodeAi, useNodeModelSelection, useNodeToolsContext, type NodeMediaModel, type NodeMediaValue } from "@toonflow/nodes-scaffold/runtime";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
-import modelLabel from "@toonflow/node-shared/modelLabel";
+import imageGenerationSettings from "@toonflow/node-shared/imageGenerationSettings";
+import providerModelSelect from "@toonflow/node-shared/providerModelSelect";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
 import { useImageVariationNode } from "../useImageVariationNode";
 
@@ -36,6 +24,7 @@ const props = defineProps<{
   aspectRatio: number;
   prompt: string;
   label: string;
+  compactPrompt?: "multiAngle" | "lighting";
   buttonLabel?: string;
   disabled?: boolean;
 }>();
@@ -46,7 +35,7 @@ const { findNode, getEdges } = useVueFlow();
 const ai = useNodeAi({ onModelsChanged: () => void refreshModels() });
 const getNodeTools = useNodeToolsContext();
 const createVariation = useImageVariationNode();
-const models = ref<NodeMediaModel[]>([]);
+const models = shallowRef<NodeMediaModel[]>([]);
 const modelsLoading = ref(false);
 const busy = computed(() => props.disabled || generating.value);
 const modelGroups = computed(() => groupNodeModels(models.value));
@@ -104,7 +93,9 @@ async function generate() {
   const controller = generationController = new AbortController();
   generating.value = true;
   try {
-    const { nodeId, edgeId } = await createVariation({ ...props.settings, label: props.label, prompt: props.prompt }, controller.signal);
+    const { nodeId, edgeId } = await createVariation({
+      ...props.settings, label: props.label, prompt: props.prompt, compactPrompt: props.compactPrompt,
+    }, controller.signal);
     const createdNode = findNode(nodeId);
     await getNodeTools().call({ nodeId, name: "node:getConfig", args: {} }, controller.signal);
     if (!createdNode || findNode(nodeId) !== createdNode || !getEdges.value.some(edge => edge.id === edgeId && edge.source === id && edge.sourceHandle === "image" && edge.target === nodeId && edge.targetHandle === "in")) {
@@ -118,14 +109,17 @@ async function generate() {
 </script>
 
 <style scoped lang="scss">
+@use "@toonflow/node-shared/imageToolStyles.scss" as tools;
+
 .variationFooter {
-  display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--el-border-color-lighter);
-  .modelSelect { flex: 1; min-width: 0; }
-  .sizeButton { max-width: 180px; overflow: hidden; }
-  > .el-button { margin-left: 0; flex-shrink: 0; }
-}
-.variationSettings {
-  display: grid; gap: 12px;
-  label { display: grid; gap: 6px; font-size: 12px; }
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
+
+  :deep(.providerModelSelect) { flex: 1; min-width: 0; }
+  .generateButton { @include tools.sendButton; }
 }
 </style>

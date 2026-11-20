@@ -255,12 +255,12 @@ async function loadHistory(openLatest = false) {
   }
 }
 
-async function insertMentions(mentions: AgentMention[]) {
+async function insertMentions(mentions: AgentMention[], prompt?: string) {
   visible.value = true;
   if (!initialized.value) await loadHistory(true);
   if (!initialized.value) throw new Error("Agent 对话尚未准备好，请重试");
   await nextTick();
-  const inserted = await conversationRefs.get(conversationKey.value)?.insertMentions(mentions);
+  const inserted = await conversationRefs.get(conversationKey.value)?.insertMentions(mentions, prompt);
   if (!inserted) throw new Error("Agent 输入框当前不可用，请稍后重试");
 }
 

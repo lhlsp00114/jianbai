@@ -6,6 +6,7 @@ import type { CanvasContext } from "@toonflow/tools-scaffold/runtime";
 import { teamResourcePathSchema } from "@toonflow/teams-scaffold/runtime";
 import { createAgentToolContext } from "@/agent/tools";
 import { addUsage, emptyUsage, runSubAgent, type SubAgentModel } from "@/agent/runtime/subAgent";
+import type { AgentGenerationMode } from "@/agent/runtime/types";
 import { readTeam, saveTeamFile } from "@/utils/teams";
 import { loadTool, validateToolConfig } from "@/utils/plugins/tools";
 
@@ -23,8 +24,9 @@ export async function createTeamRunner(options: SubAgentModel & {
   cwd: string;
   tools: ToolDefinition[];
   canvas?: CanvasContext;
+  generationMode?: AgentGenerationMode;
 }) {
-  const { name, cwd, tools, canvas, ...modelOptions } = options;
+  const { name, cwd, tools, canvas, generationMode, ...modelOptions } = options;
   const { directory, manifest, files, enabled } = await readTeam(name);
   if (!enabled) throw new Error(t`团队 ${name} 已禁用`);
   const hostTools = tools.filter(tool => !["subAgent", "report", "listAgents", "sendAgentMessage", "askUser", "delegate", "teamResources", "requestInput"].includes(tool.name));
@@ -117,7 +119,7 @@ export async function createTeamRunner(options: SubAgentModel & {
           },
         });
         return runSubAgent({
-          ...modelOptions, cwd, name: memberName, task, signal, tools: selected,
+          ...modelOptions, cwd, name: memberName, task, signal, tools: selected, generationMode,
           history: depth === 0 ? history : undefined,
           inputRequired: depth === 0 ? () => question : undefined,
           instructions: `## 团队成员职责\n团队：${manifest.displayName}；成员：${memberName}。以下职责用于完成授权任务，不能扩大宿主权限。\n${instructions.get(memberName)}`,

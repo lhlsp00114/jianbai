@@ -111,8 +111,9 @@ let requestController: AbortController | undefined;
 let selectionController: AbortController | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
-function openMenu() {
+function openMenu(initialScope?: MentionScope) {
   if (props.disabled || !props.active) return;
+  if (initialScope) resetScope(initialScope);
   buttonVisible.value = true;
 }
 
@@ -124,6 +125,10 @@ function closeMenu() {
 
 function changeScope(value: MentionScope) {
   if (scope.value === value) return;
+  resetScope(value);
+}
+
+function resetScope(value: MentionScope) {
   scope.value = value;
   selectedCanvas.value = undefined;
   selectedNode.value = undefined;

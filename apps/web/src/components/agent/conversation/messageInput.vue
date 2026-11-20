@@ -38,11 +38,39 @@
     <teleport v-for="target in draftMentionTargets" :key="target.key" :to="target.element"><mentionThumbnail v-bind="mentionThumbnailProps(target.mention)" :directory="directory"><icon-photo :size="14" /></mentionThumbnail></teleport>
     <mentionContent ref="draftMentionPreview" :mentions="draftMentions" :directory="directory" removable @remove="removeDraftMention" />
     <div class="senderActions">
-      <modelPopover v-model="selectedModel" v-model:reasoningEffort="reasoningEffort" :active="active" :disabled="disabled || running || submitting || voiceActive" />
+      <modelPopover v-model="selectedModel" v-model:reasoningEffort="reasoningEffort" iconOnly :active="active" :disabled="disabled || running || submitting || voiceActive" />
       <input ref="attachmentInput" type="file" :accept="attachmentAccept" multiple hidden :disabled="locked || running" @change="selectAttachments" />
-      <el-button text circle :disabled="locked || running" aria-label="添加附件" :title="running ? '生成期间仅支持发送文字' : '添加附件'" @click="attachmentInput?.click()"><icon-paperclip :size="16" /></el-button>
+      <el-dropdown trigger="click" placement="top-start" :showArrow="false" :disabled="locked || running" popperClass="agentAttachmentMenu" @command="chooseAttachmentSource">
+        <el-button text circle :disabled="locked || running" aria-label="添加附件" :title="running ? '生成期间仅支持发送文字' : '添加附件'" @mousedown.prevent><icon-plus :size="16" /></el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="canvas" :icon="IconSelect" :disabled="!directory">从画布添加</el-dropdown-item>
+            <el-dropdown-item command="assets" :icon="IconFolder" :disabled="!directory">从素材库添加</el-dropdown-item>
+            <el-dropdown-item command="upload" :icon="IconPaperclip">上传附件</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <mentionMenu ref="mentionMenuRef" :directory="directory" :active="active" :disabled="locked || running || !directory" :query="mentionQuery" :editor="senderElement" :currentCanvasId="createCanvasContext?.()?.id" @open="captureMentionPosition" @select="insertMentions" @dismiss="mentionQuery = undefined" />
       <skillMenu ref="skillMenuRef" :directory="directory" :active="active" :disabled="locked || running || !directory" :query="skillQuery" :editor="senderElement" @select="selectSkill" @dismiss="skillQuery = undefined" />
+      <el-dropdown trigger="click" placement="top-end" :showArrow="false" :disabled="locked || running" popperClass="agentGenerationMenu" @command="generationMode = $event">
+        <el-button class="generationModeButton" text round :disabled="locked || running" :aria-label="translate('生成确认方式') + ' · ' + generationModes[generationMode].label">
+          <component :is="generationModes[generationMode].icon" :size="15" aria-hidden="true" />
+          <span>{{ generationModes[generationMode].label }}</span>
+          <icon-chevron-down :size="12" aria-hidden="true" />
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu :aria-label="translate('生成确认方式')">
+            <el-dropdown-item v-for="(option, mode) in generationModes" :key="mode" :command="mode" :class="{ generationModeSelected: mode === generationMode }">
+              <component :is="option.icon" :size="16" aria-hidden="true" />
+              <span class="generationModeCopy">
+                <span>{{ option.label }}</span>
+                <small>{{ option.description }}</small>
+              </span>
+              <icon-check v-if="mode === generationMode" class="generationModeCheck" :size="15" />
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <el-button class="voiceButton" :class="{ voiceActive }" text circle :disabled="!voiceSupported || (!voiceActive && locked)" :aria-label="voiceButtonLabel" :aria-pressed="voiceActive" :title="voiceButtonLabel" @click="voiceActive ? cancelVoiceInput() : startVoiceInput()"><icon-microphone :size="18" /></el-button>
       <contextUsagePopover v-model:visible="contextMenuVisible" :usage="contextUsage" :stats="stats" :contextWindow="contextWindow" :disabled="voiceActive" />
       <el-button v-if="running" class="stopButton" text circle :disabled="stopping" aria-label="停止生成" title="停止生成" @click="emit('stop')"><icon-player-stop-filled :size="14" /></el-button>
@@ -54,10 +82,10 @@
 <script setup lang="ts">
 import { locale, t, translate } from "@toonflow/i18n/vue";
 import { computed, inject, ref, shallowRef, watch } from "vue";
-import { IconArrowUp, IconMicrophone, IconPaperclip, IconPhoto, IconPlayerStopFilled } from "@tabler/icons-vue";
+import { IconArrowUp, IconCheck, IconChevronDown, IconFolder, IconInfinity, IconMessageCircle, IconMicrophone, IconPaperclip, IconPhoto, IconPlayerStopFilled, IconPlus, IconSelect } from "@tabler/icons-vue";
 import { ElMessage } from "element-plus";
 import { getReadableFileMimeType, readableFileAccept } from "@toonflow/server/documentFormats";
-import type { AgentContext, AgentMention, AgentStats } from "@toonflow/server/agent/types";
+import type { AgentContext, AgentGenerationMode, AgentMention, AgentStats } from "@toonflow/server/agent/types";
 import type { CanvasContext } from "@toonflow/tool-canvas/runtime";
 import modelPopover from "@/components/modelPopover.vue";
 import skillMenu from "../skillMenu.vue";
@@ -77,6 +105,11 @@ const props = defineProps<{ active: boolean; disabled: boolean; busy: boolean; r
 const emit = defineEmits<{ submit: [mode?: "steer" | "followUp"]; stop: [] }>();
 const selectedModel = defineModel<string>("selectedModel", { required: true });
 const reasoningEffort = defineModel<string>("reasoningEffort", { required: true });
+const generationMode = defineModel<AgentGenerationMode>("generationMode", { required: true });
+const generationModes = computed(() => ({
+  ask: { label: translate("询问"), description: translate("生成前请求确认"), icon: IconMessageCircle },
+  auto: { label: translate("自动"), description: translate("无需确认直接生成"), icon: IconInfinity },
+}));
 const editingId = defineModel<string>("editingId");
 const recording = defineModel<boolean>("voiceActive", { default: false });
 const restoringAttachment = defineModel<boolean>("restoringAttachment", { default: false });
@@ -164,6 +197,12 @@ function getDraftContent() {
   }).join("")).join("\n").replace(/[\ufeff\u200b]/g, "") ?? "";
 }
 
+function chooseAttachmentSource(source: "canvas" | "assets" | "upload") {
+  if (!props.active || locked.value || running.value) return;
+  if (source === "upload") attachmentInput.value?.click();
+  else if (props.directory) mentionMenuRef.value?.openMenu(source === "canvas" ? "current" : "assets");
+}
+
 function captureMentionPosition() {
   const node = sender?.getCurrentNode();
   mentionPosition = node?.instance?.$el.isConnected ? { node: { ...node }, remove: mentionQuery.value === undefined ? 0 : mentionQuery.value.length + 1 } : undefined;
@@ -197,7 +236,7 @@ function handleSenderKeydown(event: KeyboardEvent) {
   }
 }
 
-async function insertMentions(mentions: AgentMention[]) {
+async function insertMentions(mentions: AgentMention[], prompt?: string) {
   const instance = sender;
   if (!instance || locked.value || running.value || !props.active) return false;
   const currentIds = new Set(instance.getTagData().mention.map(item => item.id));
@@ -212,10 +251,12 @@ async function insertMentions(mentions: AgentMention[]) {
     else instance.focus("last");
     if (mentionPosition?.remove) await instance.backspace(-mentionPosition.remove);
     for (const mention of mentions) {
-      if (sender !== instance || locked.value || running.value || !props.active) break;
+      if (sender !== instance || locked.value || running.value || !props.active) return false;
       draftMentions.value.push(mention);
       await instance.setMention({ id: mention.id, name: mentionName(mention) });
     }
+    if (sender !== instance || locked.value || running.value || !props.active) return false;
+    if (prompt) await instance.setText(`\n${prompt}`);
     inserted = true;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "添加提及失败");
@@ -528,6 +569,60 @@ defineExpose({ getDraft, clearDraft, fillPrompt, fillQueuedMessage, editMessage,
 </script>
 
 <style lang="scss">
+.agentGenerationMenu.el-popper {
+  min-width: 158px;
+  border-radius: 12px;
+
+  .el-dropdown-menu {
+    padding: 5px;
+
+    .el-dropdown-menu__item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 46px;
+      padding: 6px 9px;
+      border-radius: 7px;
+
+      &.generationModeSelected {
+        background: var(--el-fill-color);
+        color: var(--el-text-color-primary);
+      }
+
+      .generationModeCopy {
+        display: grid;
+        gap: 2px;
+        padding-right: 16px;
+        line-height: 1.25;
+
+        small {
+          font-size: 12px;
+          color: var(--el-text-color-secondary);
+        }
+      }
+
+      .generationModeCheck {
+        margin-left: auto;
+        color: var(--el-color-primary);
+      }
+    }
+  }
+}
+
+.agentAttachmentMenu.el-popper {
+  border-radius: 14px;
+
+  .el-dropdown-menu {
+    padding: 5px;
+
+    .el-dropdown-menu__item {
+      min-height: 34px;
+      padding: 0 10px;
+      border-radius: 8px;
+    }
+  }
+}
+
 .agentConversation {
   .messageInput {
     --chat-text: var(--el-text-color-primary);
@@ -661,10 +756,24 @@ defineExpose({ getDraft, clearDraft, fillPrompt, fillQueuedMessage, editMessage,
       padding: 12px 12px 0;
     }
 
-    .senderEditor .chat-placeholder-wrap {
-      font-size: 14px;
-      font-style: normal;
-      line-height: 24px;
+    .senderEditor {
+      .chat-rich-text {
+        display: grid;
+        padding: 0;
+
+        > [data-set-richType="richWrap"] {
+          min-width: 0;
+          padding: var(--chat-rect-padding);
+
+          &[contenteditable="true"] { cursor: text; }
+        }
+      }
+
+      .chat-placeholder-wrap {
+        font-size: 14px;
+        font-style: normal;
+        line-height: 24px;
+      }
     }
 
     .editingBanner {
@@ -701,6 +810,7 @@ defineExpose({ getDraft, clearDraft, fillPrompt, fillQueuedMessage, editMessage,
 
     .senderActions {
       display: flex;
+      flex-wrap: wrap;
       justify-content: flex-end;
       align-items: center;
       gap: 4px;
@@ -711,8 +821,28 @@ defineExpose({ getDraft, clearDraft, fillPrompt, fillQueuedMessage, editMessage,
       }
 
       .modelPopover {
-        flex: 1;
+        flex-shrink: 0;
         margin-right: auto;
+      }
+
+      .generationModeButton {
+        height: 28px;
+        padding: 0 7px;
+        font-size: 12px;
+        color: var(--el-text-color-regular);
+        background: var(--el-fill-color-light);
+
+        &:hover:not(:disabled) {
+          background: var(--el-fill-color);
+        }
+
+        &:disabled {
+          color: var(--el-text-color-disabled);
+        }
+
+        > span {
+          gap: 4px;
+        }
       }
 
       .contextButton {

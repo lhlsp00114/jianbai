@@ -28,7 +28,7 @@
           </span>
         </el-button>
       </div>
-      <modelForm v-model="other" :rules="model?.rules" :disabled="disabled" />
+      <modelForm v-if="other" v-model="other" :rules="model?.rules" :disabled="disabled" />
     </div>
   </el-popover>
 </template>
@@ -60,7 +60,7 @@ watch(() => settingsVisible.value ? [viewport.value.x, viewport.value.y, viewpor
 }, { flush: "post" });
 const size = defineModel<string>("size", { required: true });
 const ratio = defineModel<string>("ratio", { required: true });
-const other = defineModel<Record<string, unknown>>("other", { required: true });
+const other = defineModel<Record<string, unknown>>("other");
 
 function ratioStyle(value: string) {
   const [width = 1, height = 1] = value.split(":").map(Number);

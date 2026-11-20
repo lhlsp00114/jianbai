@@ -6,6 +6,7 @@ import { addUsage, emptyUsage, type SubAgentModel, type SubAgentResult } from "@
 import { createTeamRunner } from "@/agent/teams";
 import { runRemoteTeam } from "@/agent/teams/remote";
 import { listTeams, getRemoteTeam } from "@/utils/teams";
+import type { AgentGenerationMode } from "@/agent/runtime/types";
 
 const parameters = z.strictObject({
   tasks: z.array(z.strictObject({
@@ -17,8 +18,9 @@ const parameters = z.strictObject({
   })).min(1),
 });
 
-export async function createSubAgentTool({ cwd, tools, canvas, runTask, ...modelOptions }: SubAgentModel & {
+export async function createSubAgentTool({ cwd, tools, canvas, generationMode, runTask, ...modelOptions }: SubAgentModel & {
   cwd: string; tools: ToolDefinition[]; canvas?: CanvasContext;
+  generationMode?: AgentGenerationMode;
   runTask: (name: string, task: string, signal?: AbortSignal, onProgress?: (text: string) => void) => Promise<{ result: SubAgentResult; usage: ReturnType<typeof emptyUsage> }>;
 }): Promise<ToolDefinition> {
   if (tools.some(tool => tool.name === "subAgent")) throw new Error("工具名称 subAgent 已被内置子任务工具占用");
@@ -50,7 +52,7 @@ export async function createSubAgentTool({ cwd, tools, canvas, runTask, ...model
           const output = remote
             ? await runRemoteTeam({ ...task, name: task.team!, signal, onProgress })
             : task.team
-              ? await (await createTeamRunner({ ...modelOptions, cwd, tools: inheritedTools, canvas, name: task.team })).run(task.task, signal, onProgress)
+              ? await (await createTeamRunner({ ...modelOptions, cwd, tools: inheritedTools, canvas, generationMode, name: task.team })).run(task.task, signal, onProgress)
               : await runTask(task.name, task.task, signal, onProgress);
           results[index] = { ...output.result, name: task.name };
           addUsage(usage, output.usage);

@@ -1,0 +1,1712 @@
+diff --git a/src/App.tsx b/src/App.tsx
+index fa4b915..192d105 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -4,7 +4,7 @@ import { X } from "lucide-react";
+ import { DirectorDeskShell } from "./app/layout/DirectorDeskShell";
+ import { DirectorCanvas } from "./editor/canvas/DirectorCanvas";
+ import { initDirectorDeskHostBridge } from "./editor/io/hostBridge";
+-import { useDirectorStore } from "./editor/store/directorStore";
++import { transformKeys, useDirectorStore, useShortcutProfile, type TransformMode } from "./editor/store/directorStore";
+ 
+ function isEditableShortcutTarget(target: EventTarget | null) {
+   if (!(target instanceof HTMLElement)) return false;
+@@ -21,6 +21,27 @@ export default function App() {
+     window.parent?.postMessage({ type: "storyai:director-desk-ready" }, window.location.origin);
+   }, []);
+ 
++  useEffect(() => {
++    const host = window.frameElement?.ownerDocument.documentElement;
++    if (!host) return;
++    function syncAppearance() {
++      if (!host) return;
++      const root = document.documentElement;
++      const color = getComputedStyle(host).getPropertyValue("--el-color-primary").trim();
++      if (/^#[0-9a-f]{6}$/i.test(color)) {
++        const rgb = [1, 3, 5].map(start => parseInt(color.slice(start, start + 2), 16)).join(" ");
++        root.style.setProperty("--accent-rgb", rgb);
++        root.style.setProperty("--accent-hover-rgb", rgb);
++      }
++      root.dataset.theme = host.classList.contains("dark") ? "dark" : "light";
++      root.classList.toggle("dark", root.dataset.theme === "dark");
++    }
++    syncAppearance();
++    const observer = new MutationObserver(syncAppearance);
++    observer.observe(host, { attributes: true, attributeFilter: ["class", "style"] });
++    return () => observer.disconnect();
++  }, []);
++
+   function handleClose() {
+     window.parent?.postMessage({ type: "storyai:director-desk-close" }, window.location.origin);
+   }
+@@ -28,7 +49,13 @@ export default function App() {
+   useEffect(() => {
+     function handleKeyDown(event: KeyboardEvent) {
+       if (event.defaultPrevented || isEditableShortcutTarget(event.target)) return;
+-      if (!event.metaKey && !event.ctrlKey) return;
++      if (document.querySelector("dialog[open]") || event.isComposing || event.altKey) return;
++      if (!event.metaKey && !event.ctrlKey) {
++        const keys = transformKeys[useShortcutProfile.getState().profile] ?? transformKeys.default;
++        const mode = (Object.keys(keys) as TransformMode[]).find(mode => keys[mode] === event.key.toUpperCase());
++        if (mode && !event.shiftKey) { event.preventDefault(); useDirectorStore.getState().setTransformMode(mode); }
++        return;
++      }
+ 
+       const key = event.key.toLowerCase();
+       if (key === "c") {
+@@ -57,10 +84,10 @@ export default function App() {
+   }, []);
+ 
+   return (
+-    <div className="app-shell">
++    <div className="app-shell studioDesk">
+       <header className="top-bar">
+         <div className="top-bar-left">
+-          <h1 className="top-bar-title">3D导演台</h1>
++          <h1 className="top-bar-title">3D 导演台</h1>
+         </div>
+         <div className="top-bar-center">
+           <div className="mode-toggle ui-segmented" role="group" aria-label="视角切换">
+diff --git a/src/app/layout/DirectorDeskShell.tsx b/src/app/layout/DirectorDeskShell.tsx
+index 20b9537..3b7b7e4 100644
+--- a/src/app/layout/DirectorDeskShell.tsx
++++ b/src/app/layout/DirectorDeskShell.tsx
+@@ -18,7 +18,8 @@ export function DirectorDeskShell({ children }: { children: ReactNode }) {
+         aria-hidden={viewportPanelsCollapsed ? "true" : undefined}
+         aria-label="场景"
+       >
+-        <ObjectTreePanel />
++        <div id="directorSideTools" />
++        <div className="sceneTree"><ObjectTreePanel /></div>
+       </aside>
+       <aside
+         className="right-sidebar director-sidebar"
+diff --git a/src/editor/canvas/DirectorCanvas.tsx b/src/editor/canvas/DirectorCanvas.tsx
+index f103cbc..9b6d2fb 100644
+--- a/src/editor/canvas/DirectorCanvas.tsx
++++ b/src/editor/canvas/DirectorCanvas.tsx
+@@ -1,8 +1,7 @@
+-import { GizmoHelper, GizmoViewport, Grid, OrbitControls, PerspectiveCamera } from "@react-three/drei";
++import { Grid, OrbitControls, PerspectiveCamera } from "@react-three/drei";
+ import { Canvas, useThree } from "@react-three/fiber";
+ import {
+   Suspense,
+-  useCallback,
+   useEffect,
+   useLayoutEffect,
+   useRef,
+@@ -26,12 +25,13 @@ import { ViewportBackground } from "./ViewportBackground";
+ import { ViewportToolbar } from "./ViewportToolbar";
+ import { getViewportAspectFrameRect, type ViewportSafeAreaInsets } from "./viewportAspectFrame";
+ 
+-export const DEFAULT_DIRECTOR_VIEW_SNAPSHOT: CameraShotSnapshot = DEFAULT_DIRECTOR_CAMERA_VIEW_SNAPSHOT;
++export const DEFAULT_DIRECTOR_VIEW_SNAPSHOT: CameraShotSnapshot = {
++  ...DEFAULT_DIRECTOR_CAMERA_VIEW_SNAPSHOT,
++  position: [2.65, 2.85, 4.35],
++};
+ const VIEWPORT_FRAME_PADDING = 40;
+ const VIEWPORT_TOOLBAR_BOTTOM_OFFSET = 40;
+ const DEFAULT_VIEWPORT_TOOLBAR_HEIGHT = 44;
+-const GIZMO_AXIS_COLORS: [string, string, string] = ["#E56C5B", "#6CDB7A", "#7AA7FF"];
+-const GIZMO_VIEWPORT_SCALE = 25;
+ const GIZMO_HIT_LAYER_SIZE = 80;
+ const GIZMO_HIT_LAYER_CENTER = GIZMO_HIT_LAYER_SIZE / 2;
+ const GIZMO_AXIS_SCREEN_RADIUS = 25;
+@@ -40,7 +40,7 @@ const LEFT_PANEL_WIDTH = 220;
+ const RIGHT_PANEL_WIDTH = 300;
+ const GIZMO_EDGE_PADDING = 20;
+ const HIDE_FROM_VIEWPORT_CAPTURE_KEY = "hideFromViewportCapture";
+-const CAPTURE_LABEL_FONT_SIZE = 12;
++const CAPTURE_LABEL_FONT_SIZE = 24;
+ const CAPTURE_LABEL_HORIZONTAL_PADDING = 10;
+ const CAPTURE_LABEL_VERTICAL_PADDING = 6;
+ const CAPTURE_LABEL_BORDER_RADIUS = 999;
+@@ -128,22 +128,6 @@ function applySnapshotToCamera(camera: ThreePerspectiveCamera, snapshot: CameraS
+   camera.updateMatrixWorld();
+ }
+ 
+-function applySnapshotToRelativeGizmoCamera(camera: ThreePerspectiveCamera, snapshot: CameraShotSnapshot) {
+-  const position = new Vector3(...snapshot.position);
+-  const target = new Vector3(...snapshot.target);
+-  const offset = position.sub(target);
+-
+-  if (offset.lengthSq() === 0) {
+-    offset.set(0, 0, 1);
+-  }
+-
+-  camera.fov = snapshot.fov;
+-  camera.position.copy(offset);
+-  camera.lookAt(0, 0, 0);
+-  camera.updateProjectionMatrix();
+-  camera.updateMatrixWorld();
+-}
+-
+ function createTransformMatrix(transform: DirectorTransform) {
+   return new Matrix4().compose(
+     new Vector3(...transform.position),
+@@ -504,46 +488,6 @@ function DirectorViewCameraSync({
+   return null;
+ }
+ 
+-function ViewportGizmoContent({
+-  onSnapshotChange,
+-  snapshot,
+-}: {
+-  onSnapshotChange: (snapshot: CameraShotSnapshot) => void;
+-  snapshot: CameraShotSnapshot;
+-}) {
+-  const { camera } = useThree();
+-  const targetRef = useRef(new Vector3(...snapshot.target));
+-
+-  useLayoutEffect(() => {
+-    targetRef.current.set(...snapshot.target);
+-    applySnapshotToRelativeGizmoCamera(camera as ThreePerspectiveCamera, snapshot);
+-  }, [camera, snapshot]);
+-
+-  const handleGizmoUpdate = useCallback(() => {
+-    const relativeCamera = camera as ThreePerspectiveCamera;
+-    const target = targetRef.current;
+-    const position = target.clone().add(relativeCamera.position);
+-
+-    onSnapshotChange({
+-      fov: snapshot.fov,
+-      position: toSnapshotTuple(position),
+-      target: toSnapshotTuple(target),
+-    });
+-  }, [camera, onSnapshotChange, snapshot.fov]);
+-
+-  const getGizmoTarget = useCallback(() => new Vector3(0, 0, 0), []);
+-
+-  return (
+-    <GizmoHelper alignment="center-center" margin={[0, 0]} onTarget={getGizmoTarget} onUpdate={handleGizmoUpdate}>
+-      <GizmoViewport
+-        axisColors={GIZMO_AXIS_COLORS}
+-        disabled
+-        scale={GIZMO_VIEWPORT_SCALE}
+-      />
+-    </GizmoHelper>
+-  );
+-}
+-
+ function ViewportGizmoOverlay({
+   onSnapshotChange,
+   rightOffset = GIZMO_EDGE_PADDING,
+@@ -557,28 +501,24 @@ function ViewportGizmoOverlay({
+     onSnapshotChange(getViewportSnapshotFromGizmoDirection(snapshot, new Vector3(...direction)));
+   }
+ 
++  const axes = GIZMO_AXIS_HIT_TARGETS.map(target => ({
++    ...target,
++    style: getViewportGizmoHitButtonStyle(snapshot, target.direction),
++  }));
+   return (
+-    <div className="viewport-gizmo-overlay" aria-label="3D视口原生坐标控件" style={{ right: `${rightOffset}px` }}>
+-      <Canvas
+-        className="viewport-gizmo-canvas"
+-        camera={{ fov: snapshot.fov, position: [0, 0, 1] }}
+-        gl={{ alpha: true, antialias: true }}
+-      >
+-        <ViewportGizmoContent onSnapshotChange={onSnapshotChange} snapshot={snapshot} />
+-      </Canvas>
+-      <div className="viewport-gizmo-hit-layer" aria-label="3D视口坐标切换按钮">
+-        {GIZMO_AXIS_HIT_TARGETS.map((target) => (
+-          <button
+-            key={target.label}
+-            aria-label={target.label}
+-            className={`viewport-gizmo-hit-button ${target.className}`}
+-            style={getViewportGizmoHitButtonStyle(snapshot, target.direction)}
+-            type="button"
+-            onClick={() => selectAxisDirection(target.direction)}
+-          />
+-        ))}
++    <nav className="viewNavigator" aria-label="视角导航" style={{ right: rightOffset }}>
++      <div className="axisDial">
++        <svg aria-hidden="true" viewBox="0 0 80 80">
++          {axes.map(({ label, style }) => <line key={label} x1="40" y1="40"
++            x2={parseFloat(String(style.left)) + GIZMO_AXIS_HIT_SIZE / 2}
++            y2={parseFloat(String(style.top)) + GIZMO_AXIS_HIT_SIZE / 2} />)}
++        </svg>
++        {axes.map(({ label, direction, style }) => <button key={label} type="button" aria-label={label} title={label}
++          style={style} data-axis={direction[0] === 1 ? "x" : direction[1] === 1 ? "y" : direction[2] === 1 ? "z" : undefined}
++          onClick={() => selectAxisDirection(direction)} />)}
+       </div>
+-    </div>
++      <button className="resetView" type="button" onClick={() => onSnapshotChange(DEFAULT_DIRECTOR_VIEW_SNAPSHOT)}>重置视角</button>
++    </nav>
+   );
+ }
+ 
+@@ -750,7 +690,7 @@ export function DirectorCanvas() {
+         rightOffset={gizmoRightOffset}
+         snapshot={visibleViewportSnapshot}
+       />
+-      <ViewportToolbar getViewportCameraSnapshot={getViewportCameraSnapshot} toolbarContainerRef={toolbarRef} />
++          <ViewportToolbar getViewportCameraSnapshot={getViewportCameraSnapshot} toolbarContainerRef={toolbarRef} />
+     </div>
+   );
+ }
+diff --git a/src/editor/canvas/SceneRoot.tsx b/src/editor/canvas/SceneRoot.tsx
+index 0e69e4c..996de71 100644
+--- a/src/editor/canvas/SceneRoot.tsx
++++ b/src/editor/canvas/SceneRoot.tsx
+@@ -1,7 +1,7 @@
+ import { Html, Line, TransformControls, type TransformControlsProps } from "@react-three/drei";
+-import { useLoader, type ThreeEvent } from "@react-three/fiber";
+-import { Suspense, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+-import { Box3, Matrix4, Quaternion, Vector3, type Group, type Object3D } from "three";
++import { createPortal, useThree, useLoader, type ThreeEvent } from "@react-three/fiber";
++import { Suspense, useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject, type ReactNode } from "react";
++import { Box3, Matrix4, Mesh, Quaternion, Vector3, type Group, type Object3D } from "three";
+ import type { TransformControls as TransformControlsImpl } from "three-stdlib";
+ import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
+ import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+@@ -42,7 +42,6 @@ const VIEWPORT_CAMERA_BODY_SIZE: CameraWirePoint = [
+ ];
+ const VIEWPORT_CAMERA_BODY_FRONT_Z = VIEWPORT_CAMERA_BODY_CENTER[2] + VIEWPORT_CAMERA_BODY_SIZE[2] / 2;
+ const VIEWPORT_CAMERA_LENS_TIP: CameraWirePoint = [0, 0, 0.2 * VIEWPORT_CAMERA_VISUAL_SCALE];
+-const ROLE_LABEL_DISTANCE_FACTOR = 3;
+ const IMPORTED_MODEL_TARGET_MAX_SIZE = 2;
+ type CameraWirePoint = [number, number, number];
+ type CameraWirePointLine = CameraWirePoint[];
+@@ -57,23 +56,23 @@ type CameraHitArea = {
+ };
+ 
+ function ViewportObjectLabel({
++  character = false,
+   children,
+   position,
+ }: {
++  character?: boolean;
+   children: ReactNode;
+   position: [number, number, number];
+ }) {
+   return (
+     <Html
+       center
+-      distanceFactor={ROLE_LABEL_DISTANCE_FACTOR}
+       pointerEvents="none"
+       position={position}
+-      sprite
+-      transform
++      style={{ pointerEvents: "none" }}
+       zIndexRange={[0, 1]}
+     >
+-      <div className="role-label">{children}</div>
++      <div className={character ? "role-label characterLabel" : "role-label"}>{children}</div>
+     </Html>
+   );
+ }
+@@ -89,30 +88,73 @@ function ViewportTransformControls({
+   onObjectChange: TransformControlsProps["onObjectChange"];
+   translationSnap?: number | null;
+ }) {
+-  const controlsRef = useRef<TransformControlsImpl | null>(null);
++  const worldScene = useThree(state => state.scene);
+   const setControlsRef = useCallback((controls: TransformControlsImpl | null) => {
+-    controlsRef.current = controls;
+     if (controls) {
+       controls.userData[HIDE_FROM_VIEWPORT_CAPTURE_KEY] = true;
++      controls.traverse(handle => {
++        if (!(handle instanceof Mesh) || !("tag" in handle) || handle.tag !== "bwd") return;
++        const forward = handle.parent?.children.find(sibling =>
++          sibling.name === handle.name && "tag" in sibling && sibling.tag === "fwd"
++        );
++        if (forward instanceof Mesh) handle.geometry.copy(forward.geometry);
++      });
+     }
+   }, []);
+   const beginUndoBatch = useDirectorStore((state) => state.beginUndoBatch);
+   const endUndoBatch = useDirectorStore((state) => state.endUndoBatch);
+ 
+-  return (
++  return createPortal(
+     <TransformControls
+       ref={setControlsRef}
+       mode={mode}
++      space={mode === "translate" ? "world" : undefined}
++      size={0.8}
+       object={object}
+       onMouseDown={beginUndoBatch}
+       onMouseUp={endUndoBatch}
+       onObjectChange={onObjectChange}
+       translationSnap={translationSnap ?? undefined}
+       userData={{ [HIDE_FROM_VIEWPORT_CAPTURE_KEY]: true }}
+-    />
++    />,
++    worldScene
+   );
+ }
+ 
++function CenteredControls({ target, center, mode, onObjectChange, translationSnap }: {
++  target: RefObject<Group>;
++  center: CameraWirePoint;
++  mode: TransformMode;
++  onObjectChange: () => void;
++  translationSnap: number | null;
++}) {
++  const pivot = useRef<Group>(null!);
++  const worldScene = useThree(state => state.scene);
++  useLayoutEffect(() => {
++    const object = target.current;
++    if (!object) return;
++    object.updateWorldMatrix(true, false);
++    pivot.current.position.copy(object.localToWorld(new Vector3(...center)));
++    object.getWorldQuaternion(pivot.current.quaternion);
++    object.getWorldScale(pivot.current.scale);
++  });
++  function commitPivot() {
++    const object = target.current;
++    if (!object) return;
++    const handle = pivot.current;
++    const worldPosition = handle.position.clone().sub(new Vector3(...center).multiply(handle.scale).applyQuaternion(handle.quaternion));
++    const worldMatrix = new Matrix4().compose(worldPosition, handle.quaternion, handle.scale);
++    const localMatrix = object.parent ? object.parent.matrixWorld.clone().invert().multiply(worldMatrix) : worldMatrix;
++    localMatrix.decompose(object.position, object.quaternion, object.scale);
++    object.updateMatrixWorld(true);
++    onObjectChange();
++  }
++  return <>
++    {createPortal(<group ref={pivot} />, worldScene)}
++    <ViewportTransformControls object={pivot} mode={mode} translationSnap={translationSnap} onObjectChange={commitPivot} />
++  </>;
++}
++
+ export function getViewportCameraQuaternion(
+   position: [number, number, number],
+   target: [number, number, number]
+@@ -463,45 +505,31 @@ function ObjectSceneNode({
+   onSelect?: (item: DirectorObject) => void;
+ }) {
+   const groupRef = useRef<Group>(null!);
+-  const [measuredCharacterLabel, setMeasuredCharacterLabel] = useState<{
+-    key: string;
+-    y: number;
+-  } | null>(null);
++  const [anchors, setAnchors] = useState<{head: CameraWirePoint; pelvis: CameraWirePoint} | null>(null);
++  const handleAnchorsChange = useCallback((head: CameraWirePoint, pelvis: CameraWirePoint) => {
++    setAnchors({ head, pelvis });
++  }, []);
+   const updateObjectTransform = useDirectorStore((state) => state.updateObjectTransform);
+   const isImportedModel = asset?.sourceType === "model";
+-  const characterLabelKey = `${item.id}:${item.bodyType ?? ""}:${item.characterRig?.rigType ?? ""}`;
+   const fallbackCharacterLabelY =
+     item.kind === "character"
+       ? item.characterRig?.rigType === "ue4-mannequin"
+         ? getUE4GroundedLabelY(item.bodyType)
+         : getGroundedLabelY(item.bodyType)
+       : 1.25;
+-  const characterLabelY =
+-    measuredCharacterLabel?.key === characterLabelKey ? measuredCharacterLabel.y : fallbackCharacterLabelY;
+-  const handleCharacterLabelAnchorYChange = useCallback(
+-    (anchorY: number) => {
+-      setMeasuredCharacterLabel((current) => {
+-        const nextY = Number(anchorY.toFixed(4));
+-
+-        if (current?.key === characterLabelKey && Math.abs(current.y - nextY) < 0.0001) {
+-          return current;
+-        }
+-
+-        return {
+-          key: characterLabelKey,
+-          y: nextY,
+-        };
+-      });
+-    },
+-    [characterLabelKey]
+-  );
++  const measured = item.characterRig?.rigType === "ue4-mannequin" ? anchors : null;
++  const labelPosition: CameraWirePoint = measured?.head ?? [0, fallbackCharacterLabelY, 0];
++  const geometryCenterY = { box: 0.5, sphere: 0.55, cylinder: 0.6, torus: 0.14, cone: 0.55, pyramid: 0.55 };
++  const center: CameraWirePoint = isImportedModel ? [0, 0, 0] : item.kind === "character"
++    ? measured?.pelvis ?? [0, fallbackCharacterLabelY / 2, 0]
++    : [0, geometryCenterY[item.geometryType ?? "box"], 0];
+ 
+   function commitTransformFromViewport() {
+     const group = groupRef.current;
+     if (!group) return;
+ 
+     updateObjectTransform(item.id, {
+-      position: [group.position.x, group.position.y, group.position.z],
++      position: group.position.toArray(),
+       rotation: [group.rotation.x, group.rotation.y, group.rotation.z],
+       scale: [group.scale.x, group.scale.y, group.scale.z],
+     });
+@@ -528,12 +556,12 @@ function ObjectSceneNode({
+             <CharacterModel
+               bodyType={item.bodyType}
+               color={item.color}
+-              onLabelAnchorYChange={handleCharacterLabelAnchorYChange}
++              onAnchorsChange={handleAnchorsChange}
+               rigState={item.characterRig}
+             />
+           </Suspense>
+           {showLabels ? (
+-            <ViewportObjectLabel position={[0, characterLabelY, 0]}>{item.name}</ViewportObjectLabel>
++            <ViewportObjectLabel character position={labelPosition}>{item.name}</ViewportObjectLabel>
+           ) : null}
+         </>
+       ) : item.kind === "prop" && item.geometryType ? (
+@@ -542,17 +570,16 @@ function ObjectSceneNode({
+     </group>
+   );
+ 
+-  if (!selected || !transformable) return node;
+-
+   return (
+     <>
+       {node}
+-      <ViewportTransformControls
++      {selected && transformable && <CenteredControls
++        center={center}
+         mode={transformMode}
+-        object={groupRef}
++        target={groupRef}
+         onObjectChange={commitTransformFromViewport}
+         translationSnap={transformMode === "translate" ? translationSnap : null}
+-      />
++      />}
+     </>
+   );
+ }
+@@ -669,7 +696,7 @@ function ViewportCameraRig({
+ 
+     const position: [number, number, number] = [group.position.x, group.position.y, group.position.z];
+     const forward = VIEWPORT_CAMERA_FORWARD.clone().applyQuaternion(group.quaternion).normalize();
+-    const currentDistance = new Vector3(...camera.target).distanceTo(group.position);
++    const currentDistance = new Vector3(...camera.target).distanceTo(new Vector3(...camera.transform.position));
+     const nextTarget = group.position.clone().add(forward.multiplyScalar(Math.max(currentDistance, 0.1)));
+ 
+     updateCamera(camera.id, {
+@@ -733,17 +760,16 @@ function ViewportCameraRig({
+     </group>
+   );
+ 
+-  if (!selected || !transformable) return node;
+-
+   return (
+     <>
+       {node}
+-      <ViewportTransformControls
++      {selected && transformable && <CenteredControls
++        center={VIEWPORT_CAMERA_BODY_CENTER}
+         mode={transformMode}
+-        object={groupRef}
++        target={groupRef}
+         onObjectChange={commitCameraTransformFromViewport}
+         translationSnap={transformMode === "translate" ? translationSnap : null}
+-      />
++      />}
+     </>
+   );
+ }
+diff --git a/src/editor/canvas/ViewportToolbar.tsx b/src/editor/canvas/ViewportToolbar.tsx
+index 537f896..804585e 100644
+--- a/src/editor/canvas/ViewportToolbar.tsx
++++ b/src/editor/canvas/ViewportToolbar.tsx
+@@ -1,9 +1,9 @@
++import { createPortal } from "react-dom";
+ import {
+   useEffect,
+   useLayoutEffect,
+   useRef,
+   useState,
+-  type CSSProperties,
+   type ChangeEvent,
+   type MutableRefObject,
+ } from "react";
+@@ -11,21 +11,23 @@ import {
+   Box,
+   Boxes,
+   Camera,
+-  ChevronRight,
++  Layers,
++  CircleHelp,
++  X,
++  MousePointer2,
+   Expand,
+   Grid2X2,
+   Grid3X3,
+   Image,
+   ImagePlus,
+-  Move3D,
+   Plus,
+   Ratio,
+   Rotate3D,
+   Scale3D,
++  Sparkles,
+   Trash2,
+   UserPlus,
+   Video,
+-  X,
+   type LucideIcon,
+ } from "lucide-react";
+ import { requestViewportCapture } from "../io/captureBridge";
+@@ -45,6 +47,8 @@ import { BODY_TYPE_OPTIONS, type CharacterBodyType } from "../runtime/mannequin/
+ import { GEOMETRY_PRIMITIVE_OPTIONS, type GeometryPrimitiveType } from "../schema/directorProject";
+ import {
+   useDirectorStore,
++  useShortcutProfile,
++  transformKeys,
+   type CameraShotSnapshot,
+   type CrowdCharactersInput,
+   type TransformMode,
+@@ -54,11 +58,10 @@ type ToolbarAction = {
+   label: string;
+   icon: LucideIcon;
+   mode?: TransformMode;
++  capture?: boolean;
+   onClick: () => void;
+ };
+ 
+-const DEFAULT_VIEWPORT_TOOLBAR_HEIGHT = 46;
+-const VIEWPORT_TOOLBAR_BOTTOM_OFFSET = 40;
+ const DEFAULT_CROWD_ROWS = 3;
+ const DEFAULT_CROWD_COLUMNS = 3;
+ const DEFAULT_CROWD_SPACING = 1.2;
+@@ -91,28 +94,37 @@ export function ViewportToolbar({
+   toolbarContainerRef?: MutableRefObject<HTMLDivElement | null>;
+ }) {
+   const toolbarRef = useRef<HTMLDivElement | null>(null);
+-  const aspectRatioPanelRef = useRef<HTMLDivElement | null>(null);
+-  const characterTriggerRef = useRef<HTMLButtonElement | null>(null);
+-  const geometryTriggerRef = useRef<HTMLButtonElement | null>(null);
+-  const crowdTriggerRef = useRef<HTMLButtonElement | null>(null);
+-  const modelLibraryTriggerRef = useRef<HTMLButtonElement | null>(null);
+-  const characterMenuRef = useRef<HTMLDivElement | null>(null);
+-  const geometryMenuRef = useRef<HTMLDivElement | null>(null);
+-  const crowdPanelRef = useRef<HTMLDivElement | null>(null);
+-  const modelLibraryPanelRef = useRef<HTMLDivElement | null>(null);
++  const menuRef = useRef<HTMLDetailsElement>(null);
++  const captureLock = useRef(false);
++  const [capturing, setCapturing] = useState(false);
++  const [captureError, setCaptureError] = useState("");
++  useEffect(() => {
++    function dismissOutside(event: PointerEvent) {
++      const menu = menuRef.current;
++      if (menu?.open && !event.composedPath().includes(menu)) menu.open = false;
++    }
++    function dismissOnEscape(event: KeyboardEvent) {
++      const menu = menuRef.current;
++      if (event.key !== "Escape" || !menu?.open) return;
++      menu.open = false;
++      menu.querySelector("summary")?.focus();
++    }
++    document.addEventListener("pointerdown", dismissOutside, true);
++    document.addEventListener("keydown", dismissOnEscape);
++    return () => {
++      document.removeEventListener("pointerdown", dismissOutside, true);
++      document.removeEventListener("keydown", dismissOnEscape);
++    };
++  }, []);
++  const helpRef = useRef<HTMLDialogElement>(null);
++  const profile = useShortcutProfile(state => state.profile);
++  const keys = transformKeys[profile] ?? transformKeys.default;
++  const [sideHost, setSideHost] = useState<HTMLElement | null>(null);
++  const [section, setSection] = useState("场景");
++  useLayoutEffect(() => setSideHost(document.getElementById("directorSideTools")), []);
+   const sceneLocalModelInputRef = useRef<HTMLInputElement | null>(null);
+   const libraryLocalModelInputRef = useRef<HTMLInputElement | null>(null);
+   const panoramaInputRef = useRef<HTMLInputElement | null>(null);
+-  const [characterMenuOpen, setCharacterMenuOpen] = useState(false);
+-  const [geometryMenuOpen, setGeometryMenuOpen] = useState(false);
+-  const [crowdPanelOpen, setCrowdPanelOpen] = useState(false);
+-  const [modelLibraryOpen, setModelLibraryOpen] = useState(false);
+-  const [aspectRatioPanelOpen, setAspectRatioPanelOpen] = useState(false);
+-  const [toolbarHeight, setToolbarHeight] = useState(DEFAULT_VIEWPORT_TOOLBAR_HEIGHT);
+-  const [characterMenuStyle, setCharacterMenuStyle] = useState<CSSProperties>({});
+-  const [geometryMenuStyle, setGeometryMenuStyle] = useState<CSSProperties>({});
+-  const [crowdPanelStyle, setCrowdPanelStyle] = useState<CSSProperties>({});
+-  const [modelLibraryPanelStyle, setModelLibraryPanelStyle] = useState<CSSProperties>({});
+   const [crowdBodyType, setCrowdBodyType] = useState<CharacterBodyType>(BODY_TYPE_OPTIONS[0]?.bodyType ?? "mannequin");
+   const [crowdRows, setCrowdRows] = useState(String(DEFAULT_CROWD_ROWS));
+   const [crowdColumns, setCrowdColumns] = useState(String(DEFAULT_CROWD_COLUMNS));
+@@ -137,135 +149,6 @@ export function ViewportToolbar({
+   const setViewportAspectRatio = useDirectorStore((state) => state.setViewportAspectRatio);
+   const toggleViewportPanelsCollapsed = useDirectorStore((state) => state.toggleViewportPanelsCollapsed);
+ 
+-  useEffect(() => {
+-    if (!characterMenuOpen && !crowdPanelOpen && !modelLibraryOpen && !aspectRatioPanelOpen) return;
+-
+-    function closeMenusOnOutsidePointerDown(event: PointerEvent) {
+-      if (event.target instanceof Node && toolbarRef.current?.contains(event.target)) return;
+-      if (event.target instanceof Node && characterMenuRef.current?.contains(event.target)) return;
+-      if (event.target instanceof Node && geometryMenuRef.current?.contains(event.target)) return;
+-      if (event.target instanceof Node && crowdPanelRef.current?.contains(event.target)) return;
+-      if (event.target instanceof Node && modelLibraryPanelRef.current?.contains(event.target)) return;
+-      if (event.target instanceof Node && aspectRatioPanelRef.current?.contains(event.target)) return;
+-      if (event.target instanceof Node && sceneLocalModelInputRef.current?.contains(event.target)) return;
+-      if (event.target instanceof Node && libraryLocalModelInputRef.current?.contains(event.target)) return;
+-      if (event.target instanceof Node && panoramaInputRef.current?.contains(event.target)) return;
+-
+-      setCharacterMenuOpen(false);
+-      setGeometryMenuOpen(false);
+-      setCrowdPanelOpen(false);
+-      setModelLibraryOpen(false);
+-      setAspectRatioPanelOpen(false);
+-    }
+-
+-    document.addEventListener("pointerdown", closeMenusOnOutsidePointerDown);
+-
+-    return () => {
+-      document.removeEventListener("pointerdown", closeMenusOnOutsidePointerDown);
+-    };
+-  }, [aspectRatioPanelOpen, characterMenuOpen, crowdPanelOpen, modelLibraryOpen]);
+-
+-  useLayoutEffect(() => {
+-    const element = toolbarRef.current;
+-    if (!element) return;
+-
+-    const updateHeight = () => {
+-      const nextHeight = Math.max(element.offsetHeight, DEFAULT_VIEWPORT_TOOLBAR_HEIGHT);
+-      setToolbarHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
+-    };
+-
+-    updateHeight();
+-
+-    if (typeof ResizeObserver === "undefined") {
+-      window.addEventListener("resize", updateHeight);
+-      return () => {
+-        window.removeEventListener("resize", updateHeight);
+-      };
+-    }
+-
+-    const resizeObserver = new ResizeObserver(updateHeight);
+-    resizeObserver.observe(element);
+-    window.addEventListener("resize", updateHeight);
+-
+-    return () => {
+-      resizeObserver.disconnect();
+-      window.removeEventListener("resize", updateHeight);
+-    };
+-  }, []);
+-
+-  useLayoutEffect(() => {
+-    const toolbarElement = toolbarRef.current;
+-    const frameElement = toolbarElement?.parentElement;
+-    if (!toolbarElement || !frameElement) return;
+-
+-    const updateFloatingPositions = () => {
+-      const frameRect = frameElement.getBoundingClientRect();
+-
+-      if (characterMenuOpen && characterTriggerRef.current) {
+-        const triggerRect = characterTriggerRef.current.getBoundingClientRect();
+-        setCharacterMenuStyle({
+-          left: `${triggerRect.left - frameRect.left + triggerRect.width / 2}px`,
+-          bottom: `${frameRect.bottom - triggerRect.top + 8}px`,
+-        });
+-      }
+-
+-      if (geometryMenuOpen && geometryTriggerRef.current) {
+-        const triggerRect = geometryTriggerRef.current.getBoundingClientRect();
+-        setGeometryMenuStyle({
+-          left: `${triggerRect.right - frameRect.left + 8}px`,
+-          bottom: `${frameRect.bottom - triggerRect.bottom}px`,
+-        });
+-      }
+-
+-      if (crowdPanelOpen && crowdTriggerRef.current) {
+-        const triggerRect = crowdTriggerRef.current.getBoundingClientRect();
+-        setCrowdPanelStyle({
+-          left: `${triggerRect.right - frameRect.left + 8}px`,
+-          bottom: `${frameRect.bottom - triggerRect.bottom}px`,
+-        });
+-      }
+-
+-      if (modelLibraryOpen) {
+-        const toolbarRect = toolbarElement.getBoundingClientRect();
+-        setModelLibraryPanelStyle({
+-          left: `${toolbarRect.left - frameRect.left + toolbarRect.width / 2}px`,
+-          bottom: `${frameRect.bottom - toolbarRect.top + 10}px`,
+-        });
+-      }
+-    };
+-
+-    updateFloatingPositions();
+-
+-    if (typeof ResizeObserver === "undefined") {
+-      window.addEventListener("resize", updateFloatingPositions);
+-      return () => {
+-        window.removeEventListener("resize", updateFloatingPositions);
+-      };
+-    }
+-
+-    const resizeObserver = new ResizeObserver(updateFloatingPositions);
+-    resizeObserver.observe(frameElement);
+-    resizeObserver.observe(toolbarElement);
+-    if (characterTriggerRef.current) {
+-      resizeObserver.observe(characterTriggerRef.current);
+-    }
+-    if (geometryTriggerRef.current) {
+-      resizeObserver.observe(geometryTriggerRef.current);
+-    }
+-    if (crowdTriggerRef.current) {
+-      resizeObserver.observe(crowdTriggerRef.current);
+-    }
+-    if (modelLibraryTriggerRef.current) {
+-      resizeObserver.observe(modelLibraryTriggerRef.current);
+-    }
+-    window.addEventListener("resize", updateFloatingPositions);
+-
+-    return () => {
+-      resizeObserver.disconnect();
+-      window.removeEventListener("resize", updateFloatingPositions);
+-    };
+-  }, [characterMenuOpen, crowdPanelOpen, geometryMenuOpen, modelLibraryOpen]);
+-
+   async function handleLocalModelChange(
+     event: ChangeEvent<HTMLInputElement>,
+     addToScene: boolean
+@@ -307,6 +190,10 @@ export function ViewportToolbar({
+   }
+ 
+   async function handleCapture(preset: "current" | "four" | "twelve") {
++    if (captureLock.current) return;
++    captureLock.current = true;
++    setCapturing(true);
++    setCaptureError("");
+     try {
+       const targetCameraId =
+         viewMode === "director" ? addCameraShot(getViewportCameraSnapshot?.()) : activeCameraId;
+@@ -320,8 +207,11 @@ export function ViewportToolbar({
+         cameraId: targetCameraId,
+       });
+       addCameraCaptures(targetCameraId, results.map((result) => result.dataUrl));
+-    } catch {
+-      // Keep the capsule toolbar icon-only and free of transient status text.
++    } catch (error) {
++      setCaptureError(error instanceof Error ? `截图失败：${error.message}` : "截图失败，请重试");
++    } finally {
++      captureLock.current = false;
++      setCapturing(false);
+     }
+   }
+ 
+@@ -329,37 +219,6 @@ export function ViewportToolbar({
+     setTransformMode(mode);
+   }
+ 
+-  function toggleCharacterMenu() {
+-    setCharacterMenuOpen((isOpen) => !isOpen);
+-    setGeometryMenuOpen(false);
+-    setCrowdPanelOpen(false);
+-    setModelLibraryOpen(false);
+-    setAspectRatioPanelOpen(false);
+-  }
+-
+-  function addCharacterWithBodyType(bodyType: CharacterBodyType) {
+-    addPresetCharacter(bodyType);
+-    setCharacterMenuOpen(false);
+-    setGeometryMenuOpen(false);
+-    setCrowdPanelOpen(false);
+-  }
+-
+-  function addGeometryWithType(geometryType: GeometryPrimitiveType) {
+-    addGeometryPrimitive(geometryType);
+-    setCharacterMenuOpen(false);
+-    setGeometryMenuOpen(false);
+-    setCrowdPanelOpen(false);
+-  }
+-
+-  function openCrowdPanel() {
+-    setCrowdPanelOpen(true);
+-    setGeometryMenuOpen(false);
+-  }
+-
+-  function closeCrowdPanel() {
+-    setCrowdPanelOpen(false);
+-  }
+-
+   function getCrowdInputValue(): CrowdCharactersInput {
+     return {
+       bodyType: crowdBodyType,
+@@ -379,17 +238,6 @@ export function ViewportToolbar({
+     const nextInput = getCrowdInputValue();
+     applyCrowdValueDrafts(nextInput);
+     addCrowdCharacters(nextInput);
+-    setCharacterMenuOpen(false);
+-    setGeometryMenuOpen(false);
+-    setCrowdPanelOpen(false);
+-  }
+-
+-  function toggleModelLibrary() {
+-    setModelLibraryOpen((isOpen) => !isOpen);
+-    setCharacterMenuOpen(false);
+-    setGeometryMenuOpen(false);
+-    setCrowdPanelOpen(false);
+-    setAspectRatioPanelOpen(false);
+   }
+ 
+   function addModelLibraryItem(item: ModelLibraryItem) {
+@@ -400,7 +248,7 @@ export function ViewportToolbar({
+       name: item.name,
+       url: item.url,
+     });
+-    setModelLibraryOpen(false);
++
+   }
+ 
+   async function handleMyModelsImport() {
+@@ -426,37 +274,13 @@ export function ViewportToolbar({
+     addCameraShot(snapshot);
+   }
+ 
+-  function toggleAspectRatioPanel() {
+-    setAspectRatioPanelOpen((isOpen) => !isOpen);
+-    setCharacterMenuOpen(false);
+-    setGeometryMenuOpen(false);
+-    setCrowdPanelOpen(false);
+-    setModelLibraryOpen(false);
+-  }
+-
+-  function selectAspectRatio(ratio: ViewportAspectRatio) {
+-    setViewportAspectRatio(ratio);
+-    setAspectRatioPanelOpen(false);
+-  }
+-
+   const actions: ToolbarAction[] = [
+-    { label: "移动", icon: Move3D, mode: "translate", onClick: () => selectTransformMode("translate") },
++    { label: "移动", icon: MousePointer2, mode: "translate", onClick: () => selectTransformMode("translate") },
+     { label: "旋转", icon: Rotate3D, mode: "rotate", onClick: () => selectTransformMode("rotate") },
+     { label: "缩放", icon: Scale3D, mode: "scale", onClick: () => selectTransformMode("scale") },
+-    { label: "导入全景图", icon: ImagePlus, onClick: () => panoramaInputRef.current?.click() },
+-    {
+-      label: "导入本地模型",
+-      icon: Box,
+-      onClick: () => {
+-        sceneLocalModelInputRef.current?.click();
+-      },
+-    },
+-    { label: "模型库", icon: Boxes, onClick: toggleModelLibrary },
+-    { label: "添加机位", icon: Video, onClick: addCameraFromViewport },
+-    { label: "选择画幅比例", icon: Ratio, onClick: toggleAspectRatioPanel },
+-    { label: "当前视角截图", icon: Camera, onClick: () => void handleCapture("current") },
+-    { label: "四方位截图", icon: Grid2X2, onClick: () => void handleCapture("four") },
+-    { label: "十二方位截图", icon: Grid3X3, onClick: () => void handleCapture("twelve") },
++    { label: "当前视角截图", icon: Camera, capture: true, onClick: () => void handleCapture("current") },
++    { label: "四方位截图", icon: Grid2X2, capture: true, onClick: () => void handleCapture("four") },
++    { label: "十二方位截图", icon: Grid3X3, capture: true, onClick: () => void handleCapture("twelve") },
+     { label: "全屏", icon: Expand, onClick: toggleViewportPanelsCollapsed },
+   ];
+ 
+@@ -467,6 +291,7 @@ export function ViewportToolbar({
+     return (
+       <button
+         key={action.label}
++        disabled={action.capture && capturing}
+         aria-label={action.label}
+         aria-pressed={action.mode ? active : undefined}
+         className={`ui-icon-button viewport-toolbar-button${active ? " is-active" : ""}`}
+@@ -480,6 +305,17 @@ export function ViewportToolbar({
+   }
+ 
+   const modelLibraryItems = getModelLibraryItems();
++  const currentTool = actions.find(action => action.mode === transformMode) ?? actions[0];
++  const CurrentIcon = currentTool.icon;
++  function renderMenuRow(action: ToolbarAction) {
++    const Icon = action.icon;
++    const key = action.mode && keys[action.mode];
++    return <button type="button" key={action.label} aria-pressed={action.mode ? action.mode === transformMode : undefined} onClick={event => {
++      const details = event.currentTarget.closest("details");
++      if (details) { details.open = false; details.querySelector("summary")?.focus(); }
++      action.onClick();
++    }}><Icon size={16} /><span>{action.label}</span>{key && <kbd>{key}</kbd>}</button>;
++  }
+   const activeModelLibraryItems =
+     activeModelLibraryCategoryId === "my-models"
+       ? myModelLibraryItems
+@@ -494,122 +330,43 @@ export function ViewportToolbar({
+     }
+   }
+ 
+-  const aspectRatioPanelStyle = {
+-    "--viewport-toolbar-height": `${toolbarHeight}px`,
+-  } as CSSProperties;
++  const sections = [
++    ["场景", Layers], ["角色与几何体", UserPlus], ["机位", Video],
++    ["全景图", ImagePlus], ["模型库", Boxes], ["画幅比例", Ratio],
++  ] as const;
+ 
+   return (
+     <>
+       <div className="viewport-toolbar" role="group" aria-label="3D视口快捷工具" ref={setToolbarElement}>
+-        {actions.slice(0, 3).map(renderActionButton)}
+-        <div className="viewport-toolbar-menu-wrap">
+-          <button
+-            aria-expanded={characterMenuOpen}
+-            aria-label="添加角色"
+-            className="ui-icon-button viewport-toolbar-button"
+-            ref={characterTriggerRef}
+-            type="button"
+-            onClick={toggleCharacterMenu}
+-          >
+-            <UserPlus aria-hidden="true" size={17} strokeWidth={1.9} />
+-            <span className="viewport-toolbar-label">添加角色</span>
+-          </button>
+-        </div>
+-        {actions.slice(3).map((action) => {
+-          if (action.label !== "模型库") {
+-            return renderActionButton(action);
+-          }
+-
+-          const Icon = action.icon;
+-
+-          return (
+-            <button
+-              key={action.label}
+-              aria-label={action.label}
+-              className="ui-icon-button viewport-toolbar-button"
+-              ref={modelLibraryTriggerRef}
+-              type="button"
+-              onClick={action.onClick}
+-            >
+-              <Icon aria-hidden="true" size={17} strokeWidth={1.9} />
+-              <span className="viewport-toolbar-label">{action.label}</span>
+-            </button>
+-          );
+-        })}
++        <details ref={menuRef} className="quickGroup" name="directorQuickTools"><summary aria-label="选择变换工具" title={currentTool.label}><CurrentIcon size={17} /></summary><div>{actions.filter(action => action.mode).map(renderMenuRow)}</div></details>
++        {renderActionButton(actions[3])}
++        {actions.slice(4, 6).map(renderActionButton)}
++        {renderActionButton(actions[6])}
++        {window.parent !== window && renderActionButton({ label: "AI 搭景", icon: Sparkles, onClick: () => window.parent.postMessage({ type: "storyai:director-desk-toggle-layout" }, window.location.origin) })}
++        {capturing && <span className="captureNotice" role="status">正在截图…</span>}
++        {captureError && <div className="captureNotice" role="alert">{captureError}<button type="button" aria-label="关闭截图提示" onClick={() => setCaptureError("")}><X size={14} /></button></div>}
+       </div>
+-      {characterMenuOpen ? (
+-        <div
+-          ref={characterMenuRef}
+-          className="viewport-toolbar-menu"
+-          role="menu"
+-          aria-label="选择角色体型"
+-          style={characterMenuStyle}
+-        >
+-          {BODY_TYPE_OPTIONS.map((option) => (
+-            <button
+-              key={option.bodyType}
+-              role="menuitem"
+-              type="button"
+-              onClick={() => addCharacterWithBodyType(option.bodyType)}
+-              onMouseEnter={() => {
+-                setGeometryMenuOpen(false);
+-                setCrowdPanelOpen(false);
+-              }}
+-            >
+-              {option.label}
+-            </button>
+-          ))}
+-          <div
+-            className="viewport-toolbar-submenu-wrap"
+-            onMouseEnter={openCrowdPanel}
+-          >
+-            <button
+-              ref={crowdTriggerRef}
+-              aria-expanded={crowdPanelOpen}
+-              aria-haspopup="dialog"
+-              className="viewport-toolbar-menu-subtrigger"
+-              role="menuitem"
+-              type="button"
+-              onFocus={openCrowdPanel}
+-              onMouseEnter={openCrowdPanel}
+-            >
+-              <span>群众 (3x3)</span>
+-              <ChevronRight aria-hidden="true" size={14} strokeWidth={1.8} />
+-            </button>
++      {sideHost && createPortal(<>
++        <nav className="sideRail" aria-label="导演台分类">
++          <div className="categoryDock">{sections.map(([name, Icon]) => <button key={name} type="button" data-label={name} title={name} aria-label={name} aria-pressed={section === name} onClick={() => setSection(name)}><Icon size={18} strokeWidth={1.65} /></button>)}</div>
++          <button type="button" className="helpTrigger" data-label="快捷键" aria-label="查看快捷键" onClick={() => helpRef.current?.showModal()}><CircleHelp size={17} /></button>
++        </nav>
++        <dialog className="shortcutHelp" ref={helpRef} aria-label="导演台快捷键" onClick={event => { if (event.target === event.currentTarget) helpRef.current?.close(); }}>
++          <section><header><h2>快捷键</h2><button type="button" aria-label="关闭快捷键" onClick={() => helpRef.current?.close()}><X size={16} /></button></header>
++          <div className="shortcutProfiles" role="group" aria-label="快捷键方案">
++            {(["default", "blender"] as const).map(value => <button type="button" key={value} aria-pressed={profile === value} onClick={() => useShortcutProfile.setState({ profile: value })}>{value === "default" ? "默认" : "Blender"}</button>)}
+           </div>
+-          <div
+-            className="viewport-toolbar-submenu-wrap"
+-            onMouseEnter={() => {
+-              setGeometryMenuOpen(true);
+-              setCrowdPanelOpen(false);
+-            }}
+-          >
+-            <button
+-              ref={geometryTriggerRef}
+-              aria-expanded={geometryMenuOpen}
+-              aria-haspopup="menu"
+-              className="viewport-toolbar-menu-subtrigger"
+-              role="menuitem"
+-              type="button"
+-              onMouseEnter={() => {
+-                setGeometryMenuOpen(true);
+-                setCrowdPanelOpen(false);
+-              }}
+-            >
+-              <span>几何模型</span>
+-              <ChevronRight aria-hidden="true" size={14} strokeWidth={1.8} />
+-            </button>
+-          </div>
+-        </div>
+-      ) : null}
+-      {crowdPanelOpen ? (
+-        <div
+-          ref={crowdPanelRef}
+-          className="viewport-toolbar-crowd-panel"
+-          role="dialog"
+-          aria-label="添加群众阵列"
+-          style={crowdPanelStyle}
+-        >
++          {[["移动", keys.translate], ["旋转", keys.rotate], ["缩放", keys.scale], ["复制对象", "Ctrl / ⌘ + C"], ["粘贴对象", "Ctrl / ⌘ + V"], ["撤销", "Ctrl / ⌘ + Z"], ["删除选中对象", profile === "blender" ? "X / Delete" : "Delete / Backspace"]].map(([label, key]) => <div key={label}><span>{label}</span><kbd>{key}</kbd></div>)}</section>
++        </dialog>
++        <section className="sidePage" data-section={section} aria-label={section}>
++          <h2>{section}</h2>
++          {section === "机位" && <button className="sideChoice" onClick={addCameraFromViewport}><Video size={16} />从当前视角添加机位</button>}
++          {section === "全景图" && <button className="sideChoice" onClick={() => panoramaInputRef.current?.click()}><ImagePlus size={16} />本地上传</button>}
++          {section === "角色与几何体" && <>
++            <button className="sideChoice" onClick={() => sceneLocalModelInputRef.current?.click()}><Box size={16} />导入本地模型</button>
++            {BODY_TYPE_OPTIONS.map(option => <button className="sideChoice" key={option.bodyType} onClick={() => addPresetCharacter(option.bodyType)}><UserPlus size={15} />{option.label}</button>)}
++            <details><summary>几何模型</summary>{GEOMETRY_PRIMITIVE_OPTIONS.map(option => <button className="sideChoice" key={option.type} onClick={() => addGeometryPrimitive(option.type)}><Box size={15} />{option.label}</button>)}</details>
++            <details><summary>群众阵列</summary>
+           <div className="viewport-toolbar-crowd-panel-header">
+             <h2 className="viewport-toolbar-crowd-panel-title">添加群众阵列</h2>
+             <span className="viewport-toolbar-crowd-panel-count">共{crowdTotalCount}人</span>
+@@ -660,7 +417,7 @@ export function ViewportToolbar({
+             </label>
+           </div>
+           <div className="viewport-toolbar-crowd-actions">
+-            <button className="viewport-toolbar-crowd-cancel camera-capture-clear-all" type="button" onClick={closeCrowdPanel}>
++            <button className="viewport-toolbar-crowd-cancel camera-capture-clear-all" type="button" onClick={event => { const details = event.currentTarget.closest("details"); if (details) details.open = false; }}>
+               取消
+             </button>
+             <button
+@@ -672,47 +429,9 @@ export function ViewportToolbar({
+               添加
+             </button>
+           </div>
+-        </div>
+-      ) : null}
+-      {geometryMenuOpen ? (
+-        <div
+-          ref={geometryMenuRef}
+-          className="viewport-toolbar-submenu"
+-          role="menu"
+-          aria-label="选择几何模型"
+-          style={geometryMenuStyle}
+-        >
+-          {GEOMETRY_PRIMITIVE_OPTIONS.map((option) => (
+-            <button
+-              key={option.type}
+-              role="menuitem"
+-              type="button"
+-              onClick={() => addGeometryWithType(option.type)}
+-            >
+-              {option.label}
+-            </button>
+-          ))}
+-        </div>
+-      ) : null}
+-      {modelLibraryOpen ? (
+-        <div
+-          ref={modelLibraryPanelRef}
+-          className="model-library-panel"
+-          role="dialog"
+-          aria-label="模型库"
+-          style={modelLibraryPanelStyle}
+-        >
+-          <div className="model-library-header">
+-            <h2 className="model-library-title">模型库</h2>
+-            <button
+-              aria-label="关闭模型库"
+-              className="top-bar-action-button model-library-close-button"
+-              type="button"
+-              onClick={() => setModelLibraryOpen(false)}
+-            >
+-              <X aria-hidden="true" size={16} strokeWidth={1.8} />
+-            </button>
+-          </div>
++            </details>
++          </>}
++          {section === "模型库" ? (<div className="sideLibrary">
+           <div className="model-library-tabs" role="tablist" aria-label="模型分类">
+             {MODEL_LIBRARY_CATEGORIES.map((category) => {
+               const active = category.id === activeModelLibraryCategoryId;
+@@ -752,7 +471,7 @@ export function ViewportToolbar({
+                       type="button"
+                       onClick={() => {
+                         addObjectFromAsset(item.id);
+-                        setModelLibraryOpen(false);
++                    
+                       }}
+                     >
+                       <span className="model-library-thumb" aria-hidden="true">
+@@ -825,15 +544,8 @@ export function ViewportToolbar({
+           )}
+         </div>
+       ) : null}
+-      {aspectRatioPanelOpen ? (
+-        <div
+-          ref={aspectRatioPanelRef}
+-          className="viewport-aspect-panel"
+-          role="dialog"
+-          aria-label="比例"
+-          style={aspectRatioPanelStyle}
+-        >
+-          <h2 className="viewport-aspect-panel-title">比例</h2>
++      {section === "画幅比例" ? (
++        <div>
+           <div className="viewport-aspect-panel-grid" role="group" aria-label="画幅比例选项">
+             {VIEWPORT_ASPECT_RATIO_OPTIONS.map((option) => {
+               const active = option.id === viewportAspectRatio;
+@@ -845,7 +557,7 @@ export function ViewportToolbar({
+                   aria-pressed={active}
+                   className={`viewport-aspect-option${active ? " is-active" : ""}`}
+                   type="button"
+-                  onClick={() => selectAspectRatio(option.id)}
++                  onClick={() => setViewportAspectRatio(option.id)}
+                 >
+                   <span className={frameClassName} aria-hidden="true" />
+                   <span className="viewport-aspect-option-label">{option.label}</span>
+@@ -855,6 +567,8 @@ export function ViewportToolbar({
+           </div>
+         </div>
+       ) : null}
++        </section>
++      </>, sideHost)}
+       <input
+         ref={panoramaInputRef}
+         aria-hidden="true"
+diff --git a/src/editor/loaders/localModelImport.ts b/src/editor/loaders/localModelImport.ts
+index f6f3151..c6933b4 100644
+--- a/src/editor/loaders/localModelImport.ts
++++ b/src/editor/loaders/localModelImport.ts
+@@ -1,6 +1,6 @@
+ const LOCAL_MODEL_EXTENSION_RE = /\.(fbx|obj)$/i;
+ 
+-function readFileAsDataUrl(file: File) {
++export function readFileAsDataUrl(file: File) {
+   return new Promise<string>((resolve, reject) => {
+     const reader = new FileReader();
+ 
+diff --git a/src/editor/loaders/panoramaImport.ts b/src/editor/loaders/panoramaImport.ts
+index 450f72e..db345b1 100644
+--- a/src/editor/loaders/panoramaImport.ts
++++ b/src/editor/loaders/panoramaImport.ts
+@@ -296,7 +296,7 @@ async function buildAdaptedPanoramaAsset(file: File) {
+     if (isPanoramaRatio(source.width, source.height)) {
+       return {
+         projectionMode: "equirectangular" as const,
+-        url: URL.createObjectURL(file),
++        url: await readFileAsDataUrl(file),
+       };
+     }
+ 
+@@ -341,3 +341,4 @@ export async function readPanoramaFile(file: File) {
+     url: result.url,
+   };
+ }
++import { readFileAsDataUrl } from "./localModelImport";
+diff --git a/src/editor/panels/ObjectTreePanel.tsx b/src/editor/panels/ObjectTreePanel.tsx
+index afda2d2..4fe6164 100644
+--- a/src/editor/panels/ObjectTreePanel.tsx
++++ b/src/editor/panels/ObjectTreePanel.tsx
+@@ -1,7 +1,7 @@
+ import { useEffect, useMemo, useState, type MouseEvent } from "react";
+ import { Box, Camera, ChevronDown, ChevronRight, Eye, EyeOff, Lock, Search, Unlock, User, Users } from "lucide-react";
+ import type { DirectorObject, DirectorObjectKind } from "../schema/directorProject";
+-import { useDirectorStore } from "../store/directorStore";
++import { useDirectorStore, useShortcutProfile } from "../store/directorStore";
+ 
+ type SceneTreePreviewItem = {
+   id: string;
+@@ -69,8 +69,11 @@ export function ObjectTreePanel() {
+ 
+   useEffect(() => {
+     function handleKeyDown(event: KeyboardEvent) {
++      if (document.querySelector("dialog[open]")) return;
+       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+-      if (event.key !== "Delete" && event.key !== "Backspace") return;
++      if (event.isComposing || event.repeat || event.shiftKey) return;
++      const alternateKey = useShortcutProfile.getState().profile === "blender" ? "x" : "backspace";
++      if (event.key !== "Delete" && event.key.toLowerCase() !== alternateKey) return;
+       if (isEditableKeyboardTarget(event.target)) return;
+       const state = useDirectorStore.getState();
+       if (!state.selectedObjectId && state.selectedObjectIds.length === 0) return;
+@@ -305,7 +308,7 @@ export function ObjectTreePanel() {
+         <div className="object-tree-groups" role="tree" aria-label="场景对象列表">
+           {filteredGroups.map((group) => (
+             <section key={group.key} className="object-tree-group" role="group" aria-label={`${group.title}分组`}>
+-              <h3>{group.title}</h3>
++              <h3>{group.title}<span className="groupCount">{group.items.length}</span></h3>
+               <ul className="object-list">
+                 {group.items.map((item) => {
+                   const selected = item.crowdId
+diff --git a/src/editor/runtime/CharacterModel.tsx b/src/editor/runtime/CharacterModel.tsx
+index ffd78db..3ece0fa 100644
+--- a/src/editor/runtime/CharacterModel.tsx
++++ b/src/editor/runtime/CharacterModel.tsx
+@@ -7,7 +7,7 @@ import type { CharacterBodyType } from "./mannequin/bodyTypes";
+ interface CharacterModelProps {
+   bodyType?: CharacterBodyType;
+   color?: string;
+-  onLabelAnchorYChange?: (anchorY: number) => void;
++  onAnchorsChange?: (head: [number, number, number], pelvis: [number, number, number]) => void;
+   rigState?: CharacterRigState;
+ }
+ 
+@@ -31,7 +31,7 @@ class CharacterModelBoundary extends Component<
+   }
+ }
+ 
+-export function CharacterModel({ bodyType, color, onLabelAnchorYChange, rigState }: CharacterModelProps) {
++export function CharacterModel({ bodyType, color, onAnchorsChange, rigState }: CharacterModelProps) {
+   const fallback = <PrimitiveMannequin bodyType={bodyType} color={color} rigState={rigState} />;
+ 
+   if (rigState?.rigType !== "ue4-mannequin") {
+@@ -43,7 +43,7 @@ export function CharacterModel({ bodyType, color, onLabelAnchorYChange, rigState
+       <UE4MannequinModel
+         bodyType={bodyType}
+         color={color}
+-        onLabelAnchorYChange={onLabelAnchorYChange}
++        onAnchorsChange={onAnchorsChange}
+         rigState={rigState}
+       />
+     </CharacterModelBoundary>
+diff --git a/src/editor/runtime/UE4MannequinModel.tsx b/src/editor/runtime/UE4MannequinModel.tsx
+index 5857a62..f9994ff 100644
+--- a/src/editor/runtime/UE4MannequinModel.tsx
++++ b/src/editor/runtime/UE4MannequinModel.tsx
+@@ -18,6 +18,7 @@ import { VIEWPORT_OBJECT_LABEL_VERTICAL_GAP } from "../schema/viewportLabels";
+ import type { CharacterBodyType } from "./mannequin/bodyTypes";
+ import {
+   UE4_MANNEQUIN_MODEL_URL,
++  UE4_MANNEQUIN_BONE_MAP,
+   getUE4ModelScale,
+ } from "./ue4Mannequin/ue4MannequinRig";
+ import { applyUE4RestPoseAndRig, captureUE4RestPose } from "./ue4Mannequin/ue4MannequinPoseApplication";
+@@ -25,7 +26,7 @@ import { applyUE4RestPoseAndRig, captureUE4RestPose } from "./ue4Mannequin/ue4Ma
+ interface UE4MannequinModelProps {
+   bodyType?: CharacterBodyType;
+   color?: string;
+-  onLabelAnchorYChange?: (anchorY: number) => void;
++  onAnchorsChange?: (head: [number, number, number], pelvis: [number, number, number]) => void;
+   rigState?: CharacterRigState;
+ }
+ 
+@@ -127,7 +128,7 @@ export function alignUE4MannequinToGround(scene: Object3D) {
+ export function UE4MannequinModel({
+   bodyType = "mannequin",
+   color = "#F3F5F7",
+-  onLabelAnchorYChange,
++  onAnchorsChange,
+   rigState,
+ }: UE4MannequinModelProps) {
+   const gltf = useLoader(GLTFLoader, UE4_MANNEQUIN_MODEL_URL) as LoadedGLTF;
+@@ -145,14 +146,16 @@ export function UE4MannequinModel({
+     });
+     alignUE4MannequinToGround(scene);
+ 
+-    const modelRoot = scene.parent ?? scene;
+-    const bounds = getBoundsInParentLocal(modelRoot);
+-    const labelAnchorY = bounds.max.y + VIEWPORT_OBJECT_LABEL_VERTICAL_GAP;
+-
+-    if (Number.isFinite(labelAnchorY)) {
+-      onLabelAnchorYChange?.(Number(labelAnchorY.toFixed(4)));
++    const parent = scene.parent?.parent;
++    const head = scene.getObjectByName(UE4_MANNEQUIN_BONE_MAP.head);
++    const pelvis = scene.getObjectByName(UE4_MANNEQUIN_BONE_MAP.body);
++    if (parent && head && pelvis) {
++      const label = parent.worldToLocal(head.getWorldPosition(new Vector3()));
++      label.y += VIEWPORT_OBJECT_LABEL_VERTICAL_GAP;
++      const pivot = parent.worldToLocal(pelvis.getWorldPosition(new Vector3()));
++      onAnchorsChange?.(label.toArray(), pivot.toArray());
+     }
+-  }, [bodyType, color, onLabelAnchorYChange, restPose, rigState?.controls, scene]);
++  }, [bodyType, color, onAnchorsChange, restPose, rigState?.controls, scene]);
+ 
+   return (
+     <group name={`ue-retopology-mannequin-${bodyType}`} scale={modelScale}>
+diff --git a/src/editor/store/directorStore.ts b/src/editor/store/directorStore.ts
+index 81f867e..dd2b07b 100644
+--- a/src/editor/store/directorStore.ts
++++ b/src/editor/store/directorStore.ts
+@@ -1,4 +1,5 @@
+ import { create } from "zustand";
++import { persist } from "zustand/middleware";
+ import { MANNEQUIN_POSE_PRESETS } from "../presets/mannequinPosePresets";
+ import { GEOMETRY_PRIMITIVE_OPTIONS } from "../schema/directorProject";
+ import type {
+@@ -26,6 +27,13 @@ import {
+ import type { ViewportAspectRatio } from "../schema/viewportAspectRatio";
+ 
+ export type TransformMode = "translate" | "rotate" | "scale";
++export const transformKeys = {
++  default: { translate: "V", rotate: "R", scale: "F" },
++  blender: { translate: "G", rotate: "R", scale: "S" },
++} as const;
++export const useShortcutProfile = create<{ profile: keyof typeof transformKeys }>()(
++  persist(() => ({ profile: "default" as keyof typeof transformKeys }), { name: "toonflow.director.shortcuts" })
++);
+ 
+ export interface ImportedAssetInput {
+   kind: DirectorAssetKind;
+@@ -256,9 +264,7 @@ function isLocalModelLibraryAsset(asset: DirectorAssetRef) {
+ }
+ 
+ function getLocalStorageSafe() {
+-  if (typeof localStorage === "undefined") return null;
+-
+-  return localStorage;
++  return null as Storage | null;
+ }
+ 
+ function cloneJsonValue<T>(value: T): T {
+diff --git a/src/main.tsx b/src/main.tsx
+index f46c379..ad6ed77 100644
+--- a/src/main.tsx
++++ b/src/main.tsx
+@@ -1,6 +1,51 @@
+ import React from "react";
+ import ReactDOM from "react-dom/client";
+ import App from "./App";
++import { useDirectorStore } from "./editor/store/directorStore";
++import { MANNEQUIN_POSE_PRESETS } from "./editor/presets/mannequinPosePresets";
++import type { DirectorObject, DirectorTransform, GeometryPrimitiveType } from "./editor/schema/directorProject";
++
++const frame = window.frameElement;
++if (frame) {
++  const initial = frame.getAttribute("data-project");
++  if (initial) useDirectorStore.getState().replaceProject(JSON.parse(initial));
++  frame.addEventListener("appenddirectorlayout", event => {
++    type Vector = DirectorTransform["position"];
++    type Item = { name: string; position: Vector; yaw: number; color: string };
++    const layout = (event as CustomEvent<{
++      characters: (Item & { pose: string })[];
++      props: (Item & { shape: GeometryPrimitiveType; scale: Vector })[];
++      cameras: { name: string; position: Vector; target: Vector; fov: number }[];
++    }>).detail;
++    const state = useDirectorStore.getState();
++    const objects = [...state.project.objects];
++    const cameras = [...state.project.cameras];
++    function makeObject(kind: DirectorObject["kind"], name: string, position: Vector, yaw = 0, scale: Vector = [1, 1, 1]): DirectorObject {
++      return { id: crypto.randomUUID(), name, kind, visible: true, locked: false, transform: { position, rotation: [0, yaw * Math.PI / 180, 0], scale } };
++    }
++    for (const item of layout.characters) {
++      const preset = MANNEQUIN_POSE_PRESETS.find(preset => preset.id === item.pose);
++      objects.push({ ...makeObject("character", item.name, item.position, item.yaw), bodyType: "mannequin", color: item.color,
++        characterRig: { rigType: "ue4-mannequin", posePresetId: item.pose, controls: { ...preset?.controls } } });
++    }
++    for (const item of layout.props) {
++      objects.push({ ...makeObject("prop", item.name, item.position, item.yaw, item.scale), geometryType: item.shape, color: item.color });
++    }
++    let activeCameraId = state.project.activeCameraId;
++    for (const item of layout.cameras) {
++      const object = makeObject("camera", item.name, item.position);
++      const id = crypto.randomUUID();
++      if (item === layout.cameras[0]) activeCameraId = id;
++      cameras.push({ id, name: item.name, transform: object.transform, fov: item.fov, targetMode: "manual", target: item.target, captures: [] });
++      objects.push({ ...object, linkedCameraId: id });
++    }
++    state.replaceProject({ ...state.project, objects, cameras, activeCameraId });
++    event.preventDefault();
++  });
++  useDirectorStore.subscribe((state, previous) => {
++    if (state.project !== previous.project) frame.dispatchEvent(new CustomEvent("projectchange", { detail: state.project }));
++  });
++}
+ 
+ ReactDOM.createRoot(document.getElementById("root")!).render(
+   <React.StrictMode>
+diff --git a/src/styles/index.css b/src/styles/index.css
+index acdf5df..55f4525 100644
+--- a/src/styles/index.css
++++ b/src/styles/index.css
+@@ -9,7 +9,7 @@
+   --text-rgb: 0 0 0;
+   --text-muted-rgb: 102 102 102;
+   --text-dim-rgb: 148 148 148;
+-  --accent-rgb: 3 150 255;
++  --accent-rgb: 64 158 255;
+   --accent-hover-rgb: 37 99 235;
+   --overlay-rgb: 15 23 42;
+   --ui-shadow-panel: 0 14px 34px rgba(15, 23, 42, 0.18);
+@@ -38,7 +38,7 @@
+   --text-rgb: 255 255 255;
+   --text-muted-rgb: 136 136 136;
+   --text-dim-rgb: 95 95 95;
+-  --accent-rgb: 3 150 255;
++  --accent-rgb: 64 158 255;
+   --accent-hover-rgb: 96 165 250;
+   --overlay-rgb: 0 0 0;
+   --ui-shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.38);
+@@ -2254,51 +2254,18 @@ textarea:focus-visible {
+   top: 66.666667%;
+ }
+ 
+-.viewport-gizmo-overlay {
+-  position: absolute;
+-  top: 20px;
+-  right: 20px;
+-  z-index: 20;
+-  width: 80px;
+-  height: 80px;
+-  pointer-events: auto;
+-}
+-
+-.viewport-gizmo-overlay > div,
+-.viewport-gizmo-overlay canvas {
+-  display: block;
+-  width: 100% !important;
+-  height: 100% !important;
+-}
+-
+-.viewport-gizmo-canvas {
+-  background: transparent;
+-}
+-
+-.viewport-gizmo-hit-layer {
+-  position: absolute;
+-  inset: 0;
+-  z-index: 2;
+-  pointer-events: none;
+-}
+-
+-.viewport-gizmo-hit-button {
+-  position: absolute;
+-  width: 15px;
+-  height: 15px;
+-  border: 0;
+-  border-radius: 999px;
+-  padding: 0;
+-  background: transparent;
+-  cursor: pointer;
+-  pointer-events: auto;
+-  appearance: none;
+-}
+-
+-.viewport-gizmo-hit-button:focus-visible {
+-  outline: 1px solid rgb(var(--accent-rgb) / 0.75);
+-  outline-offset: 2px;
+-}
++.viewNavigator { position: absolute; top: 18px; z-index: 20; display: grid; justify-items: center; gap: 6px; }
++.axisDial { position: relative; width: 80px; height: 80px; border-radius: 50%; background: #191b24; box-shadow: 0 3px 14px #0003; }
++.axisDial svg { width: 100%; height: 100%; stroke: #515360; stroke-width: 1.5; pointer-events: none; }
++.axisDial button { position: absolute; width: 15px; height: 15px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
++.axisDial button::before { content: ""; position: absolute; inset: 3px; border-radius: inherit; background: var(--dotColor, #777985); }
++.axisDial button[data-axis="x"] { --dotColor: #ff686b; }
++.axisDial button[data-axis="y"] { --dotColor: #40dcb4; }
++.axisDial button[data-axis="z"] { --dotColor: #608bff; }
++.axisDial button:is(:hover, :focus-visible)::before { outline: 2px solid white; }
++.resetView { border: 0; border-radius: 7px; padding: 4px 10px; background: #242630; color: #e4e5ea; font: inherit; font-size: 11px; cursor: pointer; }
++.resetView:is(:hover, :focus-visible) { box-shadow: 0 0 0 2px rgb(var(--accent-rgb)); }
++@media (max-width: 920px) { .viewNavigator { right: 16px !important; } }
+ 
+ .model-library-panel {
+   position: absolute;
+@@ -3165,7 +3132,10 @@ textarea:focus-visible {
+ }
+ 
+ .role-label {
+-  padding: 6px 10px;
++  transform: translateY(-50%);
++  pointer-events: none;
++  user-select: none;
++  padding: 2px 7px;
+   border-radius: 999px;
+   color: rgb(var(--text-rgb));
+   font-size: 12px;
+@@ -3174,6 +3144,8 @@ textarea:focus-visible {
+   box-shadow: 0 10px 28px rgb(var(--overlay-rgb) / 0.24);
+ }
+ 
++.characterLabel { font-size: 24px; padding: 4px 14px; }
++
+ .viewport-error-card {
+   display: grid;
+   gap: 4px;
+@@ -3249,3 +3221,188 @@ textarea:focus-visible {
+     max-width: calc(100% - 32px);
+   }
+ }
++
++.app-shell {
++  position: relative;
++  grid-template-rows: minmax(0, 1fr);
++}
++
++.top-bar {
++  position: absolute;
++  inset: 0 0 auto;
++  z-index: 30;
++  height: 44px;
++  min-height: 0;
++  padding: 0;
++  border: 0;
++  background: transparent;
++  pointer-events: none;
++  grid-template-columns: var(--left-sidebar-width) minmax(0, 1fr) var(--right-sidebar-width);
++}
++
++.top-bar-left {
++  height: 100%;
++  padding-left: 48px;
++  background: rgb(var(--panel-rgb));
++  border-bottom: 1px solid rgb(var(--border-rgb) / 0.32);
++}
++
++.top-bar-title { font-size: 14px; }
++.top-bar-actions { position: absolute; left: 8px; top: 7px; display: flex; }
++.top-bar-action-button { width: 30px; height: 30px; pointer-events: auto; }
++.top-bar-center { justify-content: center; }
++.top-bar-center .mode-toggle { pointer-events: auto; padding: 3px; border-radius: 12px; background: rgb(var(--panel-rgb) / 0.94); }
++.top-bar-center .mode-toggle-button { min-height: 28px; height: 28px; padding-inline: 14px; border-radius: 9px; }
++.director-shell-fullbleed > .left-sidebar { top: 44px; }
++.app-shell:has(.is-sidebars-collapsed) .top-bar { grid-template-columns: 1fr auto 1fr; }
++.app-shell:has(.is-sidebars-collapsed) .top-bar-left { width: fit-content; padding-right: 14px; border-radius: 0 0 10px 0; }
++
++.app-shell { --left-sidebar-width: 264px; }
++.left-sidebar:has(#directorSideTools) { display: grid; grid-template-columns: 42px minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); overflow: hidden; }
++.director-shell-fullbleed.is-sidebars-collapsed > .left-sidebar { display: none; }
++#directorSideTools { display: contents; }
++.sideRail { grid-column: 1; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 6px; align-items: center; padding-block: 10px; border-right: 1px solid #ffffff12; }
++.sideRail button { position: relative; display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: #aaa; }
++.sideRail button:hover, .sideRail button[aria-pressed="true"] { background: #ffffff12; color: white; }
++.sideRail button:hover::after { content: attr(data-label); position: absolute; left: 40px; top: 50%; z-index: 50; padding: 5px 8px; border: 1px solid #ffffff1a; border-radius: 6px; background: #25262a; color: #fff; font-size: 11px; white-space: nowrap; transform: translateY(-50%); box-shadow: 0 8px 20px #0005; pointer-events: none; }
++.sidePage { grid-column: 2; grid-row: 1 / 3; padding: 14px 10px; overflow: auto; min-width: 0; }
++.sidePage h2 { font-size: 13px; margin: 0 0 12px; }
++.sidePage[data-section="场景"] { grid-row: 1; padding-bottom: 0; }
++.sceneTree { grid-column: 2; grid-row: 2; overflow: auto; min-height: 0; }
++.left-sidebar:has(.sidePage:not([data-section="场景"])) .sceneTree { display: none; }
++.sideChoice, .sidePage summary { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font-size: 12px; text-align: left; cursor: pointer; }
++.sideChoice:hover, .sidePage summary:hover { background: #ffffff10; }
++.sidePage summary::before { content: '▸'; } .sidePage details[open] > summary::before { content: '▾'; }
++.sidePage .viewport-aspect-panel-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); width: 100%; }
++.sidePage .viewport-aspect-option { width: 100%; }
++.director-sidebar { background: #18191c; }
++.sceneTree, .sidePage { border-top: 1px solid #ffffff08; }
++.sidePage h2 { color: #f1f1f1; font-weight: 600; letter-spacing: .01em; }
++.viewport-toolbar { gap: 3px; padding: 5px 7px; background: rgb(var(--panel-rgb) / .86); }
++.viewport-toolbar-button { width: 30px; height: 30px; }
++.viewport-toolbar-button .viewport-toolbar-label { font-size: 11px; }
++.sideLibrary .model-library-tabs { display: flex; flex-wrap: wrap; height: auto; gap: 5px; }
++.sideLibrary .model-library-tab { height: 28px; }
++.quickGroup { position: relative; }
++.viewport-toolbar { left: 50%; bottom: 18px; }
++.quickGroup summary { list-style: none; cursor: pointer; color: #bbb; padding: 5px 3px; }
++.quickGroup summary::-webkit-details-marker { display: none; }
++.quickGroup[open] > div { display: flex; position: absolute; left: 50%; bottom: 38px; transform: translateX(-50%); gap: 4px; background: #242528; border: 1px solid #ffffff20; border-radius: 12px; padding: 4px; }
++.sideLibrary .model-library-grid { grid-template-columns: repeat(auto-fit,minmax(66px,1fr)); padding: 10px 0; height: auto; }
++
++.app-shell {
++  --panel-rgb: 25 26 29;
++  --field-rgb: 38 39 43;
++  --surface-rgb: 32 33 37;
++  --surface-hover-rgb: 53 54 60;
++  --border-rgb: 85 86 92;
++  --ui-shadow-panel: 0 6px 24px #0003;
++}
++.director-sidebar :is(.ui-field, .inspector-dropdown-trigger, .viewport-aspect-option, .camera-capture-thumb-wrap, .model-library-thumb),
++.director-sidebar input:not([type="range"]):not([type="color"]) { border-radius: 10px; }
++.sideChoice, .sidePage summary, .sideRail button { border-radius: 10px; }
++.sideRail .helpTrigger { margin-top: auto; }
++.top-bar-center .mode-toggle { border-radius: 16px; translate: 0 18px; }
++.top-bar-center .mode-toggle-button { border-radius: 12px; }
++.app-shell .ui-segmented-item-active, .app-shell .viewport-toolbar-button.ui-icon-button.is-active { color: #fff; background: #ffffff18; box-shadow: none; }
++.quickGroup > summary { min-width: 22px; height: 34px; display: grid; place-items: center; border-radius: 12px; }
++.quickGroup:first-child > summary { width: 34px; }
++.quickGroup[open] > summary, .quickGroup > summary:hover { background: #ffffff12; color: white; }
++.quickGroup[open] > div { display: grid; width: max-content; min-width: 128px; bottom: calc(100% + 10px); gap: 2px; padding: 5px; border-radius: 13px; box-shadow: var(--ui-shadow-panel); }
++.quickGroup[open] > div button { display: grid; grid-template-columns: 18px 1fr auto; gap: 9px; align-items: center; min-height: 33px; padding: 5px 9px; text-align: left; border: 0; border-radius: 9px; color: #ddd; background: transparent; font-size: 12px; }
++.quickGroup[open] > div button:is(:hover, :focus-visible, [aria-pressed="true"]) { color: white; background: #ffffff12; }
++.quickGroup kbd, .shortcutHelp kbd { color: #b2b3bb; font: 12px system-ui; }
++.shortcutHelp { width: min(320px, 88vw); padding: 0; color: #eee; background: #212226; border: 1px solid #ffffff20; border-radius: 18px; box-shadow: 0 16px 60px #0005; }
++.shortcutHelp::backdrop { background: #0006; }
++.shortcutHelp { pointer-events: auto; }
++.shortcutHelp section { padding: 16px 20px; }
++.shortcutHelp header, .shortcutHelp section > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
++.shortcutHelp header { margin-bottom: 10px; }
++.shortcutHelp h2 { margin: 0; font-size: 15px; }
++.shortcutHelp header button { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 50%; background: #ffffff0e; color: inherit; }
++.shortcutHelp section > div { min-height: 32px; font-size: 13px; }
++.shortcutHelp .shortcutProfiles { gap: 3px; padding: 3px; margin-bottom: 8px; background: #ffffff09; border-radius: 12px; }
++.shortcutProfiles button { flex: 1; border: 0; border-radius: 9px; padding: 6px; background: transparent; color: #b2b3bb; cursor: pointer; }
++.shortcutProfiles button[aria-pressed="true"] { color: white; background: #ffffff18; }
++
++@media (max-width: 920px) {
++  .top-bar { grid-template-columns: min(220px, 28vw) minmax(0, 1fr); }
++}
++
++.studioDesk {
++  --studioPanel: rgb(var(--panel-rgb));
++  --studioInset: rgb(var(--field-rgb));
++  --studioLine: rgb(var(--text-rgb) / .09);
++  --studioShadow: 0 6px 24px rgb(0 0 0 / .17), 0 1px 3px rgb(0 0 0 / .08);
++  --left-sidebar-width: 280px;
++  --right-sidebar-width: 288px;
++  --right-sidebar-content-width: 100%;
++  font-family: Inter, "Microsoft YaHei UI", system-ui, sans-serif;
++}
++:root:not(.dark) .studioDesk {
++  --panel-rgb: 250 250 252;
++  --surface-rgb: 241 242 245;
++  --field-rgb: 233 235 239;
++  --surface-hover-rgb: 222 225 231;
++}
++.studioDesk .top-bar-left { margin: 12px 0 0 12px; width: fit-content; height: 42px; padding: 0 17px 0 44px; border: 1px solid var(--studioLine); border-radius: 16px; background: var(--studioPanel); box-shadow: var(--studioShadow); }
++.studioDesk .top-bar-actions { display: flex; left: 18px; top: 18px; }
++.studioDesk .top-bar-action-button { border: 0; border-radius: 11px; background: var(--studioInset); }
++.studioDesk .top-bar-title { color: rgb(var(--text-rgb)); font-size: 12px; }
++.studioDesk .top-bar-center .mode-toggle { border: 1px solid var(--studioLine); background: var(--studioPanel); box-shadow: var(--studioShadow); border-radius: 24px; }
++.studioDesk .mode-toggle .mode-toggle-button { border: 0; border-radius: 18px; }
++.studioDesk .mode-toggle .mode-toggle-button[aria-pressed="true"] { background: rgb(var(--accent-rgb) / .16); color: rgb(var(--text-rgb)); }
++.studioDesk .director-shell-fullbleed > .left-sidebar { left: 12px; top: 66px; bottom: 14px; grid-template-columns: 44px minmax(0,1fr); column-gap: 8px; grid-template-rows: auto minmax(0,1fr); border: 0; background: transparent; overflow: visible; pointer-events: none; }
++.studioDesk .sideRail { align-items: stretch; padding: 0; border: 0; z-index: 2; pointer-events: none; }
++.categoryDock, .studioDesk .sideRail .helpTrigger { padding: 4px; border: 1px solid var(--studioLine); border-radius: 18px; background: var(--studioPanel); box-shadow: var(--studioShadow); pointer-events: auto; }
++.categoryDock { display: grid; justify-items: center; gap: 4px; }
++.studioDesk .sideRail button { width: 34px; height: 36px; border-radius: 12px; color: rgb(var(--text-muted-rgb)); }
++.studioDesk .sideRail button:is(:hover, :focus-visible, [aria-pressed="true"]) { background: rgb(var(--accent-rgb) / .15); color: rgb(var(--text-rgb)); }
++.studioDesk .sideRail .helpTrigger { width: 38px; height: 38px; align-self: center; }
++.studioDesk .sidePage, .studioDesk .sceneTree { pointer-events: auto; background: var(--studioPanel); border: 1px solid var(--studioLine); border-radius: 20px; box-shadow: var(--studioShadow); }
++.studioDesk .sidePage { align-self: start; max-height: 100%; padding: 15px 12px; }
++.studioDesk .sidePage h2 { color: rgb(var(--text-rgb)); margin: 0 0 12px; font-size: 14px; }
++.studioDesk .sidePage[data-section="场景"] { border-radius: 20px 20px 0 0; border-bottom: 0; box-shadow: none; padding: 14px 14px 8px; }
++.studioDesk .sidePage[data-section="场景"] h2 { margin: 0; }
++.studioDesk .sceneTree { align-self: start; max-height: 100%; border-top: 0; border-radius: 0 0 20px 20px; }
++.studioDesk .object-tree-panel { width: 100%; padding: 4px 12px 14px; background: transparent; }
++.studioDesk .object-tree-groups { gap: 14px; }
++.studioDesk .object-tree-group h3 { display: flex; align-items: center; gap: 7px; font-size: 11px; color: rgb(var(--text-muted-rgb)); }
++.groupCount { font-size: 10px; font-variant-numeric: tabular-nums; opacity: .72; }
++.studioDesk .object-list { margin: 0; gap: 2px; }
++.studioDesk .object-row { min-height: 34px; grid-template-columns: minmax(0,1fr) 21px 21px; gap: 3px; padding: 0 6px; border-radius: 10px; }
++.studioDesk .object-row[aria-selected="true"] { background: rgb(var(--accent-rgb) / .16); box-shadow: inset 2px 0 rgb(var(--accent-rgb)); }
++.studioDesk .director-shell-fullbleed > .right-sidebar { top: 14px; right: 12px; bottom: 14px; height: fit-content; max-height: calc(100% - 28px); border: 1px solid var(--studioLine); border-radius: 22px; background: var(--studioPanel); box-shadow: var(--studioShadow); }
++.studioDesk .right-inspector { width: 100%; padding: 16px; background: transparent; }
++.studioDesk .right-inspector-header { height: auto; min-height: 30px; border: 0; }
++.studioDesk .right-inspector-title { font-size: 15px; letter-spacing: .01em; }
++.studioDesk .right-inspector-content { width: 100%; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 12px; padding-bottom: 0; }
++.studioDesk .right-inspector-content :is(.inspector-section, .inspector-field, .inspector-section-body) { min-width: 0; max-width: 100%; }
++.studioDesk .right-sidebar { --right-sidebar-content-width: 100%; }
++.studioDesk .right-inspector .inspector-field { grid-template-columns: minmax(0, 1fr); }
++.studioDesk .right-inspector :is(.inspector-axis-row, .inspector-color-row) { width: 100%; min-width: 0; max-width: 100%; }
++.studioDesk .right-inspector .inspector-axis-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
++.studioDesk .right-inspector .inspector-axis-input { width: 100%; min-width: 0; grid-template-columns: auto minmax(0, 1fr); }
++.studioDesk .right-inspector .inspector-axis-value { width: 100%; min-width: 0; }
++.studioDesk .right-inspector-content > .inspector-section { padding: 10px; border: 1px solid var(--studioLine); border-radius: 14px; }
++.studioDesk .right-inspector-tabs { gap: 3px; padding: 3px; height: auto; background: var(--studioInset); border-radius: 12px; }
++.studioDesk .right-inspector-tabs button { flex: 1; height: 29px; border-radius: 9px; }
++.studioDesk .right-inspector-tabs button[aria-pressed="true"] { background: var(--studioPanel); color: rgb(var(--text-rgb)); }
++.studioDesk .right-inspector-tabs button[aria-pressed="true"]::after { display: none; }
++.studioDesk .sideChoice, .studioDesk .sidePage summary { background: var(--studioInset); color: rgb(var(--text-rgb)); margin-top: 4px; border-radius: 11px; }
++.studioDesk .viewport-toolbar, .studioDesk .quickGroup[open] > div, .studioDesk .shortcutHelp { background: var(--studioPanel); color: rgb(var(--text-rgb)); border: 1px solid var(--studioLine); box-shadow: var(--studioShadow); }
++.studioDesk .viewport-toolbar { border-radius: 18px; padding: 5px; }
++.studioDesk .quickGroup > summary, .studioDesk .quickGroup[open] > div button, .studioDesk .shortcutProfiles button { color: rgb(var(--text-muted-rgb)); }
++.studioDesk .shortcutProfiles, .studioDesk .shortcutHelp header button { background: var(--studioInset); }
++.studioDesk .shortcutProfiles button[aria-pressed="true"], .studioDesk .quickGroup button[aria-pressed="true"] { background: rgb(var(--accent-rgb) / .15); color: rgb(var(--text-rgb)); }
++.studioDesk :is(button,summary):focus-visible { outline: 2px solid rgb(var(--accent-rgb)); outline-offset: 1px; }
++@media (max-width: 920px) { .studioDesk .director-shell-fullbleed > .left-sidebar { width: min(250px, 40vw); } }
++@media (max-width: 540px) { .studioDesk .director-shell-fullbleed > .left-sidebar { width: min(220px, 56vw); } }
++
++.studioDesk .right-inspector .inspector-color-row { grid-template-columns: 34px minmax(0, 1fr); }
++.studioDesk .right-inspector .inspector-color-hex { width: 100%; min-width: 0; }
++.studioDesk .right-inspector .preset-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
++.studioDesk .preset-grid button { min-width: 0; width: 100%; }
++.studioDesk .viewport-toolbar-button:disabled { opacity: .45; cursor: progress; }
++.captureNotice { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(320px, 80vw); padding: 7px 12px; border-radius: 12px; background: var(--studioPanel); box-shadow: var(--studioShadow); color: rgb(var(--text-rgb)); font-size: 12px; overflow-wrap: anywhere; }
++.captureNotice button { display: grid; place-items: center; padding: 3px; border: 0; background: transparent; color: inherit; cursor: pointer; }

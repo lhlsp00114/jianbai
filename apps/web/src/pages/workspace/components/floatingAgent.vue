@@ -194,7 +194,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", resizeViewport);
 });
 
-defineExpose({ insertMentions: (mentions: AgentMention[]) => agentRef.value?.insertMentions(mentions) });
+defineExpose({ insertMentions: (mentions: AgentMention[], prompt?: string) => agentRef.value?.insertMentions(mentions, prompt) });
 </script>
 
 <style scoped lang="scss">

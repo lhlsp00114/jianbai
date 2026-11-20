@@ -76,6 +76,11 @@ export async function browserModules(optionalInputPaths: string[] = []): Promise
   for (const pkg of [nodePackage, sharedPackage]) {
     for (const [subpath, source] of Object.entries(pkg.info.exports ?? {})) {
       if (subpath === "." || source.endsWith(".md")) continue;
+      if (/\.(?:css|scss|sass|less|styl|stylus)$/.test(source)) {
+        files[`node_modules/${pkg.info.name}/${source.replace(/^\.\//, "")}`] = await readFile(resolve(pkg.directory, source));
+        pkg.exports[subpath] = { default: source };
+        continue;
+      }
       entry(nodeEntries, pkg, subpath, source);
     }
   }

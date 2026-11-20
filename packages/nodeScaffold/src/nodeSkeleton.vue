@@ -432,6 +432,7 @@ const connectedHandles = computed<Set<string>>((previous) => {
 
 async function focusNode() {
   if (documentTarget.value) return;
+  slotsHiddenByInteraction.value = false;
   const element = skeletonElement.value;
   await nextTick();
   const flowElement = vueFlowRef.value;
@@ -454,6 +455,15 @@ async function focusNode() {
   );
   await setViewport(targetViewport, { duration: 300 });
 }
+
+const nodeFocusActions = inject<Map<string, () => Promise<void>>>("nodeFocusActions");
+watch(documentTarget, (target, _, onCleanup) => {
+  if (!nodeFocusActions || target) return;
+  nodeFocusActions.set(nodeId, focusNode);
+  onCleanup(() => {
+    if (nodeFocusActions.get(nodeId) === focusNode) nodeFocusActions.delete(nodeId);
+  });
+}, { immediate: true });
 
 defineExpose({ focusNode });
 
@@ -582,10 +592,11 @@ async function handleCommand(command: string) {
   if (command === "reload") void reloadNode();
   if (command === "delete") void deleteNode();
   if (command === "copy" || command === "duplicate") {
-    let data: NodeData;
+    let data: NodeData & { mediaTask?: unknown };
     try {
       const patch = await nodeEvent.emit("copy");
       data = JSON.parse(JSON.stringify({ ...node.data, ...patch }));
+      delete data.mediaTask;
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : "节点复制失败");
       return;
@@ -615,9 +626,10 @@ async function handleCommand(command: string) {
       data: { ...data, label: `${props.label} - 副本` },
       parentNode: node.parentNode,
     });
-    await nextTick();
-    addSelectedNodes([findNode(id)!]);
     addEdges(incomingEdges.map((edge) => ({ ...JSON.parse(JSON.stringify(edge)), id: crypto.randomUUID(), target: id, selected: false })));
+    await nextTick();
+    const copy = findNode(id);
+    if (copy) addSelectedNodes([copy]);
   }
 }
 
@@ -906,8 +918,8 @@ watch(
         transition: border-color 120ms ease-out;
       }
 
-      &:hover::before { border-color: var(--el-color-primary); }
-      &:focus-visible { opacity: 1; outline: 2px solid var(--el-color-primary); outline-offset: 1px; }
+      &:hover::before { border-color: var(--canvasSelectionColor, #fff); }
+      &:focus-visible { opacity: 1; outline: 2px solid var(--canvasSelectionColor, #fff); outline-offset: 1px; }
     }
 
     .contentCard.selectionFrame {
@@ -915,7 +927,7 @@ watch(
     }
 
     .contentCard.selectionFrame.selected {
-      border-color: color-mix(in srgb, var(--el-color-primary) 50%, var(--el-border-color-light));
+      border-color: var(--canvasSelectionColor, #fff);
     }
 
     .contentCard .loadingContent {
@@ -995,7 +1007,7 @@ watch(
       &.linking,
       &.connecting,
       &[data-connection-status="valid"] {
-        color: var(--el-color-primary);
+        color: var(--canvasSelectionColor, #fff);
       }
 
       &[data-connection-status="invalid"] {
@@ -1004,7 +1016,7 @@ watch(
       }
 
       &[data-connection-status="valid"] .handleIcon {
-        box-shadow: 0 0 0 4px color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--canvasSelectionColor, #fff) 18%, transparent);
       }
 
       @media (prefers-reduced-motion: reduce) {

@@ -165,15 +165,14 @@ watch(
   width: 100%;
   height: 100%;
   border: 1px solid var(--el-border-color);
-  border-radius: var(--el-border-radius-base);
+  border-radius: 24px;
   background: color-mix(in srgb, var(--groupColor, var(--el-fill-color-light)) var(--groupOpacity, 25%), transparent);
+  transition: border-color 160ms ease;
 
   &.selected {
-    border-color: color-mix(in srgb, var(--el-color-primary) 50%, var(--el-border-color));
+    border-color: var(--canvasSelectionColor, #fff);
   }
 
-  &:hover,
-  &.selected,
   &.resizing {
     .resizeCorner { opacity: 1; }
   }
@@ -181,10 +180,10 @@ watch(
   .groupLabel,
   .groupLabelInput {
     position: absolute;
-    left: 0;
+    left: 12px;
     bottom: calc(100% + 8px);
     height: 22px;
-    max-width: 100%;
+    max-width: calc(100% - 24px);
     line-height: 20px;
   }
 
@@ -202,7 +201,7 @@ watch(
     box-sizing: border-box;
     width: 100%;
     padding: 0 3px;
-    border: 1px solid var(--el-color-primary);
+    border: 1px solid var(--canvasSelectionColor, #fff);
     border-radius: var(--el-border-radius-small);
     outline: none;
     background: var(--el-bg-color);
@@ -216,17 +215,17 @@ watch(
     width: 9px;
     height: 9px;
     padding: 0;
-    border: 1px solid var(--el-color-primary);
-    border-radius: 2px;
+    border: 1px solid var(--canvasSelectionColor, #fff);
+    border-radius: 50%;
     background: var(--el-bg-color);
     opacity: 0;
     touch-action: none;
 
-    &:focus-visible { opacity: 1; }
-    &.topLeft { top: -5px; left: -5px; cursor: nwse-resize; }
-    &.topRight { top: -5px; right: -5px; cursor: nesw-resize; }
-    &.bottomLeft { bottom: -5px; left: -5px; cursor: nesw-resize; }
-    &.bottomRight { bottom: -5px; right: -5px; cursor: nwse-resize; }
+    &:hover, &:focus-visible { opacity: 1; }
+    &.topLeft { top: 3px; left: 3px; cursor: nwse-resize; }
+    &.topRight { top: 3px; right: 3px; cursor: nesw-resize; }
+    &.bottomLeft { bottom: 3px; left: 3px; cursor: nesw-resize; }
+    &.bottomRight { bottom: 3px; right: 3px; cursor: nwse-resize; }
   }
 }
 </style>

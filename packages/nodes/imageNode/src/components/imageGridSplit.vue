@@ -8,7 +8,7 @@
     :persistent="false"
     :showArrow="false"
     :disabled="disabled || !src"
-    :popperStyle="{ maxWidth: 'calc(100vw - 24px)', padding: '16px', borderRadius: '12px' }">
+    :popperStyle="{ maxWidth: 'calc(100vw - 24px)', padding: '16px', borderRadius: '16px', background: 'var(--el-bg-color-overlay)' }">
     <div class="gridSplitPanel nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop @keydown.esc.prevent="visible = false; trigger?.focus()">
       <div class="panelHeader">
         <strong>宫格切分</strong>
@@ -20,7 +20,6 @@
           :key="size"
           type="button"
           class="presetButton"
-          :class="{ active: rows === size && columns === size }"
           :aria-pressed="rows === size && columns === size"
           :disabled="splitting"
           @click="rows = columns = size">
@@ -48,7 +47,7 @@
         <span>{{ validGrid ? `共 ${rows * columns} 张图片` : '请设置有效行列数' }}</span>
         <span>从左到右，逐行切分</span>
       </div>
-      <el-button class="splitButton" type="primary" :loading="splitting" :disabled="!canSplit || disabled" @click="splitImage">
+      <el-button class="splitButton" :loading="splitting" :disabled="!canSplit || disabled" @click="splitImage">
         {{ splitting ? `正在切分 ${completed} / ${rows * columns}` : '切分为图片节点' }}
       </el-button>
     </div>
@@ -65,7 +64,7 @@ import { getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 
 const props = defineProps<{ src: string; disabled?: boolean; active: boolean }>();
 const { node } = useNode();
-const { addNodes, findNode, getNodes, getSelectedNodes, nodeTypes, onNodeDragStart, onSelectionStart, onMoveStart } = useVueFlow();
+const { addNodes, findNode, fitBounds, getNodes, getSelectedNodes, nodeTypes, onNodeDragStart, onSelectionStart, onMoveStart } = useVueFlow();
 const files = useNodeFiles();
 const getCanvas = inject<(() => { id: string } | undefined) | undefined>("canvas", undefined);
 const batchHistory = inject<(action: () => Promise<void>) => Promise<void>>("batchCanvasHistory", action => action());
@@ -180,6 +179,9 @@ async function splitImage() {
     });
     visible.value = false;
     ElMessage.success(`已切分为 ${nodes.length} 个图片节点`);
+    if (!controller.signal.aborted) {
+      await fitBounds({ x, y, width: gridWidth, height: gridHeight }, { padding: 0.15, duration: 250 });
+    }
   } catch (error) {
     if (!controller.signal.aborted) showNodeError(error, "宫格切分失败");
   } finally {
@@ -198,6 +200,7 @@ async function splitImage() {
 </script>
 
 <style scoped lang="scss">
+@use "@toonflow/node-shared/imageToolStyles.scss" as tools;
 .gridSplitPanel {
   color: var(--el-text-color-primary);
 
@@ -216,22 +219,13 @@ async function splitImage() {
     gap: 8px;
 
     .presetButton {
+      @include tools.choice;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 6px;
       padding: 10px 4px;
-      border: 1px solid var(--el-border-color-light);
-      border-radius: 8px;
-      background: var(--el-fill-color-blank);
-      color: var(--el-text-color-regular);
-      font: inherit;
       font-size: 13px;
-      cursor: pointer;
-
-      &:hover, &.active { border-color: var(--el-color-primary); color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
-      &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
-      &:disabled { cursor: wait; opacity: 0.65; }
 
       .presetIcon {
         display: grid;
@@ -312,6 +306,6 @@ async function splitImage() {
     span:last-child { color: var(--el-text-color-secondary); }
   }
 
-  .splitButton { width: 100%; }
+  .splitButton { @include tools.action; width: 100%; }
 }
 </style>

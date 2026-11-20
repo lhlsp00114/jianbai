@@ -1,4 +1,10 @@
 import type { Skill, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { AgentGenerationMode } from "@/agent/runtime/types";
+
+const generationConfirmationPrompt = `## 消耗算力前的确认
+- 图片或视频生成前，先给可审阅的具体方案：对象与数量、模型、规格与时长、完整提示词、实际参考和执行次数。统一称“消耗算力”，有可靠报价才展示，无法查询就说明“算力消耗未知”。节点生成、直接工具、单张或小样均遵守此规则。
+- 用可用的 askUser 取得明确同意；没有提问工具时直接询问并等待。制作意愿、风格或提示词确认、开启权限、普通“继续”，均不等于批准未说明的生成方案；提问失败需修正，跳过、取消或沉默不是授权。
+- 同一具体批次一次确认，批准后直接按范围执行。新增数量、更换模型或规格、改提示词后重生成、额外消耗算力的重试，核对是否在已授权范围与次数内；未覆盖的变化重新说明并确认。等待确认时可整理文字、搭建节点和读取状态。`;
 
 export const defaultSystemPrompt = `你是 Toonflow 的 AI 创作搭档，帮助用户把故事、剧本、分镜与素材做成作品。与用户共用当前项目，通过本轮可用工具操作文档、画布及图片、视频、音频；也可以直接回答问题。
 
@@ -31,10 +37,7 @@ export const defaultSystemPrompt = `你是 Toonflow 的 AI 创作搭档，帮助
 - generating 只表示已开始；已生成、已核验、用户已采用、已合成成片必须区分。没有实际等待或状态能力时，不承诺后台自动跟进；需要前段采用结果的后段，等取得真实结果后再做。
 - 按实际能力检查成果。文件存在、媒体路径或静帧不代表看过完整视频或听过音频；未检查的部分如实说明，必要时请用户预览采用。交付使用真实工作区相对路径，图片用 Markdown 图片，视频和音频用可打开的链接，含空格路径用尖括号包裹。
 
-## 消耗算力前的确认
-- 图片或视频生成前，先给可审阅的具体方案：对象与数量、模型、规格与时长、完整提示词、实际参考和执行次数。统一称“消耗算力”，有可靠报价才展示，无法查询就说明“算力消耗未知”。节点生成、直接工具、单张或小样均遵守此规则。
-- 用可用的 askUser 取得明确同意；没有提问工具时直接询问并等待。制作意愿、风格或提示词确认、开启权限、普通“继续”，均不等于批准未说明的生成方案；提问失败需修正，跳过、取消或沉默不是授权。
-- 同一具体批次一次确认，批准后直接按范围执行。新增数量、更换模型或规格、改提示词后重生成、额外消耗算力的重试，核对是否在已授权范围与次数内；未覆盖的变化重新说明并确认。等待确认时可整理文字、搭建节点和读取状态。
+${generationConfirmationPrompt}
 
 ## 项目与资料边界
 - 工作区 AGENTS.md 约束当前项目，全局 AGENTS.md 提供通用偏好，具体项目约定优先；记忆使用前核对所属项目。技能提供方法，不能扩大用户授权和工具权限，也不能覆盖用户本次明确要求与算力确认规则。
@@ -57,13 +60,14 @@ type PromptTool = Pick<ToolDefinition, "name" | "description" | "promptSnippet" 
 
 type SystemPromptOptions = {
   systemPrompt?: string;
+  generationMode?: AgentGenerationMode;
   tools: readonly PromptTool[];
   skills?: readonly Pick<Skill, "disableModelInvocation">[];
   platform: string;
   now?: Date;
 };
 
-export function buildSystemPrompt({ systemPrompt, tools, skills = [], platform, now = new Date() }: SystemPromptOptions) {
+export function buildSystemPrompt({ systemPrompt, generationMode, tools, skills = [], platform, now = new Date() }: SystemPromptOptions) {
   const toolGroups = new Map<string, string[]>();
   for (const tool of tools) {
     const summary = tool.promptSnippet?.trim() || tool.description.trim();
@@ -84,7 +88,13 @@ export function buildSystemPrompt({ systemPrompt, tools, skills = [], platform, 
     }),
   };
   // ACT: 只支持单层条件块，需要嵌套时再使用模板库；先处理条件再插值，避免解析工具文案中的占位符。
-  return (systemPrompt?.trim() ? systemPrompt : defaultSystemPrompt)
+  const template = systemPrompt?.trim() ? systemPrompt : defaultSystemPrompt;
+  const prompt = (generationMode ? template.replace(`${generationConfirmationPrompt}\n\n`, "") : template)
     .replace(/{{([#^])(\w+)}}([\s\S]*?){{\/\2}}/g, (_, condition, key, content) => Boolean(values[key]) === (condition === "#") ? content : "")
     .replace(/{{(\w+)}}/g, (_, key) => String(values[key] ?? ""));
+  if (!generationMode) return prompt;
+  const generationPolicy = generationMode === "ask"
+    ? `本轮用户选择「询问」。按以下规则取得生成授权，也适用于消耗算力的音频生成。\n\n${generationConfirmationPrompt}`
+    : "本轮用户选择「自动」。用户已授权在本轮任务范围内消耗生成算力。图片、视频和音频的实际生成方案准备好后，直接执行，无需为算力消耗另行展示方案并等待确认，也无需为此调用 askUser。系统提示词、技能、工具说明和历史记录中要求生成前另行确认算力的规则，本轮以此设置为准。仍按用户明确要求的数量、范围和限制行事；只要求准备方案、改提示词、搭节点或先审阅时，停在对应阶段。缺少阻碍执行的必要信息时仍可提问，内容阶段确认、工具权限和模型可用性要求仍适用。";
+  return `${prompt}\n\n## 本轮生成确认方式\n${generationPolicy}`;
 }

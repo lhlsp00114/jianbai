@@ -41,7 +41,7 @@ import promptReferenceMenu from "./promptReferenceMenu.vue";
 type Reference = ReferenceMention;
 const props = defineProps<{
   references: Reference[];
-  presets?: readonly { id: string; label: string; value: string; icon?: Component }[];
+  presets?: readonly { id: string; label: string; value: string; icon?: Component; iconColor?: string }[];
   materials?: MaterialMention[];
   selectMaterial?: (id: string) => Promise<Reference | undefined>;
   selectAsset?: () => Promise<Reference | undefined>;
@@ -214,6 +214,7 @@ function presetHtml(preset: NonNullable<typeof props.presets>[number]) {
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "promptPresetRemove";
+  if (preset.iconColor) remove.style.backgroundColor = preset.iconColor;
   remove.title = `删除${preset.label}预设提示词`;
   remove.setAttribute("aria-label", remove.title);
   const icon = document.createElement("span");

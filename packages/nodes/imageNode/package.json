@@ -12,9 +12,9 @@
     "./imageMultiAngle": "./src/components/imageMultiAngle.vue",
     "./imageEditor": "./src/components/imageEditor.vue",
     "./imageEditMenu": "./src/components/imageEditMenu.vue",
+    "./imageAgentMenu": "./src/components/imageAgentMenu.vue",
     "./imageSmartEdit": "./src/components/imageSmartEdit.vue",
     "./imageGridSplit": "./src/components/imageGridSplit.vue",
-    "./imageInpaintPrompt": "./src/components/imageInpaintPrompt.vue",
     "./imageOutpaint": "./src/imageOutpaint.ts",
     "./outpaint": "./src/components/imageOutpaint.vue"
   },

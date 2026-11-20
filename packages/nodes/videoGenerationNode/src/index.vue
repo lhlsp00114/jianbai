@@ -126,6 +126,9 @@ import { getPromptText } from "@toonflow/node-shared/promptText";
 import promptInput from "@toonflow/node-shared/promptInput";
 import promptPresets from "@toonflow/node-shared/promptPresets";
 import generationPromptPanel from "@toonflow/node-shared/generationPromptPanel";
+import { getCompositionPrompt } from "@toonflow/node-shared/compositionPrompts";
+import { getColorPrompt } from "@toonflow/node-shared/colorPrompts";
+import { getCameraPrompt, isCameraSettings } from "@toonflow/node-shared/cameraPrompts";
 import videoPlayer from "@toonflow/node-video/videoPlayer";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
 import { emptyMediaCardWidth, getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
@@ -150,7 +153,7 @@ const { id, node, nodeProps, nodeEvent, outputs, files, ai, updateNodeInternals 
   onModelsChanged: () => void refreshProviderModels(),
 });
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
-const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; model: string; duration?: number; resolution: string; ratio: string; mode: string; generateAudio: boolean; other: Record<string, unknown> });
+const data = computed(() => node.data as { colorPreset?: string; colorPresetData?: unknown; cameraSettings?: unknown; compositionPreset?: string; prompt: string; promptModel: PromptModel; model: string; duration?: number; resolution: string; ratio: string; mode: string; generateAudio: boolean; other: Record<string, unknown> });
 data.value.prompt ??= "";
 data.value.promptModel ??= [];
 data.value.model ??= "";
@@ -241,6 +244,9 @@ const modelGroups = computed(() => groupNodeModels(models.value));
 function getGenerationPrompt(prompt: string, references = refList.value) {
   return [
     prompt.trim(),
+    getCompositionPrompt(data.value.compositionPreset),
+    getColorPrompt(data.value.colorPreset, data.value.colorPresetData),
+    getCameraPrompt(data.value.cameraSettings),
     ...references.flatMap((item, index) => (item.dataType === "STRING" && item.value?.trim() ? [`参考 ${index + 1}：\n${item.value.trim()}`] : [])),
   ]
     .filter(Boolean)
@@ -398,6 +404,8 @@ async function startGeneration() {
     generation = generationState.resume().catch(error => showNodeError(error, "视频任务复查失败"));
     return { status: "generating" };
   }
+  if (data.value.colorPreset && !getColorPrompt(data.value.colorPreset, data.value.colorPresetData)) throw new Error("所选配色不可用，请重新选择配色后生成");
+  if (data.value.cameraSettings && !isCameraSettings(data.value.cameraSettings)) throw new Error("摄影参数已失效，请重新选择相机参数后生成");
   const choice = selectedModel.value;
   if (!choice) throw new Error("请先选择视频模型");
   if (choice.mode?.length && !matchingModes.value.some(item => JSON.stringify(item) === data.value.mode)) {

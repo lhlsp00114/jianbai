@@ -306,8 +306,32 @@ watch([() => props.directory, () => props.createDefaultCanvas], async ([director
       return;
     }
     await loadDirectory("");
+    checkCanvasDirectory(directory, controller.signal);
+    const lastCanvasId = workspaceStore.project?.lastCanvasId;
+    let unavailableCanvasId: string | undefined;
+    if (typeof lastCanvasId === "string" && lastCanvasId) {
+      try {
+        let folder = "";
+        for (const name of lastCanvasId.split("/").slice(0, -1)) {
+          folder = folder ? `${folder}/${name}` : name;
+          if (!folders.value.some(entry => entry.path === folder)) break;
+          await loadDirectory(folder);
+          checkCanvasDirectory(directory, controller.signal);
+        }
+        if (canvases.value.some(canvas => canvas.id === lastCanvasId)) {
+          await applyCanvas(lastCanvasId, directory, controller.signal);
+          return;
+        }
+      } catch (error) {
+        checkCanvasDirectory(directory, controller.signal);
+        unavailableCanvasId = lastCanvasId;
+        const message = errorMessage(error, "读取画布失败");
+        ElMessage.warning(`无法恢复上次打开的画布：${message}`);
+        loadError.value = message;
+      }
+    }
     // ACT: 根目录无画布时逐层查找，找到即停止；其余目录仍按需加载。
-    for (let index = 0; !canvases.value.length && index < folders.value.length; index++) {
+    for (let index = 0; !canvases.value.some(canvas => canvas.id !== unavailableCanvasId) && index < folders.value.length; index++) {
       await loadDirectory(folders.value[index]!.path);
     }
     if (cancelled) return;
@@ -330,7 +354,11 @@ watch([() => props.directory, () => props.createDefaultCanvas], async ([director
       }
     }
     if (cancelled) return;
-    if (canvases.value[0]) await applyCanvas(canvases.value[0].id, directory, controller.signal);
+    const fallback = canvases.value.find(canvas => canvas.id !== unavailableCanvasId);
+    if (fallback) {
+      await applyCanvas(fallback.id, directory, controller.signal);
+      loadError.value = "";
+    }
   } catch (err) {
     if (!cancelled) {
       loadError.value = errorMessage(err, "读取画布失败");
@@ -384,7 +412,7 @@ async function applyCanvas(canvasId: string, directory: string, signal?: AbortSi
     return;
   }
   if (!nextCanvas.flow) {
-    const data = await useWorkspaceFiles(directory).readJson<Partial<NonNullable<Canvas["flow"]>> & { toonflowCanvas?: boolean } | null>(nextCanvas.id);
+    const data = await useWorkspaceFiles(directory).readJson<Partial<NonNullable<Canvas["flow"]>> & { toonflowCanvas?: boolean } | null>(nextCanvas.id, signal);
     checkCanvasDirectory(directory, signal);
     if (data?.toonflowCanvas !== true || !Array.isArray(data.nodes) || !Array.isArray(data.edges) || !data.viewport
       || ![data.viewport.x, data.viewport.y, data.viewport.zoom].every(Number.isFinite) || data.viewport.zoom <= 0) throw new Error("画布文件格式无效");

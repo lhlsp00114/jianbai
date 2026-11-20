@@ -4,7 +4,7 @@
     v-bind="nodeProps"
     :class="{ outpaintNode: outpaintVisible }"
     v-model:bottomVisible="node.selected"
-    :topVisible="node.selected && !outpaintVisible"
+    :topVisible="node.selected && !outpaintVisible && editor?.mode !== 'smartEdit'"
     topWidth="max-content"
     contentPadding="2px"
     :resizeAspectRatio="(previewUrl || inpaintGuideUrl) && imageNaturalHeight ? imageNaturalWidth / imageNaturalHeight : undefined"
@@ -21,17 +21,17 @@
     <template #topActions>
       <el-button :icon="IconSparkles" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || panorama?.busy || !previewUrl" text title="智能改图" aria-label="智能改图" @click.stop="startEditor('smartEdit')">智能改图</el-button>
       <el-button class="panoramaButton" :icon="IconPanoramaHorizontal" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || panorama?.busy || !previewUrl" text title="全景图" aria-label="全景图" @click.stop="panorama?.open($event)">全景图<icon-chevron-down class="menuChevron" :size="14" /></el-button>
-      <el-button :icon="IconBrush" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="局部重绘" aria-label="局部重绘" @click.stop="startEditor('inpaint')">局部重绘</el-button>
       <el-button :icon="IconArrowsMaximize" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting || outpaintPrompt?.creating" text title="扩图" aria-label="扩图" @click.stop="openOutpaint">扩图</el-button>
       <el-button :icon="IconSun" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="打光" aria-label="打光" @click.stop="openLighting">打光</el-button>
       <el-button :icon="IconCameraRotate" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="多角度" aria-label="多角度" @click.stop="openMultiAngle">多角度</el-button>
       <el-button :icon="IconLayoutGrid" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl" :loading="gridSplit?.splitting" text title="宫格切分" aria-label="宫格切分" @click.stop="gridSplit?.open($event)">宫格切分</el-button>
       <imageEditMenu :loading="creatingRotation" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" @rotate="createRotation(outputFile)" @crop="startEditor('crop')" @color="startEditor('color')" />
+      <imageAgentMenu :disabled="!outputFile" />
     </template>
     <template #topRightActions>
       <el-button :icon="IconPencil" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="标记" aria-label="标记" @click.stop="startEditor('mark')" />
     </template>
-    <div v-loading="generating || uploading" class="imageContent" :class="{ empty: !outputFile && !data.inpaint?.guide, outpainting: outpaintVisible, nopan: !outpaintVisible }" :aria-busy="generating || uploading">
+    <div v-loading="generating || uploading" class="imageContent" :class="{ empty: !outputFile && !data.inpaint?.guide, outpainting: outpaintVisible, nopan: !outpaintVisible }" :aria-busy="generating || uploading" @click.self="editor?.exitSmartEdit()">
       <input ref="fileInput" type="file" accept="image/*" hidden aria-label="选择替换图片" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy" @change="replaceOutput" />
       <div v-if="previewUrl" class="editorPreview" :style="{ visibility: outpaintVisible ? 'hidden' : undefined }">
         <imageEditor
@@ -72,13 +72,13 @@
       </div>
       <div v-else-if="outpaintVisible" ref="outpaintTarget" />
       <generationPromptPanel v-else>
-        <template v-if="editor?.mode !== 'inpaint'" #actions>
+        <template #actions>
           <div ref="providerTarget" />
           <taskRecovery compact :visible="generationState.recoveryVisible.value" :label="generationState.recoveryLabel.value" :action="generationState.recoverResult" :disabled="cancelling || deleting || uploading" />
         </template>
         <el-card class="promptCard" shadow="never" :bodyStyle="{ padding: '14px 16px 12px' }">
           <referenceActions presetPrompts :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" :disabled="generating || deleting || uploading || editor?.busy" />
-          <el-button v-if="inpaintGuideUrl && editor?.mode !== 'inpaint'" class="inpaintInfo" text :icon="data.inpaint?.mode === 'outpaint' ? IconArrowsMaximize : IconBrush" @click="inpaintPreviewVisible = true">{{ data.inpaint?.mode === 'outpaint' ? '查看扩图范围' : '查看重绘标注' }}</el-button>
+          <el-button v-if="inpaintGuideUrl" class="inpaintInfo" text :icon="data.inpaint?.mode === 'outpaint' ? IconArrowsMaximize : IconBrush" @click="inpaintPreviewVisible = true">{{ data.inpaint?.mode === 'outpaint' ? '查看扩图范围' : '查看重绘标注' }}</el-button>
           <referenceItem
             v-if="refList.length"
             v-model="refList"
@@ -86,11 +86,9 @@
             @insert="generationPromptInput?.insertReferenceAtCursor(referenceKey($event)).catch(error => showNodeError(error, '插入图片引用失败'))"
             @preview="setReferencePreview"
             @remove="removeReference" />
-          <promptInput v-if="editor?.mode === 'inpaint'" ref="generationPromptInput" highlightImageMentions v-model="data.inpaintPromptModel" v-model:text="data.inpaintPrompt" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" expandable />
-          <promptInput v-else ref="generationPromptInput" highlightImageMentions v-model="data.promptModel" v-model:text="data.prompt" :presets="imagePromptPresets" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" expandable />
+          <promptInput ref="generationPromptInput" highlightImageMentions v-model="data.promptModel" v-model:text="data.prompt" :presets="editorPromptPresets" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" expandable />
           <div class="promptFooter">
             <providerModelSelect
-              v-if="editor?.mode !== 'inpaint'"
               v-model="data.model"
               :models="models"
               :providerTarget="providerTarget"
@@ -99,7 +97,6 @@
               noDataText="请先在设置中添加图片模型"
               @open="loadModels().catch(error => showNodeError(error, '模型读取失败'))" />
             <imageGenerationSettings
-              v-if="editor?.mode !== 'inpaint'"
               v-model:size="data.size"
               v-model:ratio="data.ratio"
               v-model:other="data.other"
@@ -107,9 +104,8 @@
               :sizes="sizeOptions"
               :ratios="ratioOptions"
               :disabled="generating || deleting || !selectedModel" />
-            <promptPresets v-if="editor?.mode !== 'inpaint'" :presets="imagePromptPresets" :columns="imagePromptPresetColumns" :selected="data.prompt" :disabled="generating || deleting || uploading" @select="insertPromptPreset($event).catch(error => showNodeError(error, '插入提示词预设失败'))" />
-            <el-button v-if="editor?.mode === 'inpaint'" class="confirmButton" type="primary" :icon="IconCheck" :loading="editor.busy" :disabled="deleting || uploading || !generationPrompt" @click="confirmInpaint().catch(error => showNodeError(error, '重绘节点创建失败'))">确认</el-button>
-            <div v-else class="generationActions">
+            <promptPresets :presets="imagePromptPresets" :columns="imagePromptPresetColumns" :selected="data.prompt" :disabled="generating || deleting || uploading" @select="insertPromptPreset($event).catch(error => showNodeError(error, '插入提示词预设失败'))" />
+            <div class="generationActions">
               <mediaPrice v-if="priceInput" :input="{ ...priceInput, mediaType: 'image' }" :supported="selectedModel?.supportsPrice === true" />
               <el-button v-if="pendingRecovery" class="sendButton" :icon="IconPlayerStop" :loading="cancelling" :disabled="deleting || uploading" title="放弃任务" aria-label="放弃任务" @click="generationState.cancel().catch(error => showNodeError(error, '停止生成失败'))" />
               <el-button
@@ -143,7 +139,7 @@ import taskRecovery from "@toonflow/node-shared/taskRecovery";
 import { computed, inject, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch } from "vue";
 import { useVueFlow } from "@vue-flow/core";
 import { ElButton, ElCard, ElLoading } from "element-plus";
-import { IconCheck, IconPhotoSpark, IconPhoto, IconArrowUp, IconPlayerStop, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconSparkles, IconArrowsMaximize } from "@tabler/icons-vue";
+import { IconPhotoSpark, IconPhoto, IconArrowUp, IconPlayerStop, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown, IconSparkles, IconArrowsMaximize } from "@tabler/icons-vue";
 import { findNodeModel, getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, z, type NodeMediaModel, type NodeImageRequest, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { useNodePersistence } from "@toonflow/nodes-scaffold/nodeDocument";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
@@ -159,6 +155,9 @@ import { getModelFormValues, useImageModelForm } from "@toonflow/node-shared/use
 import promptInput from "@toonflow/node-shared/promptInput";
 import promptPresets from "@toonflow/node-shared/promptPresets";
 import generationPromptPanel from "@toonflow/node-shared/generationPromptPanel";
+import { getCompositionPrompt } from "@toonflow/node-shared/compositionPrompts";
+import { getColorPrompt } from "@toonflow/node-shared/colorPrompts";
+import { getCameraPrompt, isCameraSettings } from "@toonflow/node-shared/cameraPrompts";
 import referenceItem from "@toonflow/node-shared/referenceItem";
 import referenceActions from "@toonflow/node-shared/referenceActions";
 import mediaHistory from "@toonflow/node-shared/mediaHistory";
@@ -168,6 +167,7 @@ import imageEditor from "@toonflow/node-image/imageEditor";
 import imageSmartEdit from "@toonflow/node-image/imageSmartEdit";
 import { useImageRotation } from "@toonflow/node-image/useImageRotation";
 import imageEditMenu from "@toonflow/node-image/imageEditMenu";
+import imageAgentMenu from "@toonflow/node-image/imageAgentMenu";
 import { buildInpaintRequest, useImageInpaint, type ImageInpaint } from "@toonflow/node-image/imageInpaint";
 import imageLighting from "@toonflow/node-image/imageLighting";
 import imagePanorama from "@toonflow/node-image/imagePanorama";
@@ -195,13 +195,18 @@ const { id, node, nodeProps, nodeEvent, outputs, files, ai, updateNodeInternals 
 const { findNode, nodeTypes, updateNode } = useVueFlow();
 const getPersistence = useNodePersistence();
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
-const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; inpaintPrompt: string; inpaintPromptModel: PromptModel; model: string; size: string; ratio: string; other: Record<string, unknown>; inpaint?: ImageInpaint; mediaTask?: { state: string; applied?: boolean } });
+const data = computed(() => node.data as { colorPreset?: string; colorPresetData?: unknown; cameraSettings?: unknown; compositionPreset?: string; prompt: string; promptModel: PromptModel; multiAnglePrompt?: string; lightingPrompt?: string; model: string; size: string; ratio: string; other: Record<string, unknown>; inpaint?: ImageInpaint; mediaTask?: { state: string; applied?: boolean } });
+const variationPresets = [
+  { id: "multiAngle", label: "多角度", value: "{{preset multiAngle}}", icon: IconCameraRotate, iconColor: "#0f766e", field: "multiAnglePrompt",
+    legacyPrompt: /^Photograph the scene in reference image \{\{ref 1\}\} from a NEW CAMERA POSITION\.[\s\S]+Output one finished image without added cameras, guides or text labels\.$/ },
+  { id: "lighting", label: "打光", value: "{{preset lighting}}", icon: IconSun, iconColor: "#b45309", field: "lightingPrompt",
+    legacyPrompt: /^Relight the reference image \{\{ref 1\}\} while keeping its original scene, composition, viewpoint and background geometry intact[\s\S]+\[relight key azimuth:[^\n\]]+\]$/ },
+] as const;
+const editorPromptPresets = computed(() => [...imagePromptPresets, ...variationPresets.filter(preset => data.value[preset.field])]);
 const skeleton = ref<InstanceType<typeof nodeSkeleton>>();
 const generationPromptInput = ref<InstanceType<typeof promptInput>>();
 data.value.prompt ??= "";
 data.value.promptModel ??= [];
-data.value.inpaintPrompt ??= "";
-data.value.inpaintPromptModel ??= [];
 data.value.model ??= "";
 data.value.size ??= "";
 data.value.ratio ??= "16:9";
@@ -219,6 +224,12 @@ const readOutpaintInstruction = inject<() => string>("imageOutpaintPromptInstruc
 const previousPanoramaPreset = panoramaPromptPresets.find(preset => buildPanoramaPrompt(preset.mode) === data.value.prompt.trim());
 if (previousPanoramaPreset) {
   data.value.prompt = previousPanoramaPreset.value + " ";
+  data.value.promptModel = [[{ type: "Write", text: data.value.prompt }]];
+}
+const previousVariationPreset = variationPresets.find(preset => !data.value[preset.field] && preset.legacyPrompt.test(data.value.prompt.trim()));
+if (previousVariationPreset) {
+  data.value[previousVariationPreset.field] = data.value.prompt;
+  data.value.prompt = previousVariationPreset.value;
   data.value.promptModel = [[{ type: "Write", text: data.value.prompt }]];
 }
 
@@ -280,13 +291,18 @@ async function insertPromptPreset(id: string) {
   if ("ratio" in preset) data.value.ratio = preset.ratio;
 }
 const generationPrompt = computed(() => {
-  const prompt = (editor.value?.mode === "inpaint" ? data.value.inpaintPrompt : data.value.prompt).trim().replace(/\{\{preset ([a-zA-Z0-9]+)\}\}/g, (value, id: string) => {
+  const prompt = data.value.prompt.trim().replace(/\{\{preset ([a-zA-Z0-9]+)\}\}/g, (value, id: string) => {
+    const variation = variationPresets.find(preset => preset.id === id);
+    if (variation) return data.value[variation.field] || value;
     const preset = imagePromptPresets.find(item => item.id === id);
     if (!preset) return value;
     return readPresetPrompt(preset.id);
   });
   return [
-    editor.value?.mode !== "inpaint" && data.value.inpaint?.mode === "outpaint" ? buildOutpaintPrompt(prompt, data.value.inpaint.outpaintContext, readOutpaintInstruction()) : prompt,
+    data.value.inpaint?.mode === "outpaint" ? buildOutpaintPrompt(prompt, data.value.inpaint.outpaintContext, readOutpaintInstruction()) : prompt,
+    getCompositionPrompt(data.value.compositionPreset),
+    getColorPrompt(data.value.colorPreset, data.value.colorPresetData),
+    getCameraPrompt(data.value.cameraSettings),
     ...refList.value.flatMap((item, index) => (item.dataType === "STRING" && item.value?.trim() ? [`参考 ${index + 1}：\n${item.value.trim()}`] : [])),
   ]
     .filter(Boolean)
@@ -435,18 +451,6 @@ function loadModels() {
   return modelsRequest;
 }
 
-async function confirmInpaint() {
-  const inpaintEditor = editor.value;
-  if (!inpaintEditor || inpaintEditor.mode !== "inpaint") throw new Error("请先进入局部重绘");
-  if (inpaintEditor.busy || generating.value || deleting.value || uploading.value) return;
-  if (!generationPrompt.value) throw new Error("请输入重绘提示词");
-  if (refList.value.some(item => item.value === undefined)) throw new Error("引用节点暂无内容，请先补充引用内容");
-  let prompt = generationPrompt.value.replace(/\{\{ref (\d+)\}\}/g, "重绘参考 $1").replace(/^参考 (\d+)：/gm, "重绘参考 $1：");
-  const images = refList.value.flatMap(item => item.dataType === "IMAGE" && item.value ? [{ path: item.value.url, mimeType: item.value.mimeType }] : []);
-  const imageReferences = refList.value.flatMap((item, index) => item.dataType === "IMAGE" && item.value ? [index + 1] : []);
-  if (imageReferences.length) prompt += `\n重绘参考编号对应关系（前两张为原图和区域引导图）：${imageReferences.map((reference, index) => `重绘参考 ${reference} 对应第 ${index + 3} 张图`).join("；")}。`;
-  await inpaintEditor.createInpaint({ prompt, images }, new AbortController().signal);
-}
 
 async function startGeneration() {
   if (cancelling.value) throw new Error("任务正在取消，请稍后重试");
@@ -459,11 +463,12 @@ async function startGeneration() {
   if (multiAngleVisible.value) throw new Error("请先退出多角度，再启动图片生成");
   if (editor.value?.busy || editor.value?.mode === "mark") throw new Error("请先完成图片标记");
   if (editor.value?.mode === "crop") throw new Error("请先确认或退出图片裁剪");
-  if (editor.value?.mode === "inpaint") throw new Error("请先确认局部重绘，再到子节点生成");
   if (pendingRecovery.value) {
     generation = generationState.resume().catch(error => showNodeError(error, "图片任务复查失败"));
     return { status: "generating" };
   }
+  if (data.value.colorPreset && !getColorPrompt(data.value.colorPreset, data.value.colorPresetData)) throw new Error("所选配色不可用，请重新选择配色后生成");
+  if (data.value.cameraSettings && !isCameraSettings(data.value.cameraSettings)) throw new Error("摄影参数已失效，请重新选择相机参数后生成");
   const panoramas = panoramaPromptPresets.filter(preset => data.value.prompt.includes(preset.value));
   if (panoramas.length > 1) throw new Error("720全景和360环绕的比例要求不同，请只保留其中一个全景预设");
   const panoramaPreset = panoramas[0];
@@ -475,6 +480,10 @@ async function startGeneration() {
   }
   const input = generationInput.value;
   if (!generationPrompt.value) throw new Error("请输入生成提示词");
+  const variations = variationPresets.filter(preset => data.value.prompt.includes(preset.value));
+  const missingVariation = variations.find(preset => !data.value[preset.field]);
+  if (missingVariation) throw new Error(`${missingVariation.label}提示词缺失，请从原图重新打开工具`);
+  if (variations.length && refList.value[0]?.dataType !== "IMAGE") throw new Error("请将原图设为第一个参考，再生成多角度或打光图片");
   const references = refList.value.filter(item => !data.value.inpaint || item.dataType !== "IMAGE" || item.value?.url !== data.value.inpaint.source);
   if (references.some(item => item.value === undefined)) throw new Error("引用节点暂无内容，请先补充引用内容");
   if (!input) throw new Error("请先选择图片模型");
@@ -553,7 +562,7 @@ function openMultiAngle() {
   multiAngleVisible.value = true;
 }
 
-function startEditor(mode: "inpaint" | "mark" | "smartEdit" | "crop" | "color") {
+function startEditor(mode: "mark" | "smartEdit" | "crop" | "color") {
   if (generating.value || deleting.value || uploading.value || editor.value?.busy || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy || gridSplit.value?.splitting) return;
   lightingVisible.value = false;
   multiAngleVisible.value = false;
@@ -634,7 +643,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "setPrompt",
-  description: "修改此节点的普通图片生成提示词，仅接收 prompt，支持 {{ref 1}} 等参考标记；分辨率 size、比例 ratio 等配置须先用 node:getConfig 查询能力，再单独调用 node:setConfig；不修改局部重绘提示词，不启动生成",
+  description: "修改此节点的普通图片生成提示词，仅接收 prompt，支持 {{ref 1}} 等参考标记；分辨率 size、比例 ratio 等配置须先用 node:getConfig 查询能力，再单独调用 node:setConfig；不启动生成",
   parameters: z.strictObject({ prompt: z.string() }),
   execute({ prompt: value }) {
     if (deleting.value) throw new Error("节点正在删除，请稍后修改");
@@ -646,7 +655,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "generateImage",
-  description: "启动此节点的后台普通图片生成，使用普通生成提示词、模型、分辨率、比例和参考图片；局部重绘模式下须先退出；立即返回已开始，用 getGenerationStatus 查询完成结果，cancelGeneration 停止生成",
+  description: "启动此节点的后台普通图片生成，使用普通生成提示词、模型、分辨率、比例和参考图片；立即返回已开始，用 getGenerationStatus 查询完成结果，cancelGeneration 停止生成",
   parameters: z.strictObject({}),
   execute(_args, { signal }) {
     signal?.throwIfAborted();
@@ -716,7 +725,6 @@ nodeTools.register({
     justify-content: flex-start;
     gap: 8px;
 
-    .confirmButton { margin-left: auto; }
 
     .generationActions {
       display: flex;

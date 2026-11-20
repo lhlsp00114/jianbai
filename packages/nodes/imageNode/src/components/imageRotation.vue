@@ -5,7 +5,6 @@
   </div>
   <teleport v-if="toolbarTarget" :to="toolbarTarget">
     <div class="rotationToolbar" role="toolbar" aria-label="旋转与镜像" @keydown.esc.stop.prevent="!busy && emit('close')">
-      <el-button class="exitRotation" :icon="IconX" :disabled="busy" text title="退出旋转与镜像" aria-label="退出旋转与镜像" @click="emit('close')">旋转与镜像</el-button>
       <div class="angleControl">
         <span>角度</span>
         <el-input-number :modelValue="model.angle" :min="-360" :max="360" :step="1" :precision="1" :controls="false" :disabled="busy" aria-label="自定义旋转角度" @update:modelValue="setAngle" />
@@ -14,7 +13,8 @@
       <el-button :icon="IconRotateClockwise" :disabled="busy" text title="顺时针旋转 90°" aria-label="顺时针旋转 90°" @click="setAngle((model.angle + (model.flipX !== model.flipY ? -90 : 90) + 360) % 360)">90°</el-button>
       <el-button :icon="IconFlipHorizontal" :disabled="busy" :aria-pressed="model.flipX" :type="model.flipX ? 'primary' : 'default'" text title="水平镜像" aria-label="水平镜像" @click="model = { ...model, flipX: !model.flipX }" />
       <el-button :icon="IconFlipVertical" :disabled="busy" :aria-pressed="model.flipY" :type="model.flipY ? 'primary' : 'default'" text title="垂直镜像" aria-label="垂直镜像" @click="model = { ...model, flipY: !model.flipY }" />
-      <el-button class="saveRotation" :icon="IconCheck" :loading="busy" :disabled="!ready || preparing || !!error" type="primary" @click="saveImage">保存</el-button>
+      <el-button class="saveRotation" :icon="IconCheck" :loading="busy" :disabled="!ready || preparing || !!error" @click="saveImage">保存</el-button>
+      <el-button class="exitRotation" :icon="IconX" :disabled="busy" text title="退出旋转与镜像" aria-label="退出旋转与镜像" @click="emit('close')" />
     </div>
   </teleport>
 </template>
@@ -104,6 +104,7 @@ defineExpose({ busy });
 </script>
 
 <style scoped lang="scss">
+@use "@toonflow/node-shared/imageToolStyles.scss" as tools;
 .imageRotation {
   position: relative;
   width: 100%;
@@ -115,31 +116,23 @@ defineExpose({ busy });
   .previewStatus { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; background: var(--el-bg-color-overlay); font-size: 12px; }
 }
 .rotationToolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 12px;
-  background: var(--el-bg-color-overlay);
-  box-shadow: var(--el-box-shadow-light);
-  white-space: nowrap;
+  @include tools.toolbar;
 
-  .el-button { height: 36px; min-width: 36px; margin: 0; padding: 0 10px; border-radius: 8px; }
+  .el-button { height: 32px; min-width: 32px; margin: 0; padding: 0 8px; border-radius: 8px; }
+  .el-button[aria-pressed="true"] { @include tools.selected; }
   .exitRotation { color: var(--el-text-color-regular); }
   .angleControl {
     display: flex;
     align-items: center;
     gap: 4px;
     padding: 0 8px;
-    border-left: 1px solid var(--el-border-color-lighter);
     border-right: 1px solid var(--el-border-color-lighter);
     color: var(--el-text-color-secondary);
     font-size: 12px;
 
     .el-input-number { width: 66px; }
-    :deep(.el-input__wrapper) { min-height: 36px; box-sizing: border-box; }
+    :deep(.el-input__wrapper) { min-height: 32px; background: transparent; }
   }
-  .saveRotation { margin-left: 4px; }
+  .saveRotation { @include tools.action; margin-left: 4px; }
 }
 </style>

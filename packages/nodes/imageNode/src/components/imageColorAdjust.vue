@@ -10,7 +10,7 @@
         </div>
       </header>
       <nav class="sectionNav" aria-label="调色栏目">
-        <button v-for="(section, index) in colorSections" :key="section.label" type="button" :class="{ active: activeSection === index }" :aria-label="section.label" :aria-pressed="activeSection === index" :title="section.label" @click="scrollToSection(index)">
+        <button v-for="(section, index) in colorSections" :key="section.label" type="button" :aria-label="section.label" :aria-pressed="activeSection === index" :title="section.label" @click="scrollToSection(index)">
           <component :is="sectionIcons[index]" :size="17" :strokeWidth="1.6" />
         </button>
       </nav>
@@ -25,7 +25,7 @@
       </div>
       <footer class="panelFooter">
         <span v-if="error" class="renderError" role="alert">{{ error }}</span>
-        <el-button :icon="IconDeviceFloppy" type="primary" :loading="busy" :disabled="disabled || !ready || !!error" @click="emit('confirm', { ...settings })">保存</el-button>
+        <el-button :icon="IconDeviceFloppy" :loading="busy" :disabled="disabled || !ready || !!error" @click="emit('confirm', { ...settings })">保存</el-button>
       </footer>
     </section>
   </teleport>
@@ -181,6 +181,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
+@use "@toonflow/node-shared/imageToolStyles.scss" as tools;
 .colorPreview {
   position: absolute;
   inset: 0;
@@ -194,6 +195,7 @@ onBeforeUnmount(() => {
 }
 
 .colorPanel {
+  @include tools.surface;
   position: absolute;
   z-index: 5;
   display: flex;
@@ -201,11 +203,6 @@ onBeforeUnmount(() => {
   width: 292px;
   transform-origin: top left;
   box-sizing: border-box;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 12px;
-  background: var(--el-bg-color-overlay);
-  color: var(--el-text-color-primary);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 18%);
   font-size: 12px;
   line-height: 1.5;
   overflow: hidden;
@@ -227,22 +224,14 @@ onBeforeUnmount(() => {
     flex-shrink: 0;
     gap: 3px;
     margin: 0 12px 8px;
-    padding: 4px;
-    border-radius: 9px;
-    background: var(--el-fill-color-light);
+    padding: 4px 0;
     button {
+      @include tools.choice;
       display: grid;
       place-items: center;
       flex: 1;
       height: 28px;
       padding: 0;
-      border: 0;
-      border-radius: 6px;
-      color: var(--el-text-color-secondary);
-      background: transparent;
-      cursor: pointer;
-      &.active { background: var(--el-fill-color-darker); color: var(--el-text-color-primary); }
-      &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: -2px; }
     }
   }
   .adjustments {
@@ -264,20 +253,9 @@ onBeforeUnmount(() => {
         span { display: flex; justify-content: space-between; color: var(--el-text-color-regular); }
         output { color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }
         input {
+          @include tools.range;
           display: block;
-          appearance: none;
           width: 100%;
-          height: 24px;
-          margin: 0;
-          background: transparent;
-          cursor: pointer;
-          &::-webkit-slider-runnable-track { height: 2px; border-radius: 2px; background: linear-gradient(to right, var(--el-text-color-secondary) var(--rangeProgress), var(--el-border-color) var(--rangeProgress)); }
-          &::-webkit-slider-thumb { appearance: none; width: 9px; height: 9px; margin-top: -3.5px; border: 1px solid var(--el-border-color); border-radius: 50%; background: var(--el-text-color-primary); }
-          &::-moz-range-track { height: 2px; border-radius: 2px; background: var(--el-border-color); }
-          &::-moz-range-progress { height: 2px; background: var(--el-text-color-secondary); }
-          &::-moz-range-thumb { width: 8px; height: 8px; border: 1px solid var(--el-border-color); border-radius: 50%; background: var(--el-text-color-primary); }
-          &:focus-visible { outline: 1px solid var(--el-color-primary); outline-offset: 1px; border-radius: 4px; }
-          &:disabled { opacity: 0.45; cursor: not-allowed; }
         }
       }
     }
@@ -290,7 +268,7 @@ onBeforeUnmount(() => {
     gap: 10px;
     padding: 10px 12px;
     border-top: 1px solid var(--el-border-color-lighter);
-    .el-button { height: 30px; padding: 0 16px; border-radius: 7px; font-size: 12px; }
+    .el-button { @include tools.action; height: 32px; padding: 0 16px; font-size: 12px; }
     .renderError { color: var(--el-color-danger); font-size: 11px; line-height: 1.5; }
   }
 }

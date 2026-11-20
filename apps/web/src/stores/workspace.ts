@@ -8,6 +8,7 @@ export type Project = {
   name: string;
   lastOpenedAt: number;
   projectKind?: "infiniteCanvas" | "infiniteComic" | "team";
+  lastCanvasId?: string;
 };
 
 export const useWorkspaceStore = defineStore("workspace", () => {
@@ -40,6 +41,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const existing = projectList.value.find(project => project.directory === previousDirectory)
       ?? projectList.value.find(project => project.directory === checkedDirectory);
     const added: Project = { directory: checkedDirectory, name: name?.trim() || existing?.name || checkedDirectory.split(/[\\/]/).filter(Boolean).at(-1) || checkedDirectory, lastOpenedAt: Date.now(), projectKind };
+    if (projectKind === "infiniteCanvas" && existing?.lastCanvasId) added.lastCanvasId = existing.lastCanvasId;
     projectList.value = [
       added,
       ...projectList.value.filter(item => item.directory !== previousDirectory && item.directory !== checkedDirectory),
@@ -64,7 +66,15 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     if (project.value?.directory === path) project.value = null;
   }
 
-  return { project, projectList, projectLoading, projectLoadingDrawn, projectLoadingVisible, pendingCanvasUpload, pendingAgentMessage, addProject, openProject, renameProject, removeProject };
+  function rememberCanvas(directory: string, canvasId: string) {
+    const current = project.value;
+    if (!current || current.directory !== directory || current.lastCanvasId === canvasId) return;
+    current.lastCanvasId = canvasId;
+    const recent = projectList.value.find(item => item.directory === directory);
+    if (recent) recent.lastCanvasId = canvasId;
+  }
+
+  return { project, projectList, projectLoading, projectLoadingDrawn, projectLoadingVisible, pendingCanvasUpload, pendingAgentMessage, addProject, openProject, renameProject, removeProject, rememberCanvas };
 }, {
   persist: {
     key: "toonflow.projectList",

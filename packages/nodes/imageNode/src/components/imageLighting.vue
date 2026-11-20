@@ -32,9 +32,9 @@
             <button type="button" :aria-pressed="activeLight === 'key'" :disabled="busy" @click="selectLight('key')">主光源</button>
             <button type="button" :aria-pressed="activeLight === 'rim'" :disabled="busy" @click="selectLight('rim')">轮廓光源</button>
           </div>
-          <label class="rangeControl"><span>水平角 <b>{{ Math.round(activeAzimuth) }}°</b></span><input v-model.number="activeAzimuth" type="range" min="-180" max="180" :disabled="busy" :aria-label="`${activeLightLabel}水平角`" /></label>
-          <label class="rangeControl"><span>俯仰角 <b>{{ Math.round(activeElevation) }}°</b></span><input v-model.number="activeElevation" type="range" min="-90" max="90" :disabled="busy" :aria-label="`${activeLightLabel}俯仰角`" /></label>
-          <label class="rangeControl"><span>光照强度 <b>{{ activeBrightness }}%</b></span><input v-model.number="activeBrightness" type="range" min="0" max="100" :disabled="busy" :aria-label="`${activeLightLabel}亮度`" /></label>
+          <label class="rangeControl"><span>水平角 <b>{{ Math.round(activeAzimuth) }}°</b></span><input v-model.number="activeAzimuth" type="range" :style="{ '--rangeProgress': `${(activeAzimuth + 180) / 360 * 100}%` }" min="-180" max="180" :disabled="busy" :aria-label="`${activeLightLabel}水平角`" /></label>
+          <label class="rangeControl"><span>俯仰角 <b>{{ Math.round(activeElevation) }}°</b></span><input v-model.number="activeElevation" type="range" :style="{ '--rangeProgress': `${(activeElevation + 90) / 180 * 100}%` }" min="-90" max="90" :disabled="busy" :aria-label="`${activeLightLabel}俯仰角`" /></label>
+          <label class="rangeControl"><span>光照强度 <b>{{ activeBrightness }}%</b></span><input v-model.number="activeBrightness" type="range" :style="{ '--rangeProgress': `${activeBrightness}%` }" min="0" max="100" :disabled="busy" :aria-label="`${activeLightLabel}亮度`" /></label>
           <div class="colorControl">
             <span>光线色彩</span>
             <div><input type="color" :value="activeColor" :disabled="busy" :aria-label="`${activeLightLabel}颜色`" @input="activeColor = ($event.target as HTMLInputElement).value" /><el-button text size="small" :disabled="busy || activeColor.toLowerCase() === '#ffffff'" @click="activeColor = '#ffffff'">{{ activeColor.toLowerCase() === '#ffffff' ? '白光' : '还原' }}</el-button></div>
@@ -45,14 +45,14 @@
       <div class="presetSection">
         <span class="sectionLabel">光影预设</span>
         <div class="presetGrid" role="group" aria-label="光影预设">
-          <button v-for="preset in lightingPresets" :key="preset.id" type="button" :class="{ active: settings.preset === preset.id }" :disabled="busy" :aria-pressed="settings.preset === preset.id" @click="selectPreset(preset)">{{ preset.label }}</button>
+          <button v-for="preset in lightingPresets" :key="preset.id" type="button" :disabled="busy" :aria-pressed="settings.preset === preset.id" @click="selectPreset(preset)">{{ preset.label }}</button>
         </div>
       </div>
       <div class="smartSection">
         <div class="switchControl"><span>智能模式</span><el-switch v-model="settings.smartMode" :disabled="busy" aria-label="智能模式" /></div>
         <el-input v-if="settings.smartMode" v-model="settings.smartDesc" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" :disabled="busy" placeholder="描述你想要的光影、氛围或局部细节…" aria-label="智能打光描述" />
       </div>
-      <imageVariationGenerator v-model:generating="generating" :settings="settings" :source="source" :aspectRatio="sourceRatio" :prompt="buildLightingPrompt(settings)" :disabled="disabled" label="打光" @generated="emit('close')" />
+      <imageVariationGenerator v-model:generating="generating" :settings="settings" :source="source" :aspectRatio="sourceRatio" :prompt="buildLightingPrompt(settings)" compactPrompt="lighting" :disabled="disabled" label="打光" @generated="emit('close')" />
     </section>
   </teleport>
 </template>
@@ -112,13 +112,11 @@ function selectPreset(preset: typeof lightingPresets[number]) {
 </script>
 
 <style scoped lang="scss">
+@use "@toonflow/node-shared/imageToolStyles.scss" as tools;
+
 .lightingPanel {
+  @include tools.surface;
   padding: 14px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 14px;
-  background: var(--el-bg-color-overlay);
-  color: var(--el-text-color-primary);
-  box-shadow: var(--el-box-shadow-light);
   font-size: 12px;
 
   .panelHeader {
@@ -141,9 +139,7 @@ function selectPreset(preset: typeof lightingPresets[number]) {
         display: flex;
         gap: 4px;
         margin-top: 8px;
-        button { flex: 1; padding: 5px 0; font-size: 11px; border: 1px solid var(--el-border-color-lighter); border-radius: 6px; background: var(--el-fill-color-light); color: inherit; cursor: pointer; }
-        button[aria-pressed="true"] { border-color: var(--el-color-primary); color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
-        button:disabled { opacity: .5; cursor: default; }
+        button { @include tools.choice; flex: 1; padding: 5px 0; font-size: 11px; }
       }
     }
     .parameterColumn {
@@ -153,22 +149,20 @@ function selectPreset(preset: typeof lightingPresets[number]) {
       gap: 12px;
       padding: 4px 2px;
       .lightSelector {
-        display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: var(--el-fill-color-light);
-        button { flex: 1; padding: 6px 3px; border: 0; border-radius: 5px; color: var(--el-text-color-secondary); background: transparent; font: inherit; cursor: pointer; }
-        button[aria-pressed="true"] { color: var(--el-color-primary); background: var(--el-bg-color-overlay); box-shadow: 0 1px 3px #0001; }
-        button:disabled { opacity: .5; cursor: default; }
+        display: flex; gap: 4px;
+        button { @include tools.choice; flex: 1; padding: 6px 3px; }
       }
       .rangeControl {
         display: grid;
         gap: 10px;
         span { display: flex; justify-content: space-between; }
         b { color: var(--el-text-color-secondary); font-weight: 500; font-variant-numeric: tabular-nums; }
-        input { width: 100%; margin: 0; accent-color: var(--el-color-primary); cursor: pointer; }
+        input { @include tools.range; width: 100%; }
       }
       .colorControl {
         display: flex; align-items: center; justify-content: space-between;
         > div { display: flex; align-items: center; gap: 4px; }
-        input { width: 28px; height: 28px; padding: 2px; border: 1px solid var(--el-border-color); border-radius: 7px; background: transparent; cursor: pointer; }
+        input { @include tools.colorSwatch; }
       }
     }
   }
@@ -178,9 +172,7 @@ function selectPreset(preset: typeof lightingPresets[number]) {
     .sectionLabel { color: var(--el-text-color-secondary); }
     .presetGrid {
       display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px;
-      button { padding: 7px 4px; border: 1px solid var(--el-border-color-lighter); border-radius: 7px; color: var(--el-text-color-regular); background: var(--el-fill-color-light); cursor: pointer; font: inherit; }
-      button.active { border-color: var(--el-color-primary); color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
-      button:disabled { opacity: .5; cursor: default; }
+      button { @include tools.choice; padding: 7px 4px; }
     }
   }
   .smartSection {

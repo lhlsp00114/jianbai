@@ -8,14 +8,15 @@ export function useImageVariationNode() {
   const { addNodes, addEdges, removeNodes, findNode, getNodes, nodeTypes } = useVueFlow();
   const batchHistory = inject<(action: () => Promise<void>) => Promise<void>>("batchCanvasHistory", action => action());
 
-  return async function createVariation(input: { label: string; prompt: string; model: string; size: string; ratio: string; nodeId?: string; inpaint?: ImageInpaint }, signal?: AbortSignal) {
+  return async function createVariation(input: { label: string; prompt: string; model: string; size: string; ratio: string; nodeId?: string; inpaint?: ImageInpaint; compactPrompt?: "multiAngle" | "lighting" }, signal?: AbortSignal) {
     const type = "remote-imageGenerationNode";
     signal?.throwIfAborted();
     if (!nodeTypes?.value?.[type]) throw new Error("请先启用图片生成节点插件");
     if (findNode(id) !== node) throw new Error("原节点已变化，请重新操作");
     const nodeId = input.nodeId ?? crypto.randomUUID();
     const edgeId = crypto.randomUUID();
-    const { label, prompt, model, size, ratio } = input;
+    const { label, model, size, ratio, compactPrompt } = input;
+    const prompt = compactPrompt ? `{{preset ${compactPrompt}}}` : input.prompt;
     const [ratioWidth = 0, ratioHeight = 0] = ratio.split(":").map(Number);
     const previewSize = ratioWidth > 0 && ratioHeight > 0 && Number.isFinite(ratioWidth) && Number.isFinite(ratioHeight) ? getMediaPreviewSize(ratioWidth, ratioHeight) : undefined;
     const outputWidth = Math.max(emptyMediaCardWidth, (previewSize?.width ?? 0) + 18);
@@ -31,7 +32,12 @@ export function useImageVariationNode() {
     await batchHistory(async () => {
       signal?.throwIfAborted();
       try {
-        addNodes({ id: nodeId, type, position: { x, y }, data: { label: `${node.data.label || "图片"} · ${label}`, model, size, ratio, prompt, promptModel: prompt.split("\n").map(text => [{ type: "Write", text }]), ...(input.inpaint ? { inpaint: input.inpaint, inpaintPrompt: prompt, inpaintPromptModel: prompt.split("\n").map(text => [{ type: "Write", text }]) } : {}) } });
+        const promptModel = prompt.split("\n").map(text => [{ type: "Write", text }]);
+        addNodes({ id: nodeId, type, position: { x, y }, data: {
+          label: `${node.data.label || "图片"} · ${label}`, model, size, ratio, prompt, promptModel,
+          ...(compactPrompt ? { [`${compactPrompt}Prompt`]: input.prompt } : {}),
+          ...(input.inpaint ? { inpaint: input.inpaint } : {}),
+        } });
         addEdges({ id: edgeId, source: id, sourceHandle: "image", target: nodeId, targetHandle: "in" });
       } catch (error) {
         removeNodes(nodeId, true, false);

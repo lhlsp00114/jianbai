@@ -41,6 +41,7 @@
       ref="input"
       v-model:selectedModel="selectedModel"
       v-model:reasoningEffort="reasoningEffort"
+      v-model:generationMode="generationMode"
       v-model:editingId="editingId"
       v-model:voiceActive="voiceActive"
       v-model:restoringAttachment="restoringAttachment"
@@ -76,7 +77,7 @@ import anonymousData from "@/lib/anonymousData";
 import { modelChoices, refreshModelChoices } from "@/stores/settings";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { AgentAttachment, AgentConversation, AgentMessage } from "./types";
-import type { AgentEvent, AgentQueue, AgentQueuedMessage } from "@toonflow/server/agent/types";
+import type { AgentEvent, AgentGenerationMode, AgentQueue, AgentQueuedMessage } from "@toonflow/server/agent/types";
 import type { AgentMention } from "@toonflow/server/agent/types";
 import { createConversationStream, createReplyStream, readAgentEvents } from "./replyStream";
 import { mentionPlainText } from "./mentionText";
@@ -122,6 +123,7 @@ const pendingMessage = props.initialSession?.parentFile ? undefined : workspaceS
 const selectedModel = ref(pendingMessage?.model ?? (props.initialSession?.providerId && props.initialSession.modelId
   ? JSON.stringify([props.initialSession.providerId, props.initialSession.modelId]) : props.initialModel ?? ""));
 const reasoningEffort = ref(pendingMessage?.reasoningEffort ?? props.initialSession?.thinkingLevel ?? "");
+const generationMode = ref<AgentGenerationMode>("ask");
 const selectedModelChoice = useNodeModelSelection(modelChoices, selectedModel);
 const contextWindow = computed(() => contextUsage.value?.contextWindow ?? selectedModelChoice.value?.contextWindow ?? 262144);
 function showSteeringMessage(message: AgentQueuedMessage) {
@@ -205,7 +207,7 @@ function receiveEvent(event: AgentEvent) {
   }
 }
 
-defineExpose({ receiveEvent, beginProjectStop, insertMentions: (mentions: AgentMention[]) => input.value?.insertMentions(mentions), getRunId: () => runId, getSelectedModel: () => selectedModel.value });
+defineExpose({ receiveEvent, beginProjectStop, insertMentions: (mentions: AgentMention[], prompt?: string) => input.value?.insertMentions(mentions, prompt), getRunId: () => runId, getSelectedModel: () => selectedModel.value });
 
 function submitMessage(mode?: "steer" | "followUp") {
   if (busy.value || remoteRunning.value) return sendQueuedMessage(mode ?? "followUp");
@@ -472,6 +474,7 @@ async function sendCanvasResult(event: Extract<AgentEvent, { type: "canvasCall" 
 }
 
 async function sendMessage(source?: AgentMessage) {
+  const requestGenerationMode = generationMode.value;
   const instance = input.value;
   const draft = instance?.getDraft();
   const editing = source && editingId.value === source.id;
@@ -535,7 +538,7 @@ async function sendMessage(source?: AgentMessage) {
     const response = await fetch("/api/agent", {
       method: "POST",
       headers: { "Accept-Language": locale.value, "Content-Type": "application/json", "x-toonflow-workspace": "1" },
-      body: JSON.stringify({ prompt, mentions, attachments: attachments.map(({ name, path, mimeType }) => ({ name, path, mimeType })), directory, runId: requestRunId, providerId: currentModel.providerId, modelId: currentModel.modelId, thinkingLevel: reasoningEffort.value || undefined, sessionFile: props.sessionFile, resendFrom, canvas: canvasContext ? { id: canvasContext.id, tools: canvasContext.tools } : undefined }),
+      body: JSON.stringify({ prompt, mentions, attachments: attachments.map(({ name, path, mimeType }) => ({ name, path, mimeType })), directory, runId: requestRunId, providerId: currentModel.providerId, modelId: currentModel.modelId, thinkingLevel: reasoningEffort.value || undefined, generationMode: requestGenerationMode, sessionFile: props.sessionFile, resendFrom, canvas: canvasContext ? { id: canvasContext.id, tools: canvasContext.tools } : undefined }),
       signal: requestController.signal,
     });
     connected = response.ok;
