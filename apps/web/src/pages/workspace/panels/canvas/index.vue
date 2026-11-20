@@ -123,6 +123,8 @@
       :libraryVisible="libraryVisible"
       :assetsVisible="assetsVisible"
       :historyVisible="historyVisible"
+      :agentVisible="agentVisible"
+      @toggleAgent="agentVisible = !agentVisible"
       @openTool="toggleWorkspaceTool" />
     <section v-if="nodePanelVisible && active && canvasId" class="nodePanel nodrag nopan nowheel" aria-label="添加节点" @pointerdown.stop @click.stop @keydown.esc.stop="nodePanelVisible = false">
       <header class="nodePanelHeader">
@@ -256,6 +258,7 @@ const props = withDefaults(defineProps<{
   resolveCanvasContext?: (canvasId: string) => CanvasContext | undefined;
   flushCanvases?: (action?: () => Promise<void>) => Promise<void>;
 }>(), { active: true, settingsVisible: false, createDefaultCanvas: true });
+const agentVisible = defineModel<boolean>("agentVisible", { required: true });
 const { project } = storeToRefs(useWorkspaceStore());
 provide("textImagePromptInstruction", () => readImagePromptInstruction(settings.value.stores));
 provide("imagePresetPromptInstruction", (id: string) => readImagePresetPrompt(settings.value.stores, id));
@@ -1809,6 +1812,13 @@ const defaultEdgeOptions = markRaw({
   width: 100%;
   height: 100%;
 
+  html:not(.dark) & {
+    --canvasSelectionColor: color-mix(in srgb, var(--el-color-primary), var(--el-text-color-primary));
+
+    :deep(.nodeSkeleton .cardContainer > .contentCard.selectionFrame:not(.selected)) {
+      border-color: var(--el-card-border-color, var(--el-border-color-light));
+    }
+  }
 
   .nodePanel {
     position: absolute;

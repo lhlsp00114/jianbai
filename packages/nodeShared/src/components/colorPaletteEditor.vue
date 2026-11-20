@@ -268,8 +268,14 @@ function createPalette() {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 20px;
   padding: 24px;
-  .el-input__wrapper { box-shadow: none; background: var(--el-fill-color); border-radius: 9px; &.is-focus { box-shadow: 0 0 0 1px #888 inset; } }
-  .el-dialog__footer .el-button { border: 0; border-radius: 9px; background: var(--el-fill-color); }
-  .el-dialog__footer .el-button--primary { background: #fff; color: #161616; &:hover { background: #e9e9e9; } &.is-disabled { background: var(--el-fill-color); color: var(--el-text-color-disabled); } }
+  background: var(--el-bg-color-overlay);
+  .el-input__wrapper { box-shadow: none; background: var(--el-fill-color); border-radius: 9px; &.is-focus { box-shadow: 0 0 0 1px var(--el-color-primary) inset; } }
+  .el-dialog__footer .el-button { border: 0; border-radius: 9px; background: var(--el-fill-color); color: var(--el-text-color-primary); &:hover { background: var(--el-fill-color-dark); } }
+  .el-dialog__footer .el-button--primary {
+    background: var(--el-text-color-primary);
+    color: var(--el-bg-color);
+    &:hover { background: var(--el-text-color-regular); }
+    &.is-disabled { background: var(--el-fill-color); color: var(--el-text-color-disabled); }
+  }
 }
 </style>

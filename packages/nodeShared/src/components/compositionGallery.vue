@@ -107,8 +107,27 @@ function confirmSelection() {
   button { padding: 4px 0; border: 0; background: transparent; color: var(--el-text-color-secondary); font: inherit; font-size: 14px; cursor: pointer; }
   button[aria-selected="true"] { color: var(--el-text-color-primary); font-weight: 600; }
 }
-.galleryToolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 4px 0 20px; .compositionSearch { width: min(240px, 100%); :deep(.el-input__wrapper) { background: #242424; box-shadow: none; border-radius: 10px; } :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px #888 inset; } }
-  .createPaletteButton { flex-shrink: 0; background: #fff; border-color: #fff; color: #161616; border-radius: 9px; :deep(> span) { gap: 6px; } &:hover { background: #e9e9e9; border-color: #e9e9e9; } } }
+.galleryToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 4px 0 20px;
+  .compositionSearch {
+    width: min(240px, 100%);
+    :deep(.el-input__wrapper) { background: var(--el-fill-color); box-shadow: none; border-radius: 10px; }
+    :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px var(--el-color-primary) inset; }
+  }
+  .createPaletteButton {
+    flex-shrink: 0;
+    background: var(--el-text-color-primary);
+    border-color: var(--el-text-color-primary);
+    color: var(--el-bg-color);
+    border-radius: 9px;
+    :deep(> span) { gap: 6px; }
+    &:hover { background: var(--el-text-color-regular); border-color: var(--el-text-color-regular); }
+  }
+}
 .compositionFooter {
   display: flex;
   align-items: center;
@@ -139,7 +158,7 @@ function confirmSelection() {
   .compositionCard {
     min-width: 0;
     margin: 0;
-    &.chosen .compositionPreview { outline: 1px solid #fff; outline-offset: 2px; }
+    &.chosen .compositionPreview { outline: 1px solid var(--el-text-color-primary); outline-offset: 2px; }
 
     .compositionPreview {
       position: relative;
@@ -203,20 +222,27 @@ function confirmSelection() {
 
 <style lang="scss">
 .compositionGallery.el-dialog {
-  --el-bg-color: #171717;
-  --el-text-color-primary: #f0f0f0;
-  --el-text-color-regular: #d0d0d0;
-  --el-text-color-secondary: #999;
   padding: 20px 18px 16px;
-  border: 1px solid #2c2c2c;
+  border: 1px solid var(--el-border-color-lighter);
   border-radius: 24px;
-  background: #171717;
+  background: var(--el-bg-color-overlay);
   .el-dialog__header { padding-bottom: 16px; }
   .el-dialog__footer { padding-top: 24px; }
-  .compositionFooter .el-button { min-width: 80px; height: 36px; margin-left: 0; border: 0; border-radius: 10px; background: #242424; color: #f0f0f0;
-    &:hover { background: #333; }
-    &.el-button--primary { background: #fff; color: #161616; }
-    &.is-disabled { background: #242424; color: #777; }
+  .compositionFooter .el-button {
+    min-width: 80px;
+    height: 36px;
+    margin-left: 0;
+    border: 0;
+    border-radius: 10px;
+    background: var(--el-fill-color);
+    color: var(--el-text-color-primary);
+    &:hover { background: var(--el-fill-color-dark); }
+    &.el-button--primary {
+      background: var(--el-text-color-primary);
+      color: var(--el-bg-color);
+      &:hover { background: var(--el-text-color-regular); }
+    }
+    &.is-disabled { background: var(--el-fill-color); color: var(--el-text-color-disabled); }
   }
 }
 </style>

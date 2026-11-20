@@ -48,7 +48,7 @@
               @dragover.stop="previewDrop($event, column, item)"
               @drop.stop="dropItem($event, column, item)">
               <button class="itemSelect" type="button" :aria-label="`选择${item.label}`" :aria-pressed="selectedId === item.id" @click="selectItem(item)">
-                <component :is="item.children ? openGroups.includes(item.id) ? IconFolderOpen : IconFolder : nodeIcons[item.type ?? ''] ?? IconBox" class="itemIcon" :size="18" aria-hidden="true" />
+                <component :is="item.children ? openGroups.includes(item.id) ? IconFolderOpen : IconFolder : getNodeIcon(item.type) ?? nodeIcons[item.type ?? ''] ?? IconBox" class="itemIcon" :size="14" aria-hidden="true" />
                 <span class="itemLabel" :title="item.label">{{ item.label }}</span>
                 <span v-if="item.type && disabledTypes.has(item.type)" class="itemStatus" title="已停用">停用</span>
               </button>
@@ -123,12 +123,13 @@ import axios from "axios";
 import { translate } from "@toonflow/i18n/vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from "vue";
 import { ElMessage, type InputInstance } from "element-plus";
-import { IconBox, IconFolder, IconFolderOpen, IconFolderMinus, IconRestore, IconChevronRight, IconEdit, IconEye, IconEyeOff, IconPlus, IconDragDrop, IconPhoto, IconMusic, IconMusicBolt, IconPhotoSpark, IconMovie } from "@tabler/icons-vue";
+import { IconBox, IconFolder, IconFolderOpen, IconFolderMinus, IconRestore, IconChevronRight, IconEdit, IconEye, IconEyeOff, IconPlus, IconDragDrop, IconPhoto, IconMusic, IconMusicBolt, IconPhotoSpark, IconMovie, IconBrush, IconSeparatorVertical } from "@tabler/icons-vue";
 import textNodeIcon from "@toonflow/node-shared/textNodeIcon";
 import directorIcon from "@toonflow/node-shared/directorIcon";
 import videoIcon from "@toonflow/node-shared/videoIcon";
 import videoGenerationIcon from "@toonflow/node-shared/videoGenerationIcon";
 import { storyboardOption } from "@/pages/workspace/panels/canvas/storyboard";
+import { getNodeIcon } from "@/pages/workspace/panels/canvas/loadNodeComponent";
 import { normalizeNodeMenu, resolveNodeMenu, serializeNodeMenu, type NodeMenuItem } from "@toonflow/server/nodeMenu";
 import { generalSettings, updateGeneralSettings } from "@/stores/settings";
 
@@ -146,6 +147,9 @@ const nodeIcons: Record<string, Component> = {
   "remote-imageGenerationNode": IconPhotoSpark,
   "remote-videoGenerationNode": videoGenerationIcon,
   "remote-scriptGeneratorNode": IconMovie,
+  "remote-frameAnalysisNode": IconMovie,
+  "remote-drawingBoardNode": IconBrush,
+  "remote-imageCompareNode": IconSeparatorVertical,
   [storyboardOption.type]: storyboardOption.icon,
 };
 const installedNodes = ref<{ type: string; label: string; enabled: boolean }[]>([]);

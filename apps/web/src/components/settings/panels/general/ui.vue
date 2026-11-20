@@ -180,15 +180,15 @@ function captureThemeClickPoint(event: MouseEvent) {
   themeClickPoint = { x: event.clientX, y: event.clientY };
 }
 function changeTheme(value: string) {
+  if (!document.startViewTransition || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    updateUiSettings({ theme: value });
+    return;
+  }
   const { x, y } = themeClickPoint;
   const root = document.documentElement;
   root.style.setProperty("--themeX", `${x}px`);
   root.style.setProperty("--themeY", `${y}px`);
   root.style.setProperty("--themeR", `${Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y))}px`);
-  if (!document.startViewTransition) {
-    updateUiSettings({ theme: value });
-    return;
-  }
   document.startViewTransition(async () => {
     updateUiSettings({ theme: value });
     await nextTick();

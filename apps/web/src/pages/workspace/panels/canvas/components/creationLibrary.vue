@@ -1,8 +1,8 @@
 <template>
-  <el-dialog v-model="visible" class="creationLibraryDialog" :title="draft ? (draft.kind === 'skill' ? '编辑 Skill' : '编辑提示词') : '创作收藏'" width="min(1200px, calc(100vw - 32px))" alignCenter appendToBody :closeOnClickModal="false" :beforeClose="close" @closed="resetDraft">
-    <template v-if="!draft" #header="{ titleId, titleClass }">
+  <el-dialog v-model="visible" class="creationLibraryDialog" title="创作广场" width="min(1200px, calc(100vw - 32px))" alignCenter appendToBody :closeOnClickModal="false" :beforeClose="close" @closed="resetDraft">
+    <template #header="{ titleId, titleClass }">
       <div class="libraryHeader">
-        <span :id="titleId" :class="titleClass">创作收藏</span>
+        <h2 :id="titleId" :class="titleClass">创作广场</h2>
         <nav class="libraryViewTabs" aria-label="当前分类视图">
           <template v-if="builtinCategory">
             <button v-for="item in instructionTabs" :key="item.value" type="button" :aria-pressed="instructionType === item.value" @click="switchInstruction(item.value)">{{ item.label }}</button>
@@ -16,38 +16,51 @@
       </div>
     </template>
     <div class="creationLibrary" @keydown.stop @pointerdown.stop @wheel.stop>
-      <div v-if="!draft" class="libraryNavigation">
-        <nav class="libraryCategories" aria-label="收藏分类">
-          <button type="button" :class="{ active: builtinCategory }" :aria-pressed="builtinCategory" @click="selectCategory('builtin')"><icon-adjustments :size="16" />内置提示词</button>
-          <button type="button" :class="{ active: category === 'prompt' }" :aria-pressed="category === 'prompt'" @click="selectCategory('prompt')"><icon-message :size="16" />提示词</button>
-          <button type="button" :class="{ active: category === 'skill' }" :aria-pressed="category === 'skill'" @click="selectCategory('skill')"><icon-book :size="16" />Skill</button>
+      <div class="libraryNavigation">
+        <nav class="libraryCategories" aria-label="创作广场分类">
+          <button type="button" :aria-pressed="builtinCategory" @click="selectCategory('builtin')"><icon-adjustments :size="16" aria-hidden="true" />内置提示词</button>
+          <hr class="categoryDivider" />
+          <button type="button" :aria-pressed="category === 'prompt'" @click="selectCategory('prompt')"><icon-message :size="16" aria-hidden="true" />提示词</button>
+          <button type="button" :aria-pressed="category === 'skill'" @click="selectCategory('skill')"><icon-book :size="16" aria-hidden="true" />Skill</button>
         </nav>
       </div>
-      <builtinNodeInstructions v-if="visible && builtinCategory" :key="instructionType" ref="builtinEditor" :section="instructionType" />
+      <builtinNodeInstructions v-if="visible && builtinCategory" :key="instructionType" ref="builtinEditor" :section="instructionType" :search="search">
+        <template #default="{ cards, selectInstruction }">
+          <div class="libraryToolbar">
+            <el-input v-model="search" clearable :prefixIcon="IconSearch" placeholder="搜索内置提示词" aria-label="搜索内置提示词" />
+          </div>
+          <div class="libraryBody">
+            <div class="entryList" :style="{ '--cardWidth': `${208 - gridDensity * 28}px` }" role="region" aria-label="内置提示词列表">
+              <button v-for="card in cards" :key="card.id" class="entryItem builtinEntry" type="button" :title="card.label" :aria-label="card.label" @click="selectInstruction(card.id)">
+                <span class="entryPreview"><span class="entryExcerpt">{{ card.preview }}</span></span>
+                <span class="entryTitle">{{ card.label }}</span>
+              </button>
+              <div v-if="search.trim() && !cards.length" class="searchEmpty">
+                <span role="status">当前分类没有匹配项</span>
+                <el-button text @click="search = ''">清除搜索</el-button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </builtinNodeInstructions>
       <el-alert v-if="!builtinCategory && (library.error || operationError)" :title="library.error || operationError" type="error" :closable="false" showIcon />
-      <div v-if="draft" class="editorNavigation">
-        <el-button text :icon="IconArrowLeft" :disabled="busy" @click="backToGrid">返回收藏</el-button>
-        <span class="saveHint" role="status">{{ saving ? "正在保存…" : "返回或关闭时自动保存" }}</span>
-      </div>
-      <div v-else-if="!builtinCategory" class="libraryToolbar">
-        <el-input v-model="search" clearable :prefixIcon="IconSearch" placeholder="搜索收藏名称或内容" aria-label="搜索收藏" />
-        <el-button v-if="libraryView === 'mine'" :icon="IconPlus" :disabled="busy || !!library.error" @click="createEntry">新增收藏</el-button>
-        <el-button v-if="libraryView === 'mine'" :icon="IconUpload" :disabled="busy || !!library.error" @click="fileInput?.click()">导入文件</el-button>
-        <el-popover placement="bottom-end" trigger="click" :width="200" title="视图密度">
-          <template #reference><el-button :icon="IconAdjustments" title="视图密度" aria-label="视图密度" /></template>
-          <input v-model.number="gridDensity" class="densitySlider" type="range" min="0" max="4" step="1" aria-label="视图密度" />
-        </el-popover>
+      <div v-if="!builtinCategory && !draft && !officialPreview" class="libraryToolbar">
+        <el-input v-model="search" clearable :prefixIcon="IconSearch" :placeholder="category === 'skill' ? '搜索 Skill' : '搜索提示词'" aria-label="搜索名称或内容" />
+        <div class="libraryActions">
+          <el-button v-if="libraryView === 'mine'" text :icon="IconPlus" :disabled="busy || !!library.error" @click="createEntry">新建</el-button>
+          <el-button v-if="libraryView === 'mine'" text :icon="IconUpload" title="导入文件" aria-label="导入文件" :disabled="busy || !!library.error" @click="fileInput?.click()" />
+          <el-popover placement="bottom-end" trigger="click" :width="200" title="视图密度">
+            <template #reference><el-button text :icon="IconAdjustments" title="视图密度" aria-label="视图密度" /></template>
+            <input v-model.number="gridDensity" class="densitySlider" type="range" min="0" max="4" step="1" aria-label="视图密度" />
+          </el-popover>
+        </div>
         <input ref="fileInput" type="file" accept=".md,.markdown,.txt" hidden aria-label="导入 Skill 或提示词文本" @change="importEntry" />
       </div>
       <div v-if="category === 'skill' && libraryView === 'official'" class="officialEmpty" role="status">暂无官方 Skill</div>
       <div v-else-if="!builtinCategory" class="libraryBody">
-        <nav v-if="!draft" class="entryList" :style="{ '--cardWidth': `${204 - gridDensity * 28}px` }" aria-label="收藏列表">
-          <button v-if="libraryView === 'mine'" class="entryItem createEntryCard" type="button" :disabled="busy || !!library.error" @click="createEntry">
-            <icon-plus :size="28" aria-hidden="true" />
-            <span>{{ category === "skill" ? "创建 Skill" : "创建提示词" }}</span>
-          </button>
+        <div v-if="!draft && !officialPreview" class="entryList" :style="{ '--cardWidth': `${208 - gridDensity * 28}px` }" role="region" aria-label="创作条目">
           <div v-for="{ entry, title, excerpt } in filteredEntries" :key="entry.id" class="entryCard">
-            <button class="entryItem" :class="{ hasCover: !!entry.cover && !excerpt.hit, dragging: draggedId === entry.id, dropBefore: dropTarget?.id === entry.id && !dropTarget.after, dropAfter: dropTarget?.id === entry.id && dropTarget.after }" type="button" :disabled="busy" :draggable="!busy && libraryView === 'mine'" title="点击编辑，按住拖动排序；也可使用 Alt + 左右方向键排序" @click="selectEntry(entry)" @dragstart.stop="startSort($event, entry)" @dragover.stop="overSort($event, entry)" @drop.stop="dropSort($event, entry)" @dragend.stop="endSort" @keydown.alt.left.prevent.stop="moveEntry(entry, -1)" @keydown.alt.right.prevent.stop="moveEntry(entry, 1)">
+            <button class="entryItem" :class="{ dragging: draggedId === entry.id, dropBefore: dropTarget?.id === entry.id && !dropTarget.after, dropAfter: dropTarget?.id === entry.id && dropTarget.after }" type="button" :disabled="busy" :draggable="!busy && libraryView === 'mine'" :title="entry.title" @click="selectEntry(entry)" @dragstart.stop="startSort($event, entry)" @dragover.stop="overSort($event, entry)" @drop.stop="dropSort($event, entry)" @dragend.stop="endSort" @keydown.alt.left.prevent.stop="moveEntry(entry, -1)" @keydown.alt.right.prevent.stop="moveEntry(entry, 1)">
               <span class="entryPreview">
                 <img v-if="entry.cover && !excerpt.hit" class="entryCover" :src="entry.cover" alt="" draggable="false" />
                 <span v-else class="entryExcerpt">{{ excerpt.before }}<mark v-if="excerpt.hit">{{ excerpt.hit }}</mark>{{ excerpt.after }}</span>
@@ -65,38 +78,34 @@
             <el-button text @click="search = ''">清除搜索</el-button>
           </div>
           <div v-else-if="libraryView === 'recent' && !filteredEntries.length && !library.error" class="searchEmpty" role="status">当前分类暂无最近使用记录</div>
-        </nav>
+        </div>
         <div v-else class="entryEditor">
-          <template v-if="draft">
-            <div class="editorLayout">
-              <aside class="entryDetails" aria-label="收藏信息">
-                <div class="nameField">
-                  <label :for="titleInputId" class="fieldLabel">名称</label>
-                  <el-input :id="titleInputId" v-model="draft.title" :maxlength="120" aria-label="收藏名称" placeholder="留空时使用正文首行" :disabled="busy" />
-                </div>
+          <header class="libraryToolbar editorToolbar">
+            <el-button text :icon="IconArrowLeft" :disabled="busy" @click="backToGrid">返回列表</el-button>
+            <el-input v-if="draft" v-model="draft.title" :maxlength="120" aria-label="收藏名称" placeholder="名称（留空时使用正文首行）" :disabled="busy" />
+            <h3 v-else-if="officialPreview">{{ officialPreview.title }}</h3>
+            <div v-if="draft" class="libraryActions">
+              <el-popover placement="bottom-end" trigger="click" :width="216">
+                <template #reference><el-button text :icon="IconPhoto" title="封面图" aria-label="封面图" :disabled="busy" /></template>
                 <div class="coverEditor">
-                  <span class="fieldLabel">封面图 <small>可选</small></span>
                   <img v-if="draft.cover" :src="draft.cover" alt="收藏封面" />
-                  <div class="coverActions">
-                    <el-button :icon="IconUpload" :loading="coverLoading" :disabled="busy" @click="coverInput?.click()">{{ draft.cover ? "替换封面" : "上传封面" }}</el-button>
-                    <el-button v-if="draft.cover" text :disabled="busy" @click="delete draft.cover">移除封面</el-button>
-                  </div>
-                  <input ref="coverInput" type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label="选择收藏封面" @change="importCover" />
+                  <el-button text :icon="IconUpload" :loading="coverLoading" :disabled="busy" @click="coverInput?.click()">{{ draft.cover ? "替换封面" : "上传封面" }}</el-button>
+                  <el-button v-if="draft.cover" text :disabled="busy" @click="delete draft.cover">移除封面</el-button>
                 </div>
-              </aside>
-              <section class="entryContent" aria-label="正文编辑区">
-                <label :for="contentInputId" class="fieldLabel">{{ draft.kind === "skill" ? "Skill 内容" : "提示词内容" }}</label>
-                <el-input :id="contentInputId" v-model="draft.content" class="contentInput" type="textarea" :maxlength="64000" resize="none" :spellcheck="false" aria-label="收藏内容" :disabled="busy" />
-              </section>
+              </el-popover>
+              <el-button text :icon="IconDownload" title="导出文本" aria-label="导出文本" :loading="exporting" :disabled="busy || !draft.content.trim()" @click="exportEntry" />
+              <el-button text :icon="IconCopy" title="复制内容" aria-label="复制内容" :disabled="busy || !draft.content" @click="copyContent(draft.content)" />
+              <el-button v-if="original" text :icon="IconStarOff" title="取消收藏" aria-label="取消收藏" :disabled="busy" @click="removeEntry" />
+              <el-button text type="primary" :icon="IconCheck" :loading="saving" :disabled="busy || !dirty || !draft.content.trim()" @click="saveEntry">保存</el-button>
             </div>
-            <div class="editorActions">
-              <el-button v-if="original" text type="danger" :icon="IconStarOff" :disabled="busy" @click="removeEntry">取消收藏</el-button>
-              <span class="actionSpacer" />
-              <el-button text :icon="IconDownload" :loading="exporting" :disabled="busy || !draft.content.trim()" @click="exportEntry">导出文本</el-button>
-              <el-button text :icon="IconCopy" :disabled="busy || !draft.content" @click="copyContent(draft.content)">复制内容</el-button>
-              <el-button type="primary" :loading="saving" :disabled="busy || !dirty || !draft.content.trim()" @click="saveEntry">保存</el-button>
+            <div v-else-if="officialPreview" class="libraryActions">
+              <el-button text :icon="IconCopy" title="复制内容" aria-label="复制内容" @click="copyContent(officialPreview.content, officialPreview.id)" />
             </div>
-          </template>
+          </header>
+          <input v-if="draft" ref="coverInput" type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label="选择收藏封面" @change="importCover" />
+          <el-input v-if="draft" v-model="draft.content" class="contentInput" type="textarea" :maxlength="64000" resize="none" :spellcheck="false" :aria-label="draft.kind === 'skill' ? 'Skill 内容' : '提示词内容'" :disabled="busy" />
+          <el-input v-else-if="officialPreview" :modelValue="officialPreview.content" class="contentInput" type="textarea" resize="none" aria-label="官方提示词内容" readonly />
+          <span v-if="draft && (dirty || saving)" class="saveHint" role="status">{{ saving ? "正在保存…" : "返回、切换分类或关闭时自动保存" }}</span>
         </div>
       </div>
     </div>
@@ -105,9 +114,9 @@
 
 <script setup lang="ts">
 import axios from "axios";
-import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { IconAdjustments, IconArrowLeft, IconBook, IconCopy, IconDownload, IconMessage, IconPlus, IconSearch, IconSend, IconStar, IconStarOff, IconUpload } from "@tabler/icons-vue";
+import { IconAdjustments, IconArrowLeft, IconBook, IconCheck, IconCopy, IconDownload, IconMessage, IconPhoto, IconPlus, IconSearch, IconSend, IconStar, IconStarOff, IconUpload } from "@tabler/icons-vue";
 import { translate } from "@toonflow/i18n/vue";
 import { saveSettings, settings, settingsStorage } from "@/stores/settings";
 import { writeClipboardText } from "@/lib/clipboard";
@@ -119,7 +128,7 @@ import { officialPrompts } from "./officialPrompts";
 type Entry = { id: string; kind: "skill" | "prompt"; title: string; content: string; cover?: string };
 const visible = defineModel<boolean>({ default: false });
 const props = defineProps<{ sendToCanvas?: (entry: Entry) => Promise<void>; officialPromptsOnOpen?: boolean }>();
-const category = ref<"skill" | "prompt" | "builtin">("builtin");
+const category = ref<"skill" | "prompt" | "builtin">("prompt");
 const instructionTabs = [{ value: "text", label: translate("文本节点") }, { value: "comic", label: translate("漫画提示词") }, { value: "image", label: translate("图片生成节点") }] as const;
 const instructionType = ref<(typeof instructionTabs)[number]["value"]>("text");
 const libraryView = ref<"mine" | "official" | "recent">("mine");
@@ -147,9 +156,8 @@ function toggleStar(id: string) {
 const builtinEditor = ref<InstanceType<typeof builtinNodeInstructions>>();
 const search = ref("");
 const draft = ref<Entry>();
+const officialPreview = ref<Entry>();
 const original = ref("");
-const titleInputId = useId();
-const contentInputId = useId();
 const saving = ref(false);
 const importing = ref(false);
 const confirming = ref(false);
@@ -226,6 +234,7 @@ const filteredEntries = computed(() => {
 
 function resetDraft() {
   draft.value = undefined;
+  officialPreview.value = undefined;
   original.value = "";
   operationError.value = "";
 }
@@ -263,7 +272,9 @@ async function selectCategory(next: typeof category.value) {
 }
 
 async function switchInstruction(next: typeof instructionType.value) {
-  if (next !== instructionType.value && await saveBeforeLeaving()) instructionType.value = next;
+  if (next === instructionType.value || !await saveBeforeLeaving()) return;
+  search.value = "";
+  instructionType.value = next;
 }
 
 async function selectView(next: typeof libraryView.value) {
@@ -283,11 +294,11 @@ async function createEntry() {
 async function selectEntry(entry: Entry) {
   if (Date.now() < suppressClickUntil || entry.id === draft.value?.id || !await saveBeforeLeaving()) return;
   recordRecent(entry.id);
+  resetDraft();
   if (officialPrompts.some(prompt => prompt === entry)) {
-    await ElMessageBox.alert(entry.content, entry.title, { confirmButtonText: translate("关闭") }).catch(() => {});
+    officialPreview.value = entry;
     return;
   }
-  resetDraft();
   draft.value = { ...entry };
   original.value = JSON.stringify(entry);
 }
@@ -519,16 +530,23 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
 </script>
 
 <style scoped lang="scss">
-.densitySlider { width: 100%; margin: 4px 0; accent-color: var(--el-text-color-primary); }
+.densitySlider { display: block; width: 100%; margin: 6px 0; accent-color: var(--el-color-primary); }
+.coverEditor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  img { width: 100%; max-height: 180px; object-fit: contain; border-radius: 8px; background: var(--el-fill-color-light); }
+  :deep(.el-button) { margin: 0; padding: 0 8px; border-radius: 8px; }
+}
 :global(.el-dialog.creationLibraryDialog) {
   --librarySelectedText: var(--el-text-color-primary);
-  --libraryMutedText: color-mix(in srgb, var(--el-text-color-primary) 72%, var(--el-bg-color));
-  --el-dialog-border-radius: 30px;
+  --libraryMutedText: var(--el-text-color-secondary);
+  --libraryContentOffset: 176px;
+  --el-dialog-border-radius: 24px;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 30px;
   display: flex;
   flex-direction: column;
-  height: min(740px, 85dvh);
+  height: min(780px, 92dvh);
   max-height: calc(100dvh - 32px);
   overflow: hidden;
 }
@@ -539,12 +557,14 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
   overflow: hidden;
 }
 
-:global(.dark .creationLibraryDialog) { --librarySelectedText: #fff; }
 .libraryHeader {
-  display: grid; grid-template-columns: 174px minmax(0, 1fr); align-items: center; gap: 0;
-  .el-dialog__title { color: var(--libraryMutedText); font-size: 13px; font-weight: 500; }
+  display: grid;
+  grid-template-columns: var(--libraryContentOffset) minmax(0, 1fr);
+  align-items: center;
+  padding-right: 26px;
+  .el-dialog__title { margin: 0; color: var(--libraryMutedText); font-size: 14px; font-weight: 600; }
   .libraryViewTabs {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 2px 16px;
     button {
       min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--libraryMutedText); font: inherit; font-size: 13px; font-weight: 400; cursor: pointer;
       &:hover { color: var(--el-text-color-regular); }
@@ -555,42 +575,48 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
   @media (max-width: 640px) { grid-template-columns: 1fr; gap: 6px; }
 }
 .creationLibrary {
-  .officialEmpty { padding: 64px 12px; text-align: center; color: var(--el-text-color-secondary); border: 1px dashed var(--el-border-color); border-radius: 16px; }
+  .officialEmpty { padding: 48px 12px; text-align: center; color: var(--el-text-color-secondary); }
   position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  gap: 12px;
+  gap: 14px;
   > :deep(.el-alert) { flex-shrink: 0; }
   .libraryNavigation {
     position: absolute;
     inset: 0 auto 0 0;
-    width: 155px;
+    width: calc(var(--libraryContentOffset) - 16px);
     box-sizing: border-box;
-    padding-right: 12px;
+    padding-right: 8px;
     border-right: 1px solid var(--el-border-color-lighter);
     .libraryCategories {
       display: flex;
       flex-direction: column;
       gap: 4px;
+      .categoryDivider {
+        width: 100%;
+        margin: 2px 0;
+        border: 0;
+        border-top: 1px solid var(--el-border-color-lighter);
+      }
       button {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
         min-height: 36px;
         padding: 4px 6px;
         border: 0;
-        border-radius: 10px;
+        border-radius: 8px;
         background: transparent;
         color: var(--libraryMutedText);
         font: inherit;
         font-size: 13px;
-        svg { box-sizing: content-box; padding: 5px; border-radius: 8px; background: var(--el-fill-color-light); }
+        svg { box-sizing: content-box; padding: 5px; }
         cursor: pointer;
-        &:hover { color: color-mix(in srgb, var(--el-text-color-primary) 82%, transparent); }
-        &[aria-pressed="true"], &.active {
-          background: var(--el-fill-color);
+        &:hover { color: var(--librarySelectedText); }
+        &[aria-pressed="true"] {
+          background: var(--el-fill-color-light);
           color: var(--librarySelectedText);
           font-weight: 600;
         }
@@ -598,29 +624,22 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
       }
     }
   }
-  &:has(.libraryNavigation) { padding-left: 174px; box-sizing: border-box; }
-  .editorNavigation {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--el-border-color-lighter);
-    :deep(.el-button) { margin: 0; padding-left: 0; color: var(--el-text-color-regular); }
-    .saveHint { font-size: 12px; color: var(--el-text-color-secondary); }
-  }
+  padding-left: var(--libraryContentOffset);
+  box-sizing: border-box;
   .libraryToolbar {
     display: flex;
     flex-wrap: wrap;
     flex-shrink: 0;
     gap: 8px;
-    margin-bottom: 10px;
     :deep(.el-input) { flex: 1; min-width: 120px; max-width: 240px; margin-right: auto; }
     :deep(.el-input__wrapper) { background: var(--el-fill-color-light); border-radius: 10px; box-shadow: none; }
     :deep(.el-input__wrapper.is-focus) { box-shadow: inset 0 0 0 1px var(--el-color-primary); }
-    :deep(.el-button) { margin: 0; border-radius: 9px; }
+    .libraryActions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      :deep(.el-button) { margin: 0; padding: 0 8px; border-radius: 8px; }
+    }
   }
   .libraryBody {
     flex: 1;
@@ -630,7 +649,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--cardWidth)), 1fr));
       align-content: start;
-      gap: 12px;
+      gap: 20px 14px;
       height: 100%;
       overflow-y: auto;
       .entryCard {
@@ -638,15 +657,37 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
         min-width: 0;
         mark { background: var(--el-color-warning-light-8); color: var(--el-text-color-primary); }
         align-self: start;
-        .entryActions { position: absolute; inset: 0 0 auto; aspect-ratio: 4 / 5; display: flex; align-items: end; justify-content: end; padding: 5px; box-sizing: border-box; pointer-events: none; }
+        .entryActions {
+          position: absolute;
+          inset: 0 0 auto;
+          aspect-ratio: 3 / 4;
+          display: flex;
+          align-items: end;
+          justify-content: end;
+          gap: 4px;
+          padding: 6px;
+          box-sizing: border-box;
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+        }
+
+        &:hover .entryActions, &:focus-within .entryActions {
+          opacity: 1;
+          visibility: visible;
+        }
+
+        @media (hover: none) {
+          .entryActions { opacity: 1; visibility: visible; }
+        }
         .starEntry, .entryActions button {
           display: grid; place-items: center; pointer-events: auto;
           width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
-          background: transparent; color: var(--el-text-color-secondary); cursor: pointer;
-          &:hover { background: var(--el-fill-color); color: var(--el-text-color-primary); }
+          background: var(--el-bg-color-overlay); color: var(--el-text-color-secondary); cursor: pointer;
+          &:hover { color: var(--el-text-color-primary); }
         }
         .starEntry {
-          position: absolute; inset: 4px 4px auto auto; background: var(--el-fill-color-light);
+          position: absolute; inset: 6px auto auto 6px;
           &[aria-pressed="true"] { color: var(--el-color-warning); svg { fill: currentColor; } }
         }
       }
@@ -665,44 +706,26 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
         color: var(--el-text-color-primary);
         text-align: left;
         font: inherit;
-        cursor: grab;
+        cursor: pointer;
         user-select: none;
-        &:active { cursor: grabbing; }
+        &[draggable="true"]:active { cursor: grabbing; }
+        &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: -2px; border-radius: 12px; }
         &.dragging { opacity: 0.4; }
-        &.dropBefore { box-shadow: inset 4px 0 var(--el-color-primary); }
-        &.dropAfter { box-shadow: inset -4px 0 var(--el-color-primary); }
-        .entryPreview, &.createEntryCard {
-          width: 100%; aspect-ratio: 4 / 5; box-sizing: border-box;
+        &.dropBefore .entryPreview { border-left: 3px solid var(--el-color-primary); }
+        &.dropAfter .entryPreview { border-right: 3px solid var(--el-color-primary); }
+        .entryPreview {
+          position: relative;
+          width: 100%; aspect-ratio: 3 / 4; box-sizing: border-box;
           overflow: hidden; border: 1px solid var(--el-border-color-lighter);
-          border-radius: var(--ui-radius-large, 16px); background: var(--el-fill-color-light);
+          border-radius: 12px; background: var(--el-fill-color-light);
         }
-        .entryCover { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-        &.hasCover {
-          padding: 0;
-          .entryExcerpt { display: none; }
-          &.dropBefore::after, &.dropAfter::after { content: ""; position: absolute; top: 0; bottom: 0; width: 4px; background: var(--el-color-primary); pointer-events: none; }
-          &.dropBefore::after { left: 0; }
-          &.dropAfter::after { right: 0; }
-        }
-        &:hover .entryPreview { border-color: var(--el-border-color-darker); }
-        &.createEntryCard {
-          align-self: start;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          border-style: dashed;
-          border-color: var(--el-border-color);
-          background: transparent;
-          color: var(--el-text-color-secondary);
-          cursor: pointer;
-          &:hover:not(:disabled) { color: var(--el-color-primary); border-color: var(--el-color-primary); background: var(--el-fill-color-light); }
-          &:disabled { cursor: not-allowed; opacity: 0.5; }
-        }
-        .entryPreview { position: relative; }
-        .entryPreview .entryExcerpt { position: absolute; inset: 0 0 23px; }
-        .entryTitle { width: 100%; line-height: 24px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 500; }
+        .entryCover { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+        &:hover .entryPreview { background: var(--el-fill-color); }
+        .entryPreview .entryExcerpt { position: absolute; inset: 0 0 21px; }
+        .entryTitle { width: 100%; line-height: 20px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 500; }
         .entryExcerpt { display: block; margin: 10px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.65; }
-        .entryExcerpt::before { content: ""; float: right; width: 22px; height: 20px; }
+        .entryExcerpt::before { content: ""; float: left; width: 25px; height: 20px; }
+        &.builtinEntry .entryExcerpt { inset-block-end: 0; &::before { content: none; } }
       }
     }
     .entryEditor {
@@ -711,66 +734,34 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
       min-width: 0;
       min-height: 0;
       height: 100%;
-      gap: 12px;
-      .editorLayout {
-        display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
+      gap: 14px;
+      .editorToolbar {
+        align-items: center;
+        > :deep(.el-button) { margin: 0; padding: 0 8px; border-radius: 8px; }
+        h3 { min-width: 0; margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+        .libraryActions { flex-wrap: wrap; margin-inline-start: auto; }
+      }
+      .contentInput {
         flex: 1;
         min-height: 0;
-        gap: 24px;
-        .fieldLabel { display: block; margin-bottom: 10px; color: var(--el-text-color-primary); font-size: 14px; font-weight: 600; }
-        .entryDetails {
-          display: flex;
-          flex-direction: column;
-          gap: 24px;
-          padding: 18px;
-          overflow-y: auto;
-          border: 1px solid var(--el-border-color-lighter);
-          border-radius: var(--ui-radius-small);
+        :deep(.el-textarea__inner) {
+          height: 100%;
+          padding: 14px 16px;
+          border-radius: 12px;
           background: var(--el-fill-color-light);
-          .coverEditor {
-            small { margin-left: 4px; color: var(--el-text-color-secondary); font-weight: 400; font-size: 12px; }
-            img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; margin-bottom: 12px; border-radius: 6px; background: var(--el-bg-color); }
-            .coverActions { display: flex; flex-wrap: wrap; gap: 4px; :deep(.el-button) { margin: 0; } }
-          }
-        }
-        .entryContent {
-          display: flex;
-          flex-direction: column;
-          min-width: 0;
-          min-height: 0;
-          .contentInput { flex: 1; min-height: 0; :deep(.el-textarea__inner) { height: 100%; padding: 14px 16px; line-height: 1.8; } }
+          box-shadow: none;
+          line-height: 1.8;
+          &:focus { box-shadow: inset 0 0 0 1px var(--el-color-primary); }
         }
       }
-      .editorActions {
-        display: flex;
-        flex-shrink: 0;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-        padding-top: 12px;
-        border-top: 1px solid var(--el-border-color-lighter);
-        .actionSpacer { flex: 1; }
-        :deep(.el-button) { margin: 0; }
-      }
+      .saveHint { flex-shrink: 0; font-size: 12px; color: var(--el-text-color-secondary); }
     }
   }
   @media (max-width: 640px) {
-    &:has(.libraryNavigation) { padding-left: 0; }
+    padding-left: 0;
     .libraryNavigation {
       position: static; width: 100%; padding: 0; border: 0;
       .libraryCategories { flex-direction: row; flex-wrap: wrap; margin: 4px 0 0; padding: 0; border: 0; }
-    }
-    .libraryToolbar { flex-wrap: wrap; }
-    .libraryBody {
-      .entryEditor .editorLayout {
-        display: flex;
-        flex-direction: column;
-        overflow-y: auto;
-        gap: 16px;
-        .entryDetails { flex-shrink: 0; padding: 12px; gap: 16px; .coverEditor img { width: 128px; } }
-        .entryContent { flex: 1 0 220px; }
-      }
     }
   }
 }

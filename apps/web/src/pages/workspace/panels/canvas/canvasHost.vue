@@ -3,6 +3,7 @@
     <canvasPanel
       v-for="entry in entries"
       v-model:selectedTool="selectedTool"
+      v-model:agentVisible="agentVisible"
       :key="entry.key"
       :ref="value => setInstance(entry.key, value)"
       class="canvasRuntime"
@@ -39,6 +40,7 @@ import { copyCanvasFiles, findRemainingCanvas, readCanvasFiles, type DocumentNod
 
 const props = withDefaults(defineProps<{ active?: boolean; settingsVisible?: boolean; menuTarget?: HTMLElement; createDefaultCanvas?: boolean }>(), { active: true, settingsVisible: false, createDefaultCanvas: true });
 const selectedTool = defineModel<"move" | "hand">("selectedTool", { default: "move" });
+const agentVisible = defineModel<boolean>("agentVisible", { required: true });
 type CanvasInstance = InstanceType<typeof canvasPanel>;
 const entries = shallowRef<{ key: string; fileName?: string }[]>([{ key: crypto.randomUUID() }]);
 const activeKey = ref(entries.value[0]!.key);

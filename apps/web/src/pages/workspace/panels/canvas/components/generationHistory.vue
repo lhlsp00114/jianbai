@@ -453,7 +453,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
   max-height: none;
   margin: 0;
   overflow: hidden;
-  background: #111315;
+  background: var(--el-bg-color);
 }
 
 :global(.el-dialog.historyViewerDialog .el-dialog__header) {
@@ -467,7 +467,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
   padding: 0;
 }
 
-.historyViewer { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; color: #f5f5f5; background: #111315; outline: none; }
+.historyViewer { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; color: var(--el-text-color-primary); outline: none; }
 
 .viewerToolbar {
   display: grid;
@@ -476,18 +476,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
   gap: 16px;
   min-height: 54px;
   padding: 0 18px;
-  border-bottom: 1px solid #303338;
-  background: #1b1d20;
+  border-bottom: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color-overlay);
 
   .viewerNavigation, .viewerActions { display: flex; align-items: center; gap: 6px; }
-  .viewerNavigation { justify-self: start; color: #d7d9dc; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .viewerNavigation { justify-self: start; color: var(--el-text-color-regular); font-size: 13px; font-variant-numeric: tabular-nums; }
   .viewerActions { justify-self: end; }
-  .viewerTitle { overflow: hidden; color: #d7d9dc; font-size: 13px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-  :deep(.el-button) { width: 36px; height: 36px; margin: 0; color: #e5e7eb; }
-  :deep(.el-button:hover) { background: #303338; }
+  .viewerTitle { overflow: hidden; color: var(--el-text-color-regular); font-size: 13px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+  :deep(.el-button) { width: 36px; height: 36px; margin: 0; }
 }
 
-.viewerStage { position: relative; display: grid; flex: 1; min-height: 0; place-items: center; overflow: hidden; background: #0c0d0e; touch-action: none; }
+.viewerStage { position: relative; display: grid; flex: 1; min-height: 0; place-items: center; overflow: hidden; background: var(--el-bg-color-page); touch-action: none; }
 .viewerStage.panning { cursor: grabbing; }
 
 .viewerMedia { position: absolute; inset: 0; display: grid; width: 100%; height: 100%; place-items: center; overflow: hidden; }
@@ -510,22 +509,23 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
 .viewerMedia audio { width: min(80%, 720px); }
 
 .viewerZoom { position: absolute; top: 16px; right: 18px; z-index: 2; display: flex; align-items: center; gap: 6px; }
-.viewerZoom :deep(.el-button), .zoomReset { width: 38px; height: 38px; border: 1px solid #3b3e43; border-radius: 8px; color: #f2f3f4; background: #1b1d20; }
+.viewerZoom :deep(.el-button), .zoomReset { width: 38px; height: 38px; border: 1px solid var(--el-border-color); border-radius: 8px; color: var(--el-text-color-primary); background: var(--el-bg-color-overlay); }
+.viewerZoom :deep(.el-button:disabled) { color: var(--el-text-color-disabled); }
 .zoomReset { width: 54px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; }
 
-.viewerInfo { position: absolute; top: 68px; right: 18px; z-index: 2; display: grid; gap: 18px; width: 220px; max-height: calc(100% - 90px); overflow: auto; padding: 16px; border: 1px solid #373a3f; border-radius: 12px; background: rgb(29 31 34 / 94%); box-shadow: 0 8px 24px rgb(0 0 0 / 22%); }
+.viewerInfo { position: absolute; top: 68px; right: 18px; z-index: 2; display: grid; gap: 18px; width: 220px; max-height: calc(100% - 90px); overflow: auto; padding: 16px; border: 1px solid var(--el-border-color); border-radius: 12px; background: var(--el-bg-color-overlay); box-shadow: var(--el-box-shadow-light); }
 .infoField { display: grid; gap: 5px; min-width: 0; }
-.infoField span { color: #969ba2; font-size: 12px; }
-.infoField strong { overflow-wrap: anywhere; color: #f3f4f5; font-size: 13px; font-weight: 500; line-height: 1.45; }
+.infoField span { color: var(--el-text-color-secondary); font-size: 12px; }
+.infoField strong { overflow-wrap: anywhere; color: var(--el-text-color-primary); font-size: 13px; font-weight: 500; line-height: 1.45; }
 
-.viewerPrompt { display: flex; align-items: center; gap: 8px; width: min(720px, calc(100% - 32px)); max-height: min(180px, 28vh); align-self: center; margin: 12px 0 16px; padding: 10px 12px; border: 1px solid #373a3f; border-radius: 10px; background: #1b1d20; }
+.viewerPrompt { display: flex; align-items: center; gap: 8px; width: min(720px, calc(100% - 32px)); max-height: min(180px, 28vh); align-self: center; margin: 12px 0 16px; padding: 10px 12px; border: 1px solid var(--el-border-color); border-radius: 10px; background: var(--el-bg-color-overlay); }
 .promptText { flex: 1; min-width: 0; max-height: 3.2em; overflow: auto; }
 .promptText:not(.expanded) { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .promptText.expanded { max-height: min(160px, 24vh); }
-.promptText p { margin: 0; color: #f0f1f2; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.promptText .promptEmpty { color: #969ba2; }
+.promptText p { margin: 0; color: var(--el-text-color-primary); font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.promptText .promptEmpty { color: var(--el-text-color-secondary); }
 .promptActions { display: flex; flex: 0 0 auto; align-items: center; }
-.promptActions :deep(.el-button) { margin: 0; color: #c3c7cc; }
+.promptActions :deep(.el-button) { margin: 0; }
 
 @media (max-width: 640px) {
   .historyGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

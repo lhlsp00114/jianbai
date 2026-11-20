@@ -21,13 +21,9 @@
         <icon-upload :size="22" aria-hidden="true" />
       </el-button>
     </el-tooltip>
-    <el-tooltip :showArrow="false" content="创作收藏" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-      <el-button class="sideToolButton" :class="{ active: libraryVisible }" text :aria-pressed="libraryVisible" aria-label="创作收藏" @click="emit('openTool', 'library')">
-        <svg class="creationLibraryIcon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-          <path d="M7 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1" />
-          <rect x="7" y="3" width="14" height="15" rx="2" />
-          <path d="m14 6 1 2 2 1-2 1-1 2-1-2-2-1 2-1Z M11 15h6" />
-        </svg>
+    <el-tooltip :showArrow="false" content="创作广场" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+      <el-button class="sideToolButton" :class="{ active: libraryVisible }" text :aria-pressed="libraryVisible" aria-label="创作广场" @click="emit('openTool', 'library')">
+        <icon-apps :size="'24'" :stroke="'1.7'" aria-hidden="true" />
       </el-button>
     </el-tooltip>
     <el-tooltip v-if="currentUser?.role !== 'user'" :showArrow="false" :content="assetsVisible ? '关闭素材库' : '打开素材库'" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
@@ -40,15 +36,29 @@
         <icon-history :size="'24'" :stroke="'1.7'" aria-hidden="true" />
       </el-button>
     </el-tooltip>
+    <template v-if="agentVisible !== undefined">
+      <div class="sideToolDivider" role="separator" />
+      <el-tooltip :showArrow="false" :content="agentVisible ? '关闭见白 Agent' : '打开见白 Agent'" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+        <agentOrbButton compact :aria-pressed="agentVisible" @click="emit('toggleAgent')" />
+      </el-tooltip>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { IconFolder, IconHistory, IconPlus, IconUpload, IconX } from "@tabler/icons-vue";
+import { IconApps, IconFolder, IconHistory, IconPlus, IconUpload, IconX } from "@tabler/icons-vue";
 import { currentUser } from "@/stores/multiTenant";
+import agentOrbButton from "./agentOrbButton.vue";
 
-defineProps<{ nodePanelVisible?: boolean; uploadDisabled?: boolean; libraryVisible?: boolean; assetsVisible?: boolean; historyVisible?: boolean }>();
-const emit = defineEmits<{ openTool: [tool: "nodes" | "upload" | "library" | "assets" | "history"] }>();
+withDefaults(defineProps<{
+  nodePanelVisible?: boolean;
+  uploadDisabled?: boolean;
+  libraryVisible?: boolean;
+  assetsVisible?: boolean;
+  historyVisible?: boolean;
+  agentVisible?: boolean;
+}>(), { agentVisible: undefined });
+const emit = defineEmits<{ openTool: [tool: "nodes" | "upload" | "library" | "assets" | "history"]; toggleAgent: [] }>();
 </script>
 
 <style scoped lang="scss">
@@ -72,6 +82,12 @@ const emit = defineEmits<{ openTool: [tool: "nodes" | "upload" | "library" | "as
   border-radius: calc(var(--ui-radius) * 2.25);
 
   &:not(:has(.sideToolButton)) { display: none; }
+
+  .sideToolDivider {
+    flex: 0 0 1px;
+    width: 24px;
+    background: var(--el-border-color-light);
+  }
 
   .sideToolButton {
     display: flex;

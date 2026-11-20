@@ -1,45 +1,36 @@
 <template>
   <div class="builtinInstructions">
     <el-alert v-if="error" :title="error" type="error" :closable="false" showIcon />
-    <div v-if="!isComic && !section" class="instructionMode">
-      <span class="modeLabel">节点类型</span>
-      <el-segmented :modelValue="nodeType" class="modeSwitch" :options="nodeTypeOptions" :disabled="saving" block aria-label="节点类型" @change="selectNodeType" />
-    </div>
-    <div class="instructionLayout">
-      <aside class="instructionInfo">
-        <nav class="instructionList" aria-label="内置指令列表">
-          <template v-for="group in instructionGroups" :key="group.label">
-            <span v-if="group.label" class="groupLabel">{{ group.label }}</span>
-            <button v-for="item in group.items" :key="item.id" type="button" :class="{ selected: selectedId === item.id }" :aria-pressed="selectedId === item.id" :disabled="saving" @click="selectInstruction(item.id)"><component v-if="item.icon" :is="item.icon" :size="16" aria-hidden="true" />{{ item.label }}</button>
-          </template>
-        </nav>
-      </aside>
-      <section class="instructionEditor">
-        <header class="instructionHeading">
-          <div>
-            <span class="nodeLabel">{{ selectedInstruction.nodeLabel }}</span>
-            <h3>{{ selectedInstruction.label }}</h3>
-          </div>
-          <label :for="editorId">{{ isComic || nodeType === "image" ? "内置提示词" : "内置生成指令" }}</label>
-        </header>
-        <div class="instructionDescription">
-          <p>{{ selectedInstruction.description }}</p>
-          <p>{{ selectedInstruction.help }}</p>
+    <template v-if="selectedInstruction">
+      <header class="instructionToolbar">
+        <el-button text :icon="IconArrowLeft" :disabled="saving" @click="backToGrid">返回列表</el-button>
+        <h3 :id="editorId">{{ selectedInstruction.label }}</h3>
+        <div class="instructionActions">
+          <el-popover placement="bottom-end" trigger="click" :width="280">
+            <template #reference>
+              <el-button text :icon="IconInfoCircle" title="提示词说明" aria-label="提示词说明" />
+            </template>
+            <div class="instructionHelp">
+              <p>{{ selectedInstruction.description }}</p>
+              <p>{{ selectedInstruction.help }}</p>
+              <p>返回、切换分类或关闭时自动保存。</p>
+            </div>
+          </el-popover>
+          <el-button text :disabled="saving || !loaded || content === selectedInstruction.defaultContent" @click="content = selectedInstruction.defaultContent">恢复默认</el-button>
+          <el-button text type="primary" :icon="IconCheck" :loading="saving" :disabled="!loaded || !dirty || !content.trim()" @click="save">保存</el-button>
         </div>
-        <el-input :id="editorId" v-model="content" type="textarea" class="instructionInput" :maxlength="16000" :spellcheck="false" resize="none" :disabled="saving || !loaded" :aria-label="selectedInstruction.label" />
-      </section>
-    </div>
-    <footer class="instructionActions">
-      <el-button :disabled="saving || !loaded || content === selectedInstruction.defaultContent" @click="content = selectedInstruction.defaultContent">恢复默认</el-button>
-      <span role="status">{{ saving ? "正在保存…" : "切换分类或关闭时自动保存，下次生成生效" }}</span>
-      <el-button type="primary" :loading="saving" :disabled="!loaded || !dirty || !content.trim()" @click="save">保存</el-button>
-    </footer>
+      </header>
+      <el-input v-model="content" type="textarea" class="instructionInput" :maxlength="16000" :spellcheck="false" resize="none" :disabled="saving || !loaded" :aria-labelledby="editorId" />
+      <span v-if="dirty || saving" class="instructionStatus" role="status">{{ saving ? "正在保存…" : "有未保存的修改" }}</span>
+    </template>
+    <slot v-else :cards="cards" :selectInstruction="selectInstruction" />
   </div>
 </template>
 
 <script setup lang="ts">
 import axios from "axios";
-import { computed, onBeforeUnmount, ref, useId, watch, type Component } from "vue";
+import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
+import { IconArrowLeft, IconCheck, IconInfoCircle } from "@tabler/icons-vue";
 import { translate } from "@toonflow/i18n/vue";
 import { defaultImagePromptInstruction, imagePromptInstructionId, readImagePromptInstruction } from "@toonflow/node-text/imagePromptInstruction";
 import { imagePromptPresets, imagePromptPresetColumns, readImagePresetPrompt } from "@toonflow/node-image-generation/promptPresets";
@@ -47,20 +38,12 @@ import { defaultOutpaintPromptInstruction, outpaintPromptInstructionId, readOutp
 import { comicScriptInstructionId, scriptSystemPrompt, readComicScriptInstruction } from "@/pages/infiniteComic/comicProject";
 import { saveSettings, settings } from "@/stores/settings";
 
-const props = defineProps<{ comic?: boolean; section?: "text" | "image" | "comic" }>();
-const isComic = computed(() => props.section === "comic" || props.comic === true);
+const props = defineProps<{ section: "text" | "image" | "comic"; search: string }>();
 const editorId = useId();
-type Instruction = { id: string; label: string; nodeLabel: string; description: string; help: string; defaultContent: string; read: (stores: unknown) => string; group?: string; icon?: Component };
-type NodeType = "text" | "image";
-const nodeType = ref<NodeType>(props.section === "image" ? "image" : "text");
-const nodeTypeOptions = [
-  { value: "text", label: "文本节点" },
-  { value: "image", label: "图片生成节点" },
-];
+type Instruction = { id: string; label: string; description: string; help: string; defaultContent: string; read: (stores: unknown) => string; group?: string };
 const textInstructions: Instruction[] = [{
   id: imagePromptInstructionId,
   label: translate("图片反推提示词"),
-  nodeLabel: translate("文本节点"),
   description: translate("分析参考图片，生成可直接用于绘图的提示词。"),
   help: translate("保存后，在文本节点点击“图片反推提示词”，上传参考图片并点击生成，即会使用此指令。已进入反推模式的节点，下次生成也会使用最新保存内容。"),
   defaultContent: defaultImagePromptInstruction,
@@ -71,17 +54,14 @@ const imageInstructions: Instruction[] = [...imagePromptPresets
   .map(preset => ({
     id: preset.id,
     label: preset.label,
-    nodeLabel: translate("图片生成节点"),
     description: preset.description,
     help: translate("保存后，含对应预设标签的节点下次生成会使用最新提示词，并保留标签后补充的文字。"),
     defaultContent: readImagePresetPrompt(undefined, preset.id),
     read: (stores: unknown) => readImagePresetPrompt(stores, preset.id),
     group: preset.group,
-    icon: preset.icon,
   })), {
     id: outpaintPromptInstructionId,
     label: translate("扩图提示词"),
-    nodeLabel: translate("图片节点 / 图片生成节点"),
     description: translate("扩图时自动使用的默认指令，不显示在扩图输入框中。"),
     help: translate("保存后，两个图片节点下次扩图会使用最新指令。扩图输入框仅用于填写补充要求，可以留空；画布尺寸与原图位置由程序自动附加。"),
     defaultContent: defaultOutpaintPromptInstruction,
@@ -91,21 +71,30 @@ const imageInstructions: Instruction[] = [...imagePromptPresets
 const comicInstructions: Instruction[] = [{
   id: comicScriptInstructionId,
   label: translate("漫画脚本提示词"),
-  nodeLabel: translate("AI 漫画创作"),
   description: translate("用于第一步生成分页脚本和分格画面描述。"),
   help: translate("可调整编剧和分镜要求。请保留 JSON 输出格式（pages、number、script、description），以便程序读取草稿。"),
   defaultContent: scriptSystemPrompt,
   read: readComicScriptInstruction,
 }];
 const instructions = computed(() => {
-  if (isComic.value) return comicInstructions;
-  return nodeType.value === "image" ? imageInstructions : textInstructions;
+  if (props.section === "comic") return comicInstructions;
+  if (props.section === "image") return imagePromptPresetColumns.flat().flatMap(group => imageInstructions.filter(item => item.group === group));
+  return textInstructions;
 });
-const instructionGroups = computed(() => nodeType.value === "image"
-  ? imagePromptPresetColumns.flat().map(label => ({ label, items: instructions.value.filter(item => item.group === label) })).filter(group => group.items.length)
-  : [{ label: "", items: instructions.value }]);
-const selectedId = ref(instructions.value[0].id);
-const selectedInstruction = computed(() => instructions.value.find(item => item.id === selectedId.value) ?? instructions.value[0]);
+const cards = computed(() => {
+  const query = props.search.trim().toLowerCase();
+  return instructions.value.flatMap(item => {
+    let preview: string;
+    try {
+      preview = item.read(settings.value.stores);
+    } catch {
+      preview = translate("读取内置指令失败");
+    }
+    if (!item.label.toLowerCase().includes(query) && !preview.toLowerCase().includes(query)) return [];
+    return [{ id: item.id, label: item.label, preview }];
+  });
+});
+const selectedInstruction = ref<Instruction>();
 const content = ref("");
 const original = ref("");
 const error = ref("");
@@ -116,43 +105,37 @@ watch(content, () => {
   if (loaded.value && !saving.value) error.value = "";
 }, { flush: "sync" });
 
-function loadInstruction() {
+function selectInstruction(id: string) {
+  const instruction = instructions.value.find(item => item.id === id);
+  if (!instruction) return;
+  selectedInstruction.value = instruction;
   loaded.value = false;
   error.value = "";
   content.value = original.value = "";
   try {
-    content.value = original.value = selectedInstruction.value.read(settings.value.stores);
+    content.value = original.value = instruction.read(settings.value.stores);
     loaded.value = true;
   } catch (failure) {
     error.value = failure instanceof Error ? failure.message : translate("读取内置指令失败");
   }
 }
-loadInstruction();
-
-async function selectNodeType(value: string | number) {
-  const next = String(value) as NodeType;
-  if (next === nodeType.value || !await save()) return;
-  nodeType.value = next;
-  selectedId.value = instructions.value[0].id;
-  loadInstruction();
-}
-
-async function selectInstruction(id: string) {
-  if (id === selectedId.value || !await save()) return;
-  selectedId.value = id;
-  loadInstruction();
+async function backToGrid() {
+  if (!await save()) return;
+  loaded.value = false;
+  error.value = "";
+  selectedInstruction.value = undefined;
 }
 
 async function save(): Promise<boolean> {
   if (saving.value) return false;
-  if (!dirty.value) return true;
+  const instruction = selectedInstruction.value;
+  if (!instruction || !dirty.value) return true;
   if (!content.value.trim() || content.value.length > 16000) {
     error.value = translate("请输入 1–16000 字符的指令，当前修改已保留");
     return false;
   }
   const next = content.value;
   const expected = original.value;
-  const instruction = selectedInstruction.value;
   saving.value = true;
   error.value = "";
   try {
@@ -192,111 +175,37 @@ defineExpose({ saveBeforeLeaving: save });
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  gap: 16px;
+  gap: 14px;
   > :deep(.el-alert) { flex-shrink: 0; }
-  .instructionMode {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 10px 12px;
-    border: 1px solid var(--el-border-color-lighter);
-    border-radius: var(--ui-radius-small);
-    background: var(--el-fill-color-light);
-    .modeLabel { color: var(--el-text-color-secondary); font-size: 12px; font-weight: 600; }
-    .modeSwitch { width: min(100%, 360px); }
-  }
-  .instructionLayout {
-    display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
-    flex: 1;
-    min-height: 0;
-    gap: 24px;
-    .instructionInfo {
-      min-width: 0;
-      overflow-y: auto;
-      padding: 12px;
-      border: 1px solid var(--el-border-color-lighter);
-      border-radius: var(--ui-radius-small);
-      .instructionList {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        .groupLabel { margin: 12px 12px 4px; color: var(--el-text-color-secondary); font-size: 12px; }
-        button {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          width: 100%;
-          min-width: 0;
-          padding: 9px 10px;
-          border: 1px solid transparent;
-          border-radius: var(--ui-radius-small);
-          background: transparent;
-          color: var(--el-text-color-regular);
-          font: inherit;
-          text-align: left;
-          cursor: pointer;
-          &:hover, &.selected { background: var(--el-fill-color-light); color: var(--el-color-primary); }
-          &.selected { border-color: var(--el-border-color); }
-          &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
-          &:disabled { cursor: default; }
-          svg { flex-shrink: 0; }
-        }
-      }
-    }
-    .instructionEditor {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      min-height: 0;
-      gap: 10px;
-      .instructionHeading {
-        display: flex;
-        flex-shrink: 0;
-        align-items: end;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 8px 16px;
-        .nodeLabel { color: var(--el-text-color-secondary); font-size: 12px; }
-        h3 { margin: 4px 0 0; font-size: 16px; }
-        label { font-weight: 600; }
-      }
-      .instructionDescription {
-        flex-shrink: 0;
-        padding: 10px 12px;
-        border-left: 2px solid var(--el-color-primary);
-        background: var(--el-fill-color-light);
-        p { margin: 0; color: var(--el-text-color-secondary); line-height: 1.6; }
-        p + p { margin-top: 4px; font-size: 12px; }
-      }
-      .instructionInput { flex: 1; min-height: 0; :deep(.el-textarea__inner) { height: 100%; padding: 14px; line-height: 1.8; } }
-    }
-  }
-  .instructionActions {
+  .instructionToolbar {
     display: flex;
     flex-shrink: 0;
     align-items: center;
     flex-wrap: wrap;
-    gap: 12px;
-    border-top: 1px solid var(--el-border-color-lighter);
-    padding-top: 12px;
-    span { flex: 1; color: var(--el-text-color-secondary); font-size: 12px; }
-    :deep(.el-button) { margin: 0; }
+    gap: 8px;
+    h3 { min-width: 0; margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+    .instructionActions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-inline-start: auto; }
+    :deep(.el-button) { margin: 0; padding: 0 8px; border-radius: 8px; }
   }
-  @media (max-width: 640px) {
-    .instructionMode {
-      align-items: stretch;
-      flex-direction: column;
-      gap: 8px;
-      .modeSwitch { width: 100%; }
-    }
-    .instructionLayout {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: 120px minmax(0, 1fr);
-      gap: 12px;
+  .instructionInput {
+    flex: 1;
+    min-height: 0;
+    :deep(.el-textarea__inner) {
+      height: 100%;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: var(--el-fill-color-light);
+      box-shadow: none;
+      line-height: 1.8;
+      &:focus { box-shadow: inset 0 0 0 1px var(--el-color-primary); }
     }
   }
+  .instructionStatus { flex-shrink: 0; color: var(--el-text-color-secondary); font-size: 12px; }
+}
+.instructionHelp {
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+  p { margin: 0; }
+  p + p { margin-top: 8px; }
 }
 </style>
