@@ -48,7 +48,8 @@
     </aside>
     <main v-if="activeSection === 'tools'" class="pageScroll" aria-label="工具" />
     <photoCraft v-if="photoCraftOpened" :class="{ backgroundEditor: activeSection !== 'photoCraft' }" :inert="activeSection !== 'photoCraft'" :aria-hidden="activeSection !== 'photoCraft'" />
-    <el-scrollbar v-show="!['tools', 'photoCraft'].includes(activeSection)" ref="pageScroll" class="pageScroll" @scroll="updateActiveSection">
+    <trumanMapPage v-if="activeSection === 'trumanMap'" />
+    <el-scrollbar v-show="!['tools', 'photoCraft', 'trumanMap'].includes(activeSection)" ref="pageScroll" class="pageScroll" @scroll="updateActiveSection">
       <div class="pageBody">
         <el-main class="pageContent">
           <section v-show="!projectSectionVisible" class="creationPanel" data-home-section="home" aria-label="创建项目">
@@ -154,8 +155,9 @@ import http from "@/lib/http";
 import { waitForControlValue } from "@/lib/mcpControl";
 import settings from "@/components/settings/index.vue";
 import assetLibraryDialog from "./assetLibraryDialog.vue";
-import explore from "./explore.vue";
-import projectCard from "./projectCard.vue";
+import explore from "./pages/explore/index.vue";
+const trumanMapPage = defineAsyncComponent(() => import("./pages/trumanMap/index.vue"));
+import projectCard from "./pages/projects/projectCard.vue";
 import workspacePicker from "./workspacePicker.vue";
 import homeAdvertisementCarousel from "./homeAdvertisementCarousel.vue";
 import photoCraft from "./photoCraft.vue";
@@ -178,6 +180,7 @@ const homeSections = [
   { id: "tools", label: "工具", icon: IconTools },
   { id: "photoCraft", label: "PS图像编辑", beta: true },
   { id: "explore", label: "探索", icon: IconCompass },
+  { id: "trumanMap", label: "白模预演 TrumanMap", icon: IconCompass },
 ];
 const mobileConnect = defineAsyncComponent(() => import("@/components/mobileConnect.vue"));
 const router = useRouter();
@@ -409,7 +412,7 @@ async function scrollToSection(section: string) {
     photoCraftOpened.value = true;
     return;
   }
-  if (section === "tools") return;
+  if (section === "tools" || section === "trumanMap") return;
   await nextTick();
   if (projectSectionVisible.value) {
     pageScroll.value?.scrollTo({ top: 0 });
@@ -426,7 +429,7 @@ async function scrollToSection(section: string) {
 }
 
 function updateActiveSection() {
-  if (projectSectionVisible.value || ["tools", "photoCraft"].includes(activeSection.value)) return;
+  if (projectSectionVisible.value || ["tools", "photoCraft", "trumanMap"].includes(activeSection.value)) return;
   const wrap = pageScroll.value?.wrapRef;
   if (!wrap) return;
   if (wrap.scrollTop > 0 && wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 2) {

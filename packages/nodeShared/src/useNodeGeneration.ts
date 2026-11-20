@@ -64,7 +64,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
 
   nodeTools.register({
     name: "getGenerationStatus",
-    description: "查询节点生成或恢复状态（idle/running/succeeded/failed）、当前输出和最近一次错误。查询中断保留任务，下次生成操作优先复查已有任务，不会重复提交",
+    description: "查询节点生成或恢复状态（idle/running/succeeded/failed）、当前输出和最近一次错误。生成或恢复失败即结束任务，可直接重新生成；仅画布关闭时中断的任务会在重新打开后自动复查",
     parameters: z.strictObject({}),
     execute: getStatus,
   });
@@ -83,6 +83,23 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
     const task = ownedTask.value;
     // ACT: applied 仅在成功后释放任务；替换输出不能放弃仍可能已接单的任务。
     return !!task && task.state !== "failed" && task.state !== "cancelled" && (task.state !== "succeeded" || !task.applied);
+  }
+
+  function ownsTask(task: NodeGenerationTask, context: NodePersistenceContext) {
+    return task.nodeId === id && task.directory === context.directory && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.taskId)
+      && ["image", "video", "audio"].includes(task.mediaType);
+  }
+
+  // ACT: 失败即终态，节点回到可发送状态；卸载或画布已关闭时保留任务，重新打开后按 ID 复查。
+  async function release() {
+    const task = savedData.value.mediaTask;
+    const context = getPersistence?.();
+    if (!options || !task || !context || lifetime.signal.aborted || findNode(id) !== node || !needsRecovery()) return;
+    task.state = "failed";
+    task.resumable = false;
+    // 清理失败不覆盖原始错误，未落盘时下次打开仍按 ID 复查；归属无效或项目已移动的任务只在本节点结束，不请求服务端。
+    if (ownsTask(task, context)) await options.ai.cancelMedia(task.directory, task.taskId).catch(() => {});
+    await context.save().catch(() => {});
   }
 
   function checkTask(task: NodeGenerationTask, context: NodePersistenceContext) {
@@ -114,7 +131,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
           await current.save(signal);
         }
         if (task.state === "interrupted" && task.resumable === false) {
-          throw new Error([value.result?.message, "上次生成结果未知，可能已接单或扣费。请先核对供应商任务；如需重新生成，请点击“放弃任务”。"].filter(Boolean).join("\n"));
+          throw new Error([value.result?.message, "上次生成结果未知，可能已接单或扣费；重新生成前请先核对供应商任务。"].filter(Boolean).join("\n"));
         }
       },
     };
@@ -122,7 +139,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
 
   async function generate<T extends "image" | "video" | "audio">(mediaType: T, input: NodeImageRequest | NodeVideoRequest | NodeAudioRequest, signal: AbortSignal, recoveryData?: unknown) {
     if (!options) throw new Error("节点未提供媒体生成能力");
-    if (needsRecovery()) throw new Error("当前节点仍有未确认的生成任务，请先复查或明确放弃此任务后再生成");
+    if (needsRecovery()) throw new Error("当前节点仍有未确认的生成任务，已结束该任务，请重新生成");
     const context = getPersistence?.();
     if (!context || context.directory !== input.directory) throw new Error("画布尚未就绪，无法保存生成任务");
     let task: NodeGenerationTask = {
@@ -181,6 +198,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
       status.value = "succeeded";
       return result;
     } catch (failure) {
+      await release();
       status.value = "failed";
       const message = (failure as { response?: { data?: { message?: string } } })?.response?.data?.message;
       error.value = failure instanceof Error && failure.name === "AbortError" ? "生成已取消"
@@ -206,6 +224,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
     const signal = AbortSignal.any([lifetime.signal, recoveryController.signal]);
     const originalOutputs = JSON.stringify(outputs.value);
     recovering = execute(async () => {
+      if (!ownsTask(task, context)) throw new Error("保存的生成任务归属无效，无法恢复，请重新生成");
       let results = await options.ai.resumeMedia(task.directory, task.taskId, signal, { ...taskOptions(task, context, signal), recoverCancelled });
       checkTask(task, context);
       if (task.applied || JSON.stringify(outputs.value) !== originalOutputs) {

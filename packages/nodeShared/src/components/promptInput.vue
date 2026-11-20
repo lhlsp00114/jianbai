@@ -621,6 +621,16 @@ function handleMentionKey(event: KeyboardEvent) {
     :deep(.chat-rich-text > [contenteditable]) { min-height: 100%; outline: none; }
   }
 
+  // 最小高度加在滚动容器上，让编辑区撑满它，点击文字以外的空白也能聚焦。
+  &:deep(.chat-rich-text) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  &:deep(.chat-rich-text > [contenteditable]) {
+    flex: 1 0 auto;
+  }
+
   &:deep(.imageReference) {
     display: inline-flex;
     align-items: center;

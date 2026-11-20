@@ -32,3 +32,4 @@ Thumbs.db
 .tmp/
 /apps/web/public/photoCraft/
 /apps/web/public/directorTrial/models/
+.claude

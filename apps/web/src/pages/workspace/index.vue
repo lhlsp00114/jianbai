@@ -113,15 +113,7 @@
       </el-tooltip>
     </div>
     <floatingAgent ref="floatingAgentRef" v-model="agentVisible" :inert="workspaceStore.projectLoadingVisible" @resize="agentWidth = $event" />
-    <settings v-model="settingsVisible" />
-    <el-dialog v-model="shortcutsVisible" title="快捷键" width="min(560px, calc(100vw - 32px))" alignCenter appendToBody>
-      <div class="shortcutsMenu">
-        <div v-for="field in canvasShortcutFields" :key="field.id" class="shortcutItem">
-          <span class="shortcutLabel">{{ field.label }}</span>
-          <span class="shortcutKeys">{{ shortcutLabel(generalSettings.canvasShortcuts[field.id]) || '未绑定' }}</span>
-        </div>
-      </div>
-    </el-dialog>
+    <settings ref="settingsDialog" v-model="settingsVisible" />
     <el-dialog v-model="contactVisible" :title="contactInfo.title" width="min(360px, calc(100vw - 32px))" alignCenter appendToBody>
       <div class="contactContent">
         <q-r-code
@@ -149,6 +141,8 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { QRCode } from "tdesign-vue-next";
 import type { AgentMention } from "@toonflow/server/agent/types";
 import settings from "@/components/settings/index.vue";
+import modelLoginGuide from "@/components/modelLoginGuide.vue";
+import { multiTenantEnabled, toonflowAccountToken } from "@/stores/settings";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { generalSettings, updateUiSettings } from "@/stores/settings";
 import { shortcutLabel, canvasShortcutFields } from "@/lib/canvasShortcuts";
@@ -219,6 +213,9 @@ useProviderBalances();
 const agentVisible = ref(false);
 const agentWidth = ref(0);
 const settingsVisible = ref(false);
+const settingsDialog = ref<InstanceType<typeof settings>>();
+provide("openSettingsPanel", (id: string) => settingsDialog.value?.openPanel(id));
+provide("modelLoginGuide", computed(() => !multiTenantEnabled.value && !toonflowAccountToken.value ? modelLoginGuide : undefined));
 const helpVisible = ref(false);
 const shortcutsVisible = ref(false);
 const contactVisible = ref(false);
@@ -226,12 +223,12 @@ const contactType = ref<"community" | "business">("community");
 const contacts = {
   community: {
     title: "加入交流群",
-    url: "https://work.weixin.qq.com/u/vc36adcc89845edcbe?v=5.0.3.63936&bb=85b8d228e8",
+    url: "https://work.weixin.qq.com/u/vc66e4c7f8432af0d8?v=5.0.13.84802&bb=c03c3ad130",
     tip: "Toonflow 是为爱发电的开源项目。欢迎文明交流、友善反馈；回复可能需要一些时间，请避免责问或命令式沟通，感谢你的理解与尊重。",
   },
   business: {
     title: "商务合作",
-    url: "https://work.weixin.qq.com/u/vc0f54596c5837d05a?v=5.0.8.70675",
+    url: "https://work.weixin.qq.com/u/vc66e4c7f8432af0d8?v=5.0.13.84802&bb=c03c3ad130",
     tip: "此联系方式仅用于商务合作接洽，不提供问题答疑。使用问题欢迎在交流群交流，需求与 BUG 可通过反馈表提交。感谢理解。",
   },
 };

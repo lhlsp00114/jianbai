@@ -33,6 +33,7 @@
     "./modelLabel": "./src/components/modelLabel.vue",
     "./providerModelSelect": "./src/components/providerModelSelect.vue",
     "./modelPreference": "./src/modelPreference.ts",
+    "./modelSelect": "./src/components/modelSelect.vue",
     "./showNodeError": "./src/showNodeError.ts",
     "./useNodeReferences": "./src/useNodeReferences.ts",
     "./useNodeGeneration": "./src/useNodeGeneration.ts",

@@ -28,6 +28,9 @@
           <el-select :modelValue="selectedModelChoice ? selectedModel : ''" filterable :disabled="disabled" :teleported="false" placeholder="选择模型" aria-label="选择模型" noDataText="请先在设置中添加模型" @update:modelValue="selectedModel = $event" @change="reasoningEffort = ''">
             <template #prefix><modelIcon v-if="selectedModelChoice" :model="selectedModelChoice.modelId" :size="18" /></template>
             <template #label="{ label }"><modelLabel :label="label" :providerId="selectedModelChoice?.providerId" /></template>
+            <template v-if="!modelChoices.length && !multiTenantEnabled && !toonflowAccountToken && openSettingsPanel" #empty>
+              <modelLoginGuide @login="visible = false" />
+            </template>
             <el-option-group v-for="provider in modelGroups" :key="provider.id" :label="provider.label">
               <el-option v-for="model in provider.models" :key="model.value" :label="model.label" :value="model.value">
                 <div class="modelOption">
@@ -55,18 +58,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, useId, watch } from "vue";
+import { computed, inject, ref, useId, watch } from "vue";
 import { IconChevronDown, IconChevronUp, IconSparkles } from "@tabler/icons-vue";
 import { modelIcon } from "@toonflow/model-icons";
 import { useNodeModelSelection } from "@toonflow/nodes-scaffold/nodeAi";
 import modelLabel from "@toonflow/node-shared/modelLabel";
 import type { ThinkingLevel } from "@toonflow/server/modelReasoning";
-import { modelChoices, refreshModelChoices } from "@/stores/settings";
+import { modelChoices, multiTenantEnabled, refreshModelChoices, toonflowAccountToken } from "@/stores/settings";
+import modelLoginGuide from "./modelLoginGuide.vue";
 
 const selectedModel = defineModel<string>({ default: "" });
 const reasoningEffort = defineModel<string>("reasoningEffort", { default: "" });
 const props = withDefaults(defineProps<{ active?: boolean; disabled?: boolean; iconOnly?: boolean }>(), { active: true, disabled: false });
 const visible = ref(false);
+const openSettingsPanel = inject<(id: string) => void>("openSettingsPanel");
 const reasoningId = useId();
 const reasoningLabels: Record<ThinkingLevel, string> = { off: "关闭", minimal: "最小", low: "低", medium: "中", high: "高", xhigh: "极高", max: "最高" };
 const selectedModelChoice = useNodeModelSelection(modelChoices, selectedModel);

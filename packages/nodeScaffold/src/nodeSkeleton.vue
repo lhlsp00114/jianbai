@@ -183,7 +183,7 @@ import {
 } from "@tabler/icons-vue";
 import { ElCard, ElButton, ElDivider, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage } from "element-plus";
 import type { DropdownInstance } from "element-plus";
-import { validateConnection } from "./connection";
+import { getAssetOutputs, validateConnection } from "./connection";
 import { useNodeEvent } from "./nodeEvent";
 import type { NodeConnectionFeedback, NodeData, NodeHandle } from "./connection";
 import type { NodeOutput } from "./values";

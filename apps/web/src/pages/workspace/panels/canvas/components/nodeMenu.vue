@@ -31,6 +31,9 @@
         @focus.self="menuLevel === 'nodes' && nodeMenuItemsRef?.focusFirst()"
         :aria-label="menuLevel === 'selection' ? '选区操作' : menuLevel === 'arrange' ? '整理选中节点' : menuLevel === 'actions' ? '操作菜单' : '添加节点'">
         <template v-if="menuLevel === 'selection'">
+          <el-dropdown-item v-if="saveSelection" command="saveSelection" :icon="IconFolderPlus" :disabled="selectionBusy || deleting || !canSaveSelection">
+            添加到素材库
+          </el-dropdown-item>
           <el-dropdown-item command="duplicateSelection" :icon="IconCopyPlus" :disabled="selectionBusy || deleting || !selectedNodes.length">
             创建副本
           </el-dropdown-item>
@@ -93,7 +96,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
 import { useVueFlow, type ConnectingHandle, type GraphNode, type HandleType } from "@vue-flow/core";
-import { isTypeCompatible, useNodeEvent, validateConnection, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
+import { getAssetOutputs, isTypeCompatible, useNodeEvent, validateConnection, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { ElMessage } from "element-plus";
 import type { DropdownInstance } from "element-plus";
 import selectionHandle from "./selectionHandle.vue";
@@ -108,6 +111,7 @@ import {
   IconCopyPlus,
   IconTrash,
   IconBox,
+  IconFolderPlus,
   IconUpload,
   IconPlus,
   IconArrowBackUp,
@@ -120,11 +124,12 @@ import {
   IconFocusCentered,
 } from "@tabler/icons-vue";
 
-const { remoteNodes = [], disabled = false, pasteNode, uploadFiles, canUndo = false, canRedo = false, selectionBusy = false, batchHistory } = defineProps<{
+const { remoteNodes = [], disabled = false, pasteNode, uploadFiles, saveSelection, canUndo = false, canRedo = false, selectionBusy = false, batchHistory } = defineProps<{
   remoteNodes?: { type: string; label: string }[];
   disabled?: boolean;
   pasteNode?: (position: { x: number; y: number }) => Promise<boolean>;
   uploadFiles?: (position: { x: number; y: number }) => void;
+  saveSelection?: (nodes: GraphNode[]) => void;
   canUndo?: boolean;
   canRedo?: boolean;
   selectionBusy?: boolean;
@@ -159,6 +164,7 @@ const canArrangeSelection = computed(() => {
       && Number.isFinite(node.dimensions.width) && node.dimensions.width > 0
       && Number.isFinite(node.dimensions.height) && node.dimensions.height > 0);
 });
+const canSaveSelection = computed(() => getSelectionTree(selectedNodes.value, flow.getNodes.value).some(node => getAssetOutputs(node.data ?? {}).length));
 const filteredNodes = computed(() => {
   const nodes = remoteNodes.map(node => ({
     ...node,
@@ -301,6 +307,12 @@ async function handleCommand(command: unknown) {
     await nextTick();
     if (command === "nodes") nodeMenuItemsRef.value?.focusFirst();
     else menuList.value?.$el.focus();
+    return;
+  }
+  if (command === "saveSelection") {
+    if (selectionBusy || deleting.value || !canSaveSelection.value) return;
+    menu.value?.handleClose();
+    saveSelection?.(selectedNodes.value);
     return;
   }
   if (command === "duplicateSelection") {

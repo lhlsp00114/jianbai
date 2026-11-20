@@ -1,5 +1,5 @@
 <template>
-  <assetBrowser v-if="visible && expanded" v-model:folder="folder" v-model:searchQuery="searchQuery" v-model:newFolderName="newFolderName" :entries="entries" :loading="loading" :uploading="uploading" :newFolderParent="newFolderParent" :folderSaving="folderSaving" :mediaKind="mediaKind" :assetUrl="assetUrl" :canSelect="canSelect" :selecting="selecting" @select="emit('select', $event)" @upload="fileInput?.click()" @startFolder="startFolder" @saveFolder="saveFolder" @cancelFolder="cancelFolder" @preview="openPreview" @menu="openItemMenu" @drag="startAssetDrag" />
+  <assetBrowser v-if="visible && expanded" v-model:folder="folder" v-model:searchQuery="searchQuery" v-model:newFolderName="newFolderName" :entries="entries" :loading="loading" :uploading="uploading" :newFolderParent="newFolderParent" :folderSaving="folderSaving" :mediaKind="mediaKind" :assetUrl="assetUrl" :canSelect="canSelect" :selecting="selecting" :expandedFolders="expandedFolders" @select="emit('select', $event)" @upload="fileInput?.click()" @startFolder="startFolder" @saveFolder="saveFolder" @cancelFolder="cancelFolder" @preview="openPreview" @menu="openItemMenu" @drag="startAssetDrag" @expandFolder="expandFolder" @collapseFolder="collapseFolder" />
   <el-card v-else-if="visible" class="assetLibrary" shadow="never" :bodyStyle="{ padding: '8px' }" role="region" aria-label="素材库" @dblclick.stop>
     <div class="libraryToolbar">
       <el-input v-model="searchQuery" class="searchInput" :prefixIcon="IconSearch" placeholder="搜索素材" aria-label="搜索素材" clearable @keydown.esc.stop="searchQuery = ''" />
@@ -7,7 +7,7 @@
       <el-button class="toolbarButton" text :icon="IconFolderPlus" title="新建文件夹" aria-label="新建文件夹" :disabled="newFolderParent !== undefined" @click="startFolder" />
       <el-button class="toolbarButton" text :icon="IconX" title="关闭素材库" aria-label="关闭素材库" @click="visible = false" />
     </div>
-    <el-scrollbar class="libraryScroll">
+    <el-scrollbar class="libraryScroll" maxHeight="min(440px, calc(100dvh - 198px))">
       <el-tree ref="assetTree" class="assetTree" :data="displayEntries" nodeKey="path" :props="{ label: 'name' }" :icon="IconChevronRight" :currentNodeKey="folder === '.' ? undefined : folder" :filterNodeMethod="filterEntry" defaultExpandAll highlightCurrent emptyText="" @nodeClick="selectFolder">
         <template #default="{ data, node }">
           <div class="assetEntry" :title="data.name" :draggable="data.type === 'file'" @dragstart.stop="startAssetDrag($event, data)" @dblclick.stop="openPreview(data)" @contextmenu="openItemMenu($event, data)">
@@ -60,8 +60,8 @@
 
   <el-dialog v-model="saveVisible" title="保存到素材库" width="460px" alignCenter appendToBody :closeOnClickModal="false" :closeOnPressEscape="!saving" :showClose="!saving" @opened="assetNameInput?.select()">
     <el-form class="saveForm" labelPosition="top" @submit.prevent="saveAsset">
-      <el-form-item v-if="!saveAll" label="素材名称">
-        <el-input ref="assetNameInput" v-model="assetName" aria-label="素材名称" placeholder="输入完整文件名" :disabled="saving" @keydown.enter.prevent="saveAsset" />
+      <el-form-item v-if="!saveAll && !batchOutputs.length" :label="choosingFolder ? '文件夹名称' : '素材名称'">
+        <el-input ref="assetNameInput" v-model="assetName" :aria-label="choosingFolder ? '文件夹名称' : '素材名称'" :placeholder="choosingFolder ? '' : '输入完整文件名'" :disabled="saving" @keydown.enter.prevent="saveAsset" />
       </el-form-item>
       <el-form-item v-if="saveAll" :label="`全部素材（${outputs.length} 个）`">
         <div class="batchNames"><div v-for="(item, index) in outputs" :key="index">{{ item.label }}</div></div>
@@ -78,7 +78,7 @@
         </div>
         <div class="locationPath" :title="saveLocationLabel">{{ saveLocationLabel }}</div>
         <el-scrollbar class="saveFolderScroll" maxHeight="220px">
-          <el-tree class="saveFolderTree" :data="folders" nodeKey="path" :props="{ label: 'name' }" :icon="IconChevronRight" :currentNodeKey="saveDirectory" :expandOnClickNode="false" defaultExpandAll highlightCurrent @nodeClick="(entry: AssetEntry) => { if (!saving && saveFolderName === undefined) saveDirectory = entry.path; }">
+          <el-tree class="saveFolderTree" :data="folders" nodeKey="path" :props="{ label: 'name' }" :icon="IconChevronRight" :currentNodeKey="saveDirectory" :expandOnClickNode="false" :defaultExpandAll="generalSettings.assetFoldersExpanded" :defaultExpandedKeys="saveExpandedKeys" highlightCurrent @nodeClick="(entry: AssetEntry) => { if (!saving && saveFolderName === undefined) saveDirectory = entry.path; }">
             <template #default="{ data, node }">
               <span class="saveFolderEntry"><component :is="node.expanded && !node.isLeaf ? IconFolderOpen : IconFolder" :size="18" aria-hidden="true" /><span>{{ data.name }}</span></span>
             </template>
@@ -93,13 +93,13 @@
     </el-form>
     <template #footer>
       <el-button :disabled="saving" @click="saveVisible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" :disabled="(saveAll ? !outputs.length : !assetName.trim() || /[\\/]/.test(assetName)) || saveFolderName !== undefined" @click="saveAsset">{{ saveAll ? '保存全部' : '保存' }}</el-button>
+      <el-button type="primary" :loading="saving" :disabled="(saveAll ? !outputs.length : !batchOutputs.length && (!assetName.trim() || /[\\/]/.test(assetName))) || saveFolderName !== undefined" @click="saveAsset">{{ saveAll ? '保存全部' : '保存' }}</el-button>
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import axios from "axios";
 import { t } from "@toonflow/i18n/vue";
 import { ElMessage, ElTree, type InputInstance, type TreeNodeData } from "element-plus";
@@ -109,6 +109,7 @@ import { mentionAssetType } from "@toonflow/server/agent/mentionSources";
 import mentionThumbnail from "@/components/agent/mentionThumbnail.vue";
 import { startAssetDrag } from "../canvasDrop";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
+import { generalSettings } from "@/stores/settings";
 import assetMenu from "./assetMenu.vue";
 import assetBrowser from "./assetBrowser.vue";
 import { useMediaPreview } from "@toonflow/node-shared/mediaPreview";
@@ -135,6 +136,8 @@ const saveDirectory = ref(".");
 const saveFolderName = ref<string>();
 const saveFolderInput = ref<InputInstance>();
 const saveLocationLabel = computed(() => saveDirectory.value === "." ? "素材库" : `素材库 / ${saveDirectory.value.split("/").join(" / ")}`);
+const saveExpandedKeys = computed(() => [saveDirectory.value]);
+const expandedFolders = ref<string[]>([]);
 const searchQuery = ref("");
 const assetTree = ref<InstanceType<typeof ElTree>>();
 const folderInput = ref<InputInstance>();
@@ -178,7 +181,20 @@ async function refreshAssets(path?: string, target?: string) {
   if (path && (folder.value === path || folder.value.startsWith(path + "/"))) {
     folder.value = target ? target + folder.value.slice(path.length) : ".";
   }
+  if (path) {
+    expandedFolders.value = expandedFolders.value.flatMap(key => key !== path && !key.startsWith(path + "/") ? [key] : target ? [target + key.slice(path.length)] : []);
+  }
   try { await loadEntries(); } catch (error) { showError(error); }
+}
+
+// 树数据刷新后会重建节点，展开状态由这里保存；自身及父级一并记录，收起只移除自身。
+function expandFolder(path: string) {
+  const parts = path === "." ? [] : path.split("/");
+  expandedFolders.value = [...new Set([...expandedFolders.value, ...parts.map((_name, index) => parts.slice(0, index + 1).join("/"))])];
+}
+
+function collapseFolder(path: string) {
+  expandedFolders.value = expandedFolders.value.filter(key => key !== path);
 }
 const displayEntries = computed(() => {
   function withDraft(items: AssetEntry[], parent: string): AssetEntry[] {
@@ -197,10 +213,10 @@ watch(searchQuery, query => assetTree.value?.filter(query));
 
 async function startFolder() {
   searchQuery.value = "";
+  expandFolder(folder.value);
   newFolderParent.value = folder.value;
   newFolderName.value = "新建文件夹";
   await nextTick();
-  assetTree.value?.getNode(folder.value)?.expand();
   await nextTick();
   folderInput.value?.select();
 }
@@ -229,18 +245,35 @@ async function saveFolder() {
 }
 
 const outputs = ref<AssetOutput[]>([]);
+const batchOutputs = shallowRef<AssetOutput[]>([]);
 const selectedOutput = ref(0);
 let sourceDirectory: string | undefined;
+// 只选位置和命名（如白模预演导出整包）：沿用保存对话框，确认时只交回素材库内路径，由调用方写入；关闭对话框交回 undefined。
+const choosingFolder = ref(false);
+let folderChoice: ((path?: string) => void) | undefined;
+watch(saveVisible, open => {
+  if (open) return;
+  folderChoice?.();
+  folderChoice = undefined;
+});
 const folders = computed(() => directoryEntries(entries.value));
-const extension = computed(() => {
-  const output = outputs.value[selectedOutput.value]?.output;
+const extension = computed(() => outputExtension(outputs.value[selectedOutput.value]?.output));
+
+function outputExtension(output?: NodeOutput) {
   if (!output) return "";
   if (typeof output.value !== "object") return output.dataType === "STRING" ? ".txt" : ".json";
   return output.value.url.match(/\.[^./\\]+$/)?.[0] ?? "";
-});
+}
 
 function directoryEntries(items: AssetEntry[]): AssetEntry[] {
   return items.filter(item => item.type === "directory").map(item => ({ ...item, children: directoryEntries(item.children ?? []) }));
+}
+
+function findEntry(items: AssetEntry[], path: string): AssetEntry | undefined {
+  for (const item of items) {
+    if (item.path === path) return item;
+    if (path.startsWith(item.path + "/")) return findEntry(item.children ?? [], path);
+  }
 }
 
 async function loadEntries() {
@@ -297,6 +330,7 @@ watch(visible, opened => {
   else {
     cancelFolder();
     previewAsset.value = undefined;
+    expandedFolders.value = [];
   }
 }, { immediate: true });
 
@@ -335,16 +369,31 @@ async function createAssetFolder(parent: string, name: string) {
   return path;
 }
 
+async function openBatchSave(nodes: { label: string; outputs: AssetOutput[] }[]) {
+  if (!nodes.length || saving.value) return;
+  if (nodes.length === 1) {
+    const node = nodes[0]!;
+    return openSave(node.label, node.outputs);
+  }
+  await openSave("", []);
+  batchOutputs.value = nodes.flatMap(item => item.outputs.map(({ label, output }) => ({
+    label: item.outputs.length > 1 ? `${item.label}-${label}` : item.label,
+    output,
+  })));
+}
+
 async function openSave(label: string, items: AssetOutput[], all = false) {
   if (saving.value) return;
   saveAll.value = all;
   const names = all ? getStackFileNames(items) : [];
   outputs.value = items.map((item, index) => ({ ...item, label: names[index] ?? item.label }));
+  batchOutputs.value = [];
   selectedOutput.value = 0;
-  assetName.value = label.endsWith(extension.value) ? label : `${label}${extension.value}`;
+  assetName.value = !label || label.endsWith(extension.value) ? label : `${label}${extension.value}`;
   saveDirectory.value = folder.value;
   saveFolderName.value = undefined;
   sourceDirectory = props.directory;
+  choosingFolder.value = false;
   saveVisible.value = true;
   try {
     await loadEntries();
@@ -353,20 +402,65 @@ async function openSave(label: string, items: AssetOutput[], all = false) {
   }
 }
 
+function chooseFolder(name: string) {
+  if (saving.value) return;
+  saveAll.value = false;
+  folderChoice?.();
+  const choice = new Promise<string | undefined>(resolve => { folderChoice = resolve; });
+  batchOutputs.value = [];
+  outputs.value = [];
+  assetName.value = name;
+  saveDirectory.value = folder.value;
+  saveFolderName.value = undefined;
+  choosingFolder.value = true;
+  saveVisible.value = true;
+  loadEntries().catch(error => showError(error));
+  return choice;
+}
+
 async function saveAsset() {
   if (saveAll.value) return saveAllAssets();
   const output = outputs.value[selectedOutput.value]?.output;
   const name = assetName.value.trim();
-  if (!output || !name || /[\\/]/.test(name) || saving.value || saveFolderName.value !== undefined) return;
-  const path = saveDirectory.value === "." ? name : `${saveDirectory.value}/${name}`;
+  const batch = batchOutputs.value;
+  if (choosingFolder.value) {
+    if (saving.value || saveFolderName.value !== undefined || !name || /[\\/]/.test(name)) return;
+    folderChoice?.(saveDirectory.value === "." ? name : `${saveDirectory.value}/${name}`);
+    folderChoice = undefined;
+    saveVisible.value = false;
+    return;
+  }
+  if (saving.value || saveFolderName.value !== undefined || (!batch.length && (!output || !name || /[\\/]/.test(name)))) return;
+  const directory = saveDirectory.value;
+  // ACT: 批量保存按已加载的目录列表顺延编号，服务端仍拒绝覆盖；列表过期导致的同名冲突按单项失败提示，不自动重试。
+  const names = new Set((directory === "." ? entries.value : findEntry(entries.value, directory)?.children ?? []).map(item => item.name.toLocaleLowerCase()));
+  const items = batch.map(item => {
+    const base = item.label.replace(/[\\/]/g, "_");
+    const fileExtension = outputExtension(item.output);
+    let fileName = `${base}${fileExtension}`;
+    for (let number = 2; names.has(fileName.toLocaleLowerCase()); number++) fileName = `${base} (${number})${fileExtension}`;
+    names.add(fileName.toLocaleLowerCase());
+    return { name: fileName, output: item.output };
+  });
+  if (!batch.length && output) items.push({ name, output });
+  let saved = 0;
   saving.value = true;
   try {
-    const content = typeof output.value === "object"
-      ? await useWorkspaceFiles(() => sourceDirectory).read(output.value.url)
-      : new Blob([String(output.value)]);
-    await axios.put("/api/assets/save", content, { params: { path }, headers: { "Content-Type": "application/octet-stream" } });
+    for (const item of items) {
+      try {
+        const content = typeof item.output.value === "object"
+          ? await useWorkspaceFiles(() => sourceDirectory).read(item.output.value.url)
+          : new Blob([String(item.output.value)]);
+        await axios.put("/api/assets/save", content, { params: { path: directory === "." ? item.name : `${directory}/${item.name}` }, headers: { "Content-Type": "application/octet-stream" } });
+        saved++;
+      } catch (error) {
+        showError(error, batch.length ? item.name : undefined);
+      }
+    }
+    if (!saved) return;
     saveVisible.value = false;
-    ElMessage.success("已保存到素材库");
+    if (batch.length) ElMessage.success(t`已保存 ${saved} 个素材到素材库`);
+    else ElMessage.success("已保存到素材库");
     await loadEntries();
   } catch (error) {
     showError(error);
@@ -414,7 +508,7 @@ async function saveAllAssets() {
   }
 }
 
-defineExpose({ openSave });
+defineExpose({ openSave, openBatchSave, chooseFolder });
 </script>
 
 <style lang="scss" scoped>
