@@ -73,6 +73,16 @@
           @dblclick.stop
           @click.stop="selectAsset">从素材库选择</el-button>
       </div>
+      <mediaHistory
+        v-if="node.selected && outputFile && !data.rotationDraft && !editor?.mode && !outpaintVisible"
+        mediaType="image"
+        inline
+        replaceable
+        hideHistory
+        :current="outputFile"
+        :disabled="uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || gridSplit?.splitting"
+        @select="outputs.image = { dataType: 'IMAGE', value: $event }"
+        @upload="fileInput?.click()" />
     </div>
     <template v-if="lightingVisible || multiAngleVisible || outpaintVisible || editor?.mode === 'smartEdit'" #bottom>
       <div v-if="lightingVisible" ref="lightingTarget" />
@@ -290,7 +300,7 @@ async function selectAsset() {
 }
 
 async function setImageFile(file: File) {
-  if (data.value.rotationDraft || editor.value?.mode === "smartEdit" || uploading.value || editor.value?.busy || lighting.value?.generating || multiAngle.value?.generating || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy) return;
+  if (data.value.rotationDraft || editor.value?.mode === "smartEdit" || uploading.value || editor.value?.busy || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy) return;
   const mimeType = getMediaMimeType(file);
   if (!mimeType.startsWith("image/")) return void ElMessage.error("请选择图片文件");
   if (!file.size || file.size > 100 * 1024 * 1024) return void ElMessage.error("图片不能为空且不能超过 100 MB");

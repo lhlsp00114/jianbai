@@ -1,4 +1,18 @@
-import { findNodeModel, getNodeModelKey, type NodeMediaModel } from "@toonflow/nodes-scaffold/nodeAi";
+import { findNodeModel, getNodeModelKey, useNodeModelMemory, type NodeMediaModel } from "@toonflow/nodes-scaffold/nodeAi";
+
+export function useNodeModelPreferences() {
+  const memory = { image: useNodeModelMemory("image"), video: useNodeModelMemory("video") };
+  return {
+    readLastNodeModel(type: "image" | "video", models: NodeMediaModel[]) {
+      return readLastNodeModel(type, models) ?? findNodeModel(models, memory[type].get());
+    },
+    rememberNodeModel(model: NodeMediaModel) {
+      if (model.type !== "image" && model.type !== "video") return;
+      rememberNodeModel(model);
+      memory[model.type].set(getNodeModelKey(model));
+    },
+  };
+}
 
 export function readLastNodeModel(type: "image" | "video", models: NodeMediaModel[]) {
   try {

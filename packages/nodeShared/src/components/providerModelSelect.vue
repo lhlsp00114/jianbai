@@ -1,7 +1,8 @@
 <template>
   <div class="providerModelSelect nodrag nopan" :class="{ detachedProviderModel: !!providerTarget }">
     <teleport :to="providerTarget || 'body'" :disabled="!providerTarget">
-      <el-select
+      <modelSelect
+        :empty="!providers.length"
         :modelValue="selectedProvider?.id ?? ''"
         class="providerSelect"
         :class="{ detachedProviderSelect: !!providerTarget }"
@@ -13,10 +14,10 @@
         :noDataText="noDataText"
         :placement="providerTarget ? 'bottom-end' : 'top-start'"
         @update:modelValue="selectProvider"
-        @visible-change="visible => visible && emit('open')">
+        @visible-change="(visible: boolean) => visible && emit('open')">
         <template #label>API</template>
         <el-option v-for="provider in providers" :key="provider.id" :label="provider.label" :value="provider.id" />
-      </el-select>
+      </modelSelect>
     </teleport>
     <el-select
       :modelValue="selectedModel ? model : ''"
@@ -45,12 +46,14 @@ import { ElSelect, ElOption } from "element-plus";
 import { IconSparkles } from "@tabler/icons-vue";
 import { findNodeModel, getNodeModelKey, type NodeMediaModel } from "@toonflow/nodes-scaffold/nodeAi";
 import { groupNodeModels } from "../groupNodeModels";
-import { rememberNodeModel } from "../modelPreference";
+import { useNodeModelPreferences } from "../modelPreference";
 import modelLabel from "./modelLabel.vue";
+import modelSelect from "./modelSelect.vue";
 
 const props = defineProps<{ models: NodeMediaModel[]; loading?: boolean; disabled?: boolean; noDataText: string; providerTarget?: HTMLElement }>();
 const model = defineModel<string>({ required: true });
 const emit = defineEmits<{ open: [] }>();
+const { rememberNodeModel } = useNodeModelPreferences();
 const providers = computed(() => groupNodeModels(props.models));
 const selectedModel = computed(() => findNodeModel(props.models, model.value));
 const selectedProvider = computed(() => providers.value.find(provider => provider.id === selectedModel.value?.providerId) ?? providers.value[0]);

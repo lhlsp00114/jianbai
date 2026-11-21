@@ -36,6 +36,8 @@
       :elevate-edges-on-select="false"
       :disable-keyboard-a11y="true"
       :selectNodesOnDrag="false"
+      :autoPanOnNodeDrag="false"
+      :autoPanOnConnect="false"
       :zoom-on-double-click="false"
       :zoomOnScroll="false"
       :zoomOnPinch="active && !settingsVisible"

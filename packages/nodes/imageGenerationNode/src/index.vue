@@ -143,7 +143,7 @@ import { IconPhotoSpark, IconPhoto, IconArrowUp, IconPlayerStop, IconLayoutGrid,
 import { findNodeModel, getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, z, type NodeMediaModel, type NodeImageRequest, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { useNodePersistence } from "@toonflow/nodes-scaffold/nodeDocument";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
-import { readLastNodeModel, rememberNodeModel } from "@toonflow/node-shared/modelPreference";
+import { useNodeModelPreferences } from "@toonflow/node-shared/modelPreference";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
 import { emptyMediaCardWidth, getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 import providerModelSelect from "@toonflow/node-shared/providerModelSelect";
@@ -235,6 +235,7 @@ if (previousVariationPreset) {
 
 const { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference } = useNodeReferences();
 const models = shallowRef<NodeMediaModel[]>([]);
+const { readLastNodeModel, rememberNodeModel } = useNodeModelPreferences();
 const modelsLoading = ref(false);
 const providerTarget = ref<HTMLElement>();
 const uploading = ref(false);

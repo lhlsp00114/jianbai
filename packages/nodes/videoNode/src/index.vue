@@ -63,6 +63,16 @@
           @dblclick.stop
           @click.stop="selectAsset">从素材库选择</el-button>
       </div>
+      <mediaHistory
+        v-if="node.selected"
+        mediaType="video"
+        inline
+        replaceable
+        :current="outputFile"
+        :disabled="uploading || exporting || player?.capturing || actions?.processing"
+        @open="skeleton?.focusNode()"
+        @select="outputs.video = { dataType: 'VIDEO', value: $event }"
+        @upload="fileInput?.click()" />
     </div>
   </nodeSkeleton>
   <videoActions ref="actions" :file="outputFile" :src="previewUrl" :disabled="uploading || exporting" />

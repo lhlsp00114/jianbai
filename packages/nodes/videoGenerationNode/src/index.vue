@@ -115,7 +115,7 @@ import { IconArrowUp, IconPlayerStop, IconMusic, IconLayersSubtract, IconScissor
 import videoGenerationIcon from "@toonflow/node-shared/videoGenerationIcon";
 import { findNodeModel, getNodeModelIdentity, getNodeModelKey, nodeSkeleton, nodeTools, useNode, useNodeModelSelection, z, type NodeMediaModel, type NodeVideoRequest, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
-import { readLastNodeModel, rememberNodeModel } from "@toonflow/node-shared/modelPreference";
+import { useNodeModelPreferences } from "@toonflow/node-shared/modelPreference";
 import providerModelSelect from "@toonflow/node-shared/providerModelSelect";
 import eagleMenuItem from "@toonflow/node-shared/eagleMenuItem";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
@@ -164,6 +164,7 @@ data.value.ratio ??= "9:16";
 data.value.other ??= {};
 const { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference } = useNodeReferences();
 const models = shallowRef<NodeMediaModel[]>([]);
+const { readLastNodeModel, rememberNodeModel } = useNodeModelPreferences();
 const modelsLoading = ref(false);
 const providerTarget = ref<HTMLElement>();
 const uploading = ref(false);

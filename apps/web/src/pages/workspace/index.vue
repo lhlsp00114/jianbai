@@ -114,6 +114,14 @@
     </div>
     <floatingAgent ref="floatingAgentRef" v-model="agentVisible" :inert="workspaceStore.projectLoadingVisible" @resize="agentWidth = $event" />
     <settings ref="settingsDialog" v-model="settingsVisible" />
+    <el-dialog v-model="shortcutsVisible" title="快捷键" width="min(560px, calc(100vw - 32px))" alignCenter appendToBody>
+      <div class="shortcutsMenu">
+        <div v-for="field in canvasShortcutFields" :key="field.id" class="shortcutItem">
+          <span class="shortcutLabel">{{ field.label }}</span>
+          <span class="shortcutKeys">{{ shortcutLabel(generalSettings.canvasShortcuts[field.id]) || '未绑定' }}</span>
+        </div>
+      </div>
+    </el-dialog>
     <el-dialog v-model="contactVisible" :title="contactInfo.title" width="min(360px, calc(100vw - 32px))" alignCenter appendToBody>
       <div class="contactContent">
         <q-r-code
