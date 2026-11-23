@@ -560,12 +560,14 @@ async function processVideo() {
       .el-button { margin: 0; }
       .sendButton {
         height: 32px; padding: 0 12px;
-        --el-button-bg-color: var(--el-text-color-primary);
+        --el-button-bg-color: var(--el-color-primary);
         --el-button-border-color: transparent;
-        --el-button-text-color: var(--el-bg-color);
-        --el-button-hover-bg-color: var(--el-text-color-regular);
+        --el-button-text-color: var(--ui-primary-foreground, #fff);
+        --el-button-hover-bg-color: var(--el-color-primary-dark-2);
         --el-button-hover-border-color: transparent;
-        --el-button-hover-text-color: var(--el-bg-color);
+        --el-button-hover-text-color: var(--ui-primary-foreground, #fff);
+        --el-button-active-bg-color: var(--el-color-primary-dark-2);
+        --el-button-active-text-color: var(--ui-primary-foreground, #fff);
       }
     }
   }

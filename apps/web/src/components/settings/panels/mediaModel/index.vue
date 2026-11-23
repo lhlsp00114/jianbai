@@ -1,7 +1,9 @@
 <template>
   <div class="providerList">
     <div class="itemList">
-      <toonflowProviderCard scope="media" :provider="providers.find(item => item.id === 'toonflow')" />
+      <jianbaiProviderCard scope="media" :provider="officialProvider">
+        <el-button v-if="officialProvider?.models.length" @click="editProvider(officialProvider)">查看参数与测试</el-button>
+      </jianbaiProviderCard>
       <el-card v-for="item in visibleProviders" :key="item.fileName" class="providerItem" shadow="never">
         <div class="providerHeader">
           <div v-if="item.icon" class="providerMark" aria-hidden="true">
@@ -39,7 +41,7 @@
       <el-button class="addButton" :icon="IconPlus" @click="openAdd">添加供应商</el-button>
     </div>
     <component :is="mediaProviderDialog" v-model="providerDialogVisible" :provider="editingSourceProvider" @added="saveProviderItem" @saved="saveProviderItem" />
-    <component :is="editProviderDialog" v-model="editorVisible" :provider="editingProvider" @saved="saveProviderItem" />
+    <component :is="editProviderDialog" v-model="editorVisible" :provider="editingProvider" :readOnly="editingProvider?.id === jianbaiId" @saved="saveProviderItem" />
   </div>
 </template>
 
@@ -54,14 +56,16 @@ import { saveSettings } from "@/stores/settings";
 import { invalidateNodeModels } from "@toonflow/nodes-scaffold/nodeAi";
 import { getBuiltinSource, useBuiltinUpgrades } from "@/lib/builtinProviders";
 import { withTerminalConfirm } from "@/lib/pluginInstallConfirmation";
-import toonflowProviderCard from "../../toonflowProviderCard.vue";
+import jianbaiProviderCard from "../../toonflowProviderCard.vue";
+import { jianbaiId } from "@/lib/jianbaiAccount";
 
 defineProps<{ visible?: boolean }>();
 const upgradeVersion = useBuiltinUpgrades("media");
 const mediaProviderDialog = shallowRef<Component>();
 const editProviderDialog = shallowRef<Component>();
 const providers = ref<MediaProvider[]>([]);
-const visibleProviders = computed(() => providers.value.filter(item => item.id !== "toonflow"));
+const officialProvider = computed(() => providers.value.find(item => item.id === jianbaiId));
+const visibleProviders = computed(() => providers.value.filter(item => item.id !== "toonflow" && item.id !== jianbaiId));
 const providerDialogVisible = ref(false);
 const editorVisible = ref(false);
 const editingProvider = ref<MediaProvider>();

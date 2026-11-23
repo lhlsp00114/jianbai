@@ -1,6 +1,6 @@
 import { computed, inject, onScopeDispose, toValue, watch, type MaybeRefOrGetter, type Ref } from "vue";
 import { runAgentLoop, type AgentTool, type AgentToolResult } from "@earendil-works/pi-agent-core";
-import { createAssistantMessageEventStream, type AssistantMessage, type Context, type Message, type Model } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, type AssistantMessage, type Context, type ImageContent, type Message, type Model } from "@earendil-works/pi-ai";
 import { EventSourceParserStream } from "eventsource-parser/stream";
 import type { MediaGenerationRequest, MediaModel } from "@toonflow/tools-scaffold/runtime";
 import type { NodeOutput } from "./values";
@@ -86,6 +86,7 @@ export type NodeAiRequest = {
   modelId: string;
   prompt: string;
   systemPrompt?: string;
+  images?: ImageContent[];
   directory?: string;
   references?: Extract<NodeOutput, { dataType: "STRING" | "IMAGE" | "VIDEO" | "FILE" }>[];
   tools?: NodeAiTool[];
@@ -494,7 +495,8 @@ export function useNodeAi(options: { onModelsChanged?: () => unknown } = {}) {
     let turns = 0;
     let requests = 0;
     const identity = getNodeModelIdentity(selected);
-    const messages = await runAgentLoop([{ role: "user", content: prompt, timestamp: Date.now() }], {
+    const content = input.images?.length ? [{ type: "text" as const, text: prompt }, ...input.images] : prompt;
+    const messages = await runAgentLoop([{ role: "user", content, timestamp: Date.now() }], {
       systemPrompt: systemPrompt ?? "", messages: [], tools,
     }, {
       model, convertToLlm: messages => messages as Message[], toolExecution: "sequential",

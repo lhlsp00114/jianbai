@@ -1,8 +1,11 @@
 import { computed, ref, watchEffect } from "vue";
-import { uiSettings } from "@/stores/settings";
+import { adaptivePrimaryColor, uiSettings } from "@/stores/settings";
 
 const systemDark = ref(false);
 export const appearanceDark = computed(() => uiSettings.value.theme === "system" ? systemDark.value : uiSettings.value.theme === "dark");
+export const appearancePrimaryColor = computed(() => uiSettings.value.primaryColor === adaptivePrimaryColor
+  ? appearanceDark.value ? "#ffffff" : "#000000"
+  : uiSettings.value.primaryColor);
 
 export function registerAppearance() {
   const hostWindow = window as Window & {
@@ -13,8 +16,11 @@ export function registerAppearance() {
   const updateSystemTheme = (event: MediaQueryListEvent) => { systemDark.value = event.matches; };
   systemTheme.addEventListener("change", updateSystemTheme);
   const stop = watchEffect(() => {
-    const { primaryColor, fontScale, radius } = uiSettings.value;
+    const { primaryColor: primaryColorSetting, fontScale, radius } = uiSettings.value;
     const dark = appearanceDark.value;
+    const primaryColor = appearancePrimaryColor.value;
+    const adaptive = primaryColorSetting === adaptivePrimaryColor;
+    const primaryForeground = adaptive && dark ? "#000" : "#fff";
     const root = document.documentElement;
     root.classList.toggle("dark", dark);
     root.setAttribute("theme-mode", dark ? "dark" : "light");
@@ -22,11 +28,12 @@ export function registerAppearance() {
     root.style.fontSize = `${(16 * fontScale) / 100}px`;
     root.style.setProperty("--ui-radius", `${radius}px`);
     root.style.setProperty("--el-color-primary", primaryColor);
+    root.style.setProperty("--ui-primary-foreground", primaryForeground);
     for (let level = 1; level <= 9; level++) {
       root.style.setProperty(`--el-color-primary-light-${level}`,
         `color-mix(in srgb, ${primaryColor} ${100 - level * 10}%, ${dark ? "#141414" : "#fff"})`);
     }
-    root.style.setProperty("--el-color-primary-dark-2", `color-mix(in srgb, ${primaryColor} 80%, ${dark ? "#fff" : "#000"})`);
+    root.style.setProperty("--el-color-primary-dark-2", `color-mix(in srgb, ${primaryColor} 80%, ${adaptive ? primaryForeground : dark ? "#fff" : "#000"})`);
     if (window === window.top && hostWindow.__electrobunSendToHost) {
       const style = getComputedStyle(root);
       hostWindow.__electrobunSendToHost({

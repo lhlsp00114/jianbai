@@ -248,7 +248,7 @@ function createPalette() {
     background: radial-gradient(closest-side, #fff, transparent), conic-gradient(red, #ff0, #0f0, #0ff, #00f, #f0f, red);
     touch-action: none;
     cursor: crosshair;
-    .wheelPoint { position: absolute; width: 18px; height: 18px; transform: translate(-50%, -50%); border: 2px solid white; border-radius: 50%; cursor: grab; box-shadow: 0 1px 4px #0004; &.active { width: 24px; height: 24px; z-index: 1; } }
+    .wheelPoint { position: absolute; width: 18px; height: 18px; transform: translate(-50%, -50%); border: 2px solid white; border-radius: 50%; cursor: grab; box-shadow: 0 1px 4px #0004; &.active { width: 24px; height: 24px; z-index: 1; outline: 2px solid var(--el-color-primary); outline-offset: 1px; } }
   }
   .colorCount { font-size: 12px; color: var(--el-text-color-secondary); }
   .paletteColors {
@@ -272,9 +272,9 @@ function createPalette() {
   .el-input__wrapper { box-shadow: none; background: var(--el-fill-color); border-radius: 9px; &.is-focus { box-shadow: 0 0 0 1px var(--el-color-primary) inset; } }
   .el-dialog__footer .el-button { border: 0; border-radius: 9px; background: var(--el-fill-color); color: var(--el-text-color-primary); &:hover { background: var(--el-fill-color-dark); } }
   .el-dialog__footer .el-button--primary {
-    background: var(--el-text-color-primary);
-    color: var(--el-bg-color);
-    &:hover { background: var(--el-text-color-regular); }
+    background: var(--el-color-primary);
+    color: var(--ui-primary-foreground, #fff);
+    &:hover { background: var(--el-color-primary-dark-2); }
     &.is-disabled { background: var(--el-fill-color); color: var(--el-text-color-disabled); }
   }
 }

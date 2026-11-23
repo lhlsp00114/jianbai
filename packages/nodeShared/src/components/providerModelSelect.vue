@@ -16,7 +16,9 @@
         @update:modelValue="selectProvider"
         @visible-change="(visible: boolean) => visible && emit('open')">
         <template #label>API</template>
-        <el-option v-for="provider in providers" :key="provider.id" :label="provider.label" :value="provider.id" />
+        <el-option v-for="provider in providers" :key="provider.id" :label="provider.label" :value="provider.id">
+          <span class="providerOption"><span>{{ provider.label }}</span><el-tag v-if="provider.id === 'tokenGo'" size="small" type="info" effect="plain">官方</el-tag></span>
+        </el-option>
       </modelSelect>
     </teleport>
     <el-select
@@ -42,7 +44,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { ElSelect, ElOption } from "element-plus";
+import { ElSelect, ElOption, ElTag } from "element-plus";
 import { IconSparkles } from "@tabler/icons-vue";
 import { findNodeModel, getNodeModelKey, type NodeMediaModel } from "@toonflow/nodes-scaffold/nodeAi";
 import { groupNodeModels } from "../groupNodeModels";
@@ -126,4 +128,5 @@ function selectProvider(id: string) {
     :deep(.el-select__wrapper) { min-height: 30px; font-size: 12px; }
   }
 }
+.providerOption { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 </style>

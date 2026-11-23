@@ -271,7 +271,7 @@ const activeShot = 3;
         padding: 1px 8px;
         border-radius: 999px;
         background: var(--el-color-primary);
-        color: #fff;
+        color: var(--ui-primary-foreground, #fff);
         font-size: 10px;
         font-weight: 600;
         font-variant-numeric: tabular-nums;
@@ -540,7 +540,7 @@ const activeShot = 3;
           border-color: color-mix(in srgb, var(--el-color-primary) 45%, transparent);
           color: var(--el-text-color-primary);
 
-          .createIcon { transform: scale(1.06); background: var(--el-color-primary); color: #fff; }
+          .createIcon { transform: scale(1.06); background: var(--el-color-primary); color: var(--ui-primary-foreground, #fff); }
         }
 
         &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 3px; }

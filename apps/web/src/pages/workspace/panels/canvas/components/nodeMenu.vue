@@ -34,6 +34,12 @@
           <el-dropdown-item v-if="saveSelection" command="saveSelection" :icon="IconFolderPlus" :disabled="selectionBusy || deleting || !canSaveSelection">
             添加到素材库
           </el-dropdown-item>
+          <el-dropdown-item v-if="selectedImages.length && sendNodeToAgent" command="sendSelectionToAgent" :icon="IconSend" :disabled="selectionBusy || deleting || sendingSelection">
+            发送到 Agent
+          </el-dropdown-item>
+          <el-dropdown-item v-if="selectedImages.length" command="sendSelectionToEagle" :icon="IconExternalLink" :disabled="selectionBusy || deleting || sendingSelection">
+            {{ sendingSelection ? "正在发送到 Eagle…" : "发送到 Eagle" }}
+          </el-dropdown-item>
           <el-dropdown-item command="duplicateSelection" :icon="IconCopyPlus" :disabled="selectionBusy || deleting || !selectedNodes.length">
             创建副本
           </el-dropdown-item>
@@ -94,9 +100,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
 import { useVueFlow, type ConnectingHandle, type GraphNode, type HandleType } from "@vue-flow/core";
 import { getAssetOutputs, isTypeCompatible, useNodeEvent, validateConnection, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
+import { useNodePersistence } from "@toonflow/nodes-scaffold/nodeDocument";
+import type { NodeMediaValue } from "@toonflow/nodes-scaffold/values";
 import { ElMessage } from "element-plus";
 import type { DropdownInstance } from "element-plus";
 import selectionHandle from "./selectionHandle.vue";
@@ -122,6 +130,8 @@ import {
   IconLayoutRows,
   IconLayoutGrid,
   IconFocusCentered,
+  IconSend,
+  IconExternalLink,
 } from "@tabler/icons-vue";
 
 const { remoteNodes = [], disabled = false, pasteNode, uploadFiles, saveSelection, canUndo = false, canRedo = false, selectionBusy = false, batchHistory } = defineProps<{
@@ -144,6 +154,7 @@ const menuContainer = computed(() => menuList.value?.$el.closest<HTMLElement>(".
 const menuLevel = ref<"actions" | "nodes" | "selection" | "arrange">("actions");
 const selectedNodes = shallowRef<GraphNode[]>([]);
 const deleting = ref(false);
+const sendingSelection = ref(false);
 const pasting = ref(false);
 const directNodes = ref(false);
 const menuAnchor = shallowRef({ getBoundingClientRect: () => new DOMRect() });
@@ -165,6 +176,22 @@ const canArrangeSelection = computed(() => {
       && Number.isFinite(node.dimensions.height) && node.dimensions.height > 0);
 });
 const canSaveSelection = computed(() => getSelectionTree(selectedNodes.value, flow.getNodes.value).some(node => getAssetOutputs(node.data ?? {}).length));
+const sendNodeToAgent = inject<((nodeId: string, outputIds: string[]) => Promise<void>) | undefined>("sendNodeToAgent", undefined);
+const getPersistence = useNodePersistence();
+const selectedImages = computed(() => getSelectionTree(selectedNodes.value, flow.getNodes.value).flatMap(node => {
+  const data = node.data as {
+    handles?: { id: string; type: string }[];
+    outputs?: Record<string, { dataType?: string; value?: unknown }>;
+    label?: string;
+    prompt?: string;
+  };
+  return (data.handles ?? []).flatMap(handle => {
+    const output = data.outputs?.[handle.id];
+    if (handle.type !== "source" || output?.dataType !== "IMAGE" || !output.value || typeof output.value !== "object") return [];
+    const file = output.value as NodeMediaValue;
+    return typeof file.url === "string" && typeof file.mimeType === "string" ? [{ node, outputId: handle.id, file, label: data.label, prompt: data.prompt }] : [];
+  });
+}));
 const filteredNodes = computed(() => {
   const nodes = remoteNodes.map(node => ({
     ...node,
@@ -315,6 +342,31 @@ async function handleCommand(command: unknown) {
     saveSelection?.(selectedNodes.value);
     return;
   }
+  if (command === "sendSelectionToAgent") {
+    if (selectionBusy || deleting.value || sendingSelection.value || !sendNodeToAgent || !selectedImages.value.length) return;
+    menu.value?.handleClose();
+    sendingSelection.value = true;
+    try {
+      for (const item of selectedImages.value) await sendNodeToAgent(item.node.id, [item.outputId]);
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : "发送到 Agent 失败");
+    } finally { sendingSelection.value = false; }
+    return;
+  }
+  if (command === "sendSelectionToEagle") {
+    if (selectionBusy || deleting.value || sendingSelection.value || !selectedImages.value.length) return;
+    menu.value?.handleClose();
+    sendingSelection.value = true;
+    try {
+      const context = getPersistence?.();
+      if (!context) throw new Error("请先打开工作区");
+      for (const item of selectedImages.value) await sendImageToEagle(context.directory, item.file, item.label, item.prompt);
+      ElMessage.success("已发送到 Eagle");
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : "发送到 Eagle 失败");
+    } finally { sendingSelection.value = false; }
+    return;
+  }
   if (command === "duplicateSelection") {
     if (selectionBusy || deleting.value || !selectedNodes.value.length) return;
     menu.value?.handleClose();
@@ -347,6 +399,25 @@ async function handleCommand(command: unknown) {
     return;
   }
   await runCommand(command);
+}
+
+async function sendImageToEagle(directory: string, file: NodeMediaValue, label?: string, prompt?: string) {
+  const mediaType = file.mimeType.split("/")[0];
+  const filename = file.url.split(/[\\/]/).at(-1) ?? "";
+  const taskMatch = ["image", "video", "audio"].includes(mediaType)
+    ? filename.match(new RegExp(`^${mediaType}([a-f\\d]{32})\\d+\\.[a-z\\d]+$`, "i"))
+    : null;
+  const compactTaskId = taskMatch?.[1];
+  const taskId = compactTaskId
+    ? `${compactTaskId.slice(0, 8)}-${compactTaskId.slice(8, 12)}-${compactTaskId.slice(12, 16)}-${compactTaskId.slice(16, 20)}-${compactTaskId.slice(20)}`
+    : undefined;
+  const response = await fetch("/api/eagle/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+    body: JSON.stringify({ directory, path: file.url, name: label || "Toonflow", taskId, prompt: taskId ? undefined : prompt ?? "" }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.code !== 200) throw new Error(result.message || "发送到 Eagle 失败");
 }
 
 async function runCommand(command: unknown) {

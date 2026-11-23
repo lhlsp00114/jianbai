@@ -515,7 +515,7 @@ function goToStep(step: number) {
   }
   .editorFooter { display: flex; align-items: center; flex-shrink: 0; gap: 12px; min-height: 56px; margin: 0 20px 14px; padding: 8px 16px; border: 1px solid var(--el-border-color); border-radius: 0 0 8px 8px; background: var(--el-bg-color-overlay);
     .footerStatus { display: flex; align-items: center; gap: 12px; min-width: 0; .el-button { margin: 0; padding: 8px 4px; } }
-    .stepActions { display: flex; gap: 10px; margin-left: auto; .el-button .tabler-icon { margin-left: 8px; } .el-button--primary { color: var(--el-bg-color); background: var(--el-text-color-primary); border-color: var(--el-text-color-primary); } }
+    .stepActions { display: flex; gap: 10px; margin-left: auto; .el-button .tabler-icon { margin-left: 8px; } }
   }
   .muted { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.7; }
   @media (max-width: 1100px) { .editorHeader { .scriptIdentity, .scriptStats { display: none; } .stepNav { left: 16px; width: calc(100% - 70px); transform: none; } } }

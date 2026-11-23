@@ -1,5 +1,6 @@
 <template>
   <nodeSkeleton
+    ref="skeleton"
     v-bind="nodeProps"
     :class="{ outpaintNode: outpaintVisible }"
     :topVisible="node.selected && !outpaintVisible && editor?.mode !== 'smartEdit'"
@@ -9,7 +10,7 @@
     :resizeAspectRatio="previewUrl ? imagePreviewRatio : undefined"
     selectionFrame
     topWidth="max-content"
-    toolbarAction="focus"
+    fullscreenLabel="放大预览"
     :downloadUrl="previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
     @fullscreen="previewVisible = true"
@@ -46,6 +47,8 @@
           :toolbarTarget="editor?.mode === 'smartEdit' ? smartEditToolbar : paintToolbar"
           :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy"
           alt="节点图片"
+          :focusOnDoubleClick="!skeleton?.documentTarget"
+          @focus="skeleton?.focusNode()"
           @preview="previewVisible = true"
           @load="resizeImage"
           @error="ElMessage.error('无法预览该图片')" />
@@ -157,6 +160,7 @@ const multiAngleTarget = ref<HTMLElement>();
 const multiAngleVisible = ref(false);
 const panorama = ref<InstanceType<typeof imagePanorama>>();
 const uploading = ref(false);
+const skeleton = ref<InstanceType<typeof nodeSkeleton>>();
 const previewVisible = ref(false);
 const smartEditToolbar = ref<HTMLElement>();
 const imageWidth = ref(0);

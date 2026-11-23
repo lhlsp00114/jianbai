@@ -4,7 +4,10 @@
       <div class="libraryHeader">
         <h2 :id="titleId" :class="titleClass">创作广场</h2>
         <nav class="libraryViewTabs" aria-label="当前分类视图">
-          <template v-if="builtinCategory">
+          <template v-if="presetCategory">
+            <button v-for="tab in presetTabs" :key="tab.id" type="button" :aria-pressed="presetTab === tab.id" @click="presetTab = tab.id">{{ tab.label }}</button>
+          </template>
+          <template v-else-if="builtinCategory">
             <button v-for="item in instructionTabs" :key="item.value" type="button" :aria-pressed="instructionType === item.value" @click="switchInstruction(item.value)">{{ item.label }}</button>
           </template>
           <template v-else>
@@ -22,6 +25,10 @@
           <hr class="categoryDivider" />
           <button type="button" :aria-pressed="category === 'prompt'" @click="selectCategory('prompt')"><icon-message :size="16" aria-hidden="true" />提示词</button>
           <button type="button" :aria-pressed="category === 'skill'" @click="selectCategory('skill')"><icon-book :size="16" aria-hidden="true" />Skill</button>
+          <hr class="categoryDivider" />
+          <button type="button" :aria-pressed="category === 'style'" @click="selectCategory('style')"><icon-photo :size="16" aria-hidden="true" />风格</button>
+          <button type="button" :aria-pressed="category === 'color'" @click="selectCategory('color')"><icon-palette :size="16" aria-hidden="true" />配色</button>
+          <button type="button" :aria-pressed="category === 'composition'" @click="selectCategory('composition')"><icon-layout-grid :size="16" aria-hidden="true" />构图</button>
         </nav>
       </div>
       <builtinNodeInstructions v-if="visible && builtinCategory" :key="instructionType" ref="builtinEditor" :section="instructionType" :search="search">
@@ -43,8 +50,37 @@
           </div>
         </template>
       </builtinNodeInstructions>
-      <el-alert v-if="!builtinCategory && (library.error || operationError)" :title="library.error || operationError" type="error" :closable="false" showIcon />
-      <div v-if="!builtinCategory && !draft && !officialPreview" class="libraryToolbar">
+      <div v-if="presetCategory" class="libraryBody">
+        <nav v-if="presetCategory === 'style' && presetTab === 'official'" class="presetSubTabs" aria-label="官方风格分类">
+          <button v-for="tab in styleTabs" :key="tab.id" type="button" :aria-pressed="styleTab === tab.id" @click="styleTab = tab.id">{{ tab.label }}</button>
+        </nav>
+        <div class="libraryToolbar">
+          <el-input v-model="search" clearable :prefixIcon="IconSearch" :placeholder="`搜索${presetCategoryLabel}`" :aria-label="`搜索${presetCategoryLabel}`" />
+          <el-button v-if="presetCategory === 'color' || presetCategory === 'style' && presetTab === 'mine'" class="createPresetButton" @click="openPresetEditor"><icon-plus :size="16" aria-hidden="true" />创建{{ presetCategoryLabel }}</el-button>
+        </div>
+        <div ref="presetGrid" class="entryList presetEntryList" role="region" :aria-label="`${presetCategoryLabel}列表`">
+          <div v-for="entry in presetEntries" :key="entry.id" class="entryCard presetCard">
+            <div class="presetPreview">
+              <button class="presetSelect" type="button" :title="entry.title" :disabled="busy" @click="sendEntry(entry)">
+                <img v-if="entry.cover" class="entryCover" :src="entry.cover" alt="" draggable="false" />
+                <span v-else class="presetFallback">{{ entry.title }}</span>
+              </button>
+              <button class="presetFavorite" type="button" :aria-pressed="presetFavoriteIds.includes(entry.name || entry.id)" :title="presetFavoriteIds.includes(entry.name || entry.id) ? '取消收藏' : '收藏'" :aria-label="`${presetFavoriteIds.includes(entry.name || entry.id) ? '取消收藏' : '收藏'}${entry.title}`" @click="togglePresetFavorite(entry.name || entry.id)">
+                <icon-star :size="16" :fill="presetFavoriteIds.includes(entry.name || entry.id) ? 'currentColor' : 'none'" aria-hidden="true" />
+              </button>
+              <div class="presetActions">
+                <button type="button" title="发送到画布" :aria-label="`发送到画布：${entry.title}`" :disabled="busy" @click="sendEntry(entry)"><icon-send :size="15" /></button>
+                <button type="button" title="复制正文" :aria-label="`复制正文：${entry.title}`" :disabled="busy" @click="copyContent(entry.content, entry.id)"><icon-copy :size="15" /></button>
+              </div>
+            </div>
+            <div v-if="entry.colors?.length" class="presetSwatches" aria-label="代表色卡"><span v-for="(color, index) in entry.colors" :key="index" :style="{ background: color }" :title="color" /></div>
+            <div class="presetTitle">{{ entry.title }}</div>
+          </div>
+          <div v-if="search.trim() && !presetEntries.length" class="searchEmpty" role="status">当前分类没有匹配项</div>
+        </div>
+      </div>
+      <el-alert v-if="!builtinCategory && !presetCategory && (library.error || operationError)" :title="library.error || operationError" type="error" :closable="false" showIcon />
+      <div v-if="!builtinCategory && !presetCategory && !draft && !officialPreview" class="libraryToolbar">
         <el-input v-model="search" clearable :prefixIcon="IconSearch" :placeholder="category === 'skill' ? '搜索 Skill' : '搜索提示词'" aria-label="搜索名称或内容" />
         <div class="libraryActions">
           <el-button v-if="libraryView === 'mine'" text :icon="IconPlus" :disabled="busy || !!library.error" @click="createEntry">新建</el-button>
@@ -57,7 +93,7 @@
         <input ref="fileInput" type="file" accept=".md,.markdown,.txt" hidden aria-label="导入 Skill 或提示词文本" @change="importEntry" />
       </div>
       <div v-if="category === 'skill' && libraryView === 'official'" class="officialEmpty" role="status">暂无官方 Skill</div>
-      <div v-else-if="!builtinCategory" class="libraryBody">
+      <div v-else-if="!builtinCategory && !presetCategory" class="libraryBody">
         <div v-if="!draft && !officialPreview" class="entryList" :style="{ '--cardWidth': `${208 - gridDensity * 28}px` }" role="region" aria-label="创作条目">
           <div v-for="{ entry, title, excerpt } in filteredEntries" :key="entry.id" class="entryCard">
             <button class="entryItem" :class="{ dragging: draggedId === entry.id, dropBefore: dropTarget?.id === entry.id && !dropTarget.after, dropAfter: dropTarget?.id === entry.id && dropTarget.after }" type="button" :disabled="busy" :draggable="!busy && libraryView === 'mine'" :title="entry.title" @click="selectEntry(entry)" @dragstart.stop="startSort($event, entry)" @dragover.stop="overSort($event, entry)" @drop.stop="dropSort($event, entry)" @dragend.stop="endSort" @keydown.alt.left.prevent.stop="moveEntry(entry, -1)" @keydown.alt.right.prevent.stop="moveEntry(entry, 1)">
@@ -109,6 +145,8 @@
         </div>
       </div>
     </div>
+    <colorPaletteEditor v-if="presetCategory === 'color'" v-model="colorEditorVisible" @created="onPresetCreated" />
+    <stylePresetEditor v-if="presetCategory === 'style'" v-model="styleEditorVisible" @created="onPresetCreated" />
   </el-dialog>
 </template>
 
@@ -116,7 +154,7 @@
 import axios from "axios";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { IconAdjustments, IconArrowLeft, IconBook, IconCheck, IconCopy, IconDownload, IconMessage, IconPhoto, IconPlus, IconSearch, IconSend, IconStar, IconStarOff, IconUpload } from "@tabler/icons-vue";
+import { IconAdjustments, IconArrowLeft, IconBook, IconCheck, IconCopy, IconDownload, IconLayoutGrid, IconMessage, IconPalette, IconPhoto, IconPlus, IconSearch, IconSend, IconStar, IconStarOff, IconUpload } from "@tabler/icons-vue";
 import { translate } from "@toonflow/i18n/vue";
 import { saveSettings, settings, settingsStorage } from "@/stores/settings";
 import { writeClipboardText } from "@/lib/clipboard";
@@ -124,15 +162,107 @@ import saveFile from "@/lib/saveFile";
 import { currentUser } from "@/stores/multiTenant";
 import builtinNodeInstructions from "./builtinNodeInstructions.vue";
 import { officialPrompts } from "./officialPrompts";
+import { colorOptions } from "@toonflow/node-shared/colorOptions";
+import { compositions } from "@toonflow/node-shared/compositionOptions";
+import { getColorPrompt } from "@toonflow/node-shared/colorPrompts";
+import { getCompositionPrompt } from "@toonflow/node-shared/compositionPrompts";
+import { getStylePrompt, liveActionStylePresets, musicVideoStylePresets, stylePresets } from "@toonflow/node-shared/stylePresets";
+import { twoDStylePresets } from "@toonflow/node-shared/twoDStylePresets";
+import { threeDStylePresets } from "@toonflow/node-shared/threeDStylePresets";
+import { customColors, getCustomColorOption, loadCustomColors } from "@toonflow/node-shared/customColors";
+import { customStyles, loadCustomStyles } from "@toonflow/node-shared/customStyles";
+import colorPaletteEditor from "@toonflow/node-shared/colorPaletteEditor";
+import stylePresetEditor from "@toonflow/node-shared/stylePresetEditor";
 
-type Entry = { id: string; kind: "skill" | "prompt"; title: string; content: string; cover?: string };
+type Entry = { id: string; kind: "skill" | "prompt"; title: string; content: string; cover?: string; name?: string; colors?: string[] };
 const visible = defineModel<boolean>({ default: false });
 const props = defineProps<{ sendToCanvas?: (entry: Entry) => Promise<void>; officialPromptsOnOpen?: boolean }>();
-const category = ref<"skill" | "prompt" | "builtin">("prompt");
+const category = ref<"skill" | "prompt" | "builtin" | "style" | "color" | "composition">("prompt");
 const instructionTabs = [{ value: "text", label: translate("文本节点") }, { value: "comic", label: translate("漫画提示词") }, { value: "image", label: translate("图片生成节点") }] as const;
 const instructionType = ref<(typeof instructionTabs)[number]["value"]>("text");
 const libraryView = ref<"mine" | "official" | "recent">("mine");
+type PresetTab = "official" | "mine" | "favorites" | "recent";
+const presetTab = ref<PresetTab>("official");
+const styleTab = ref("all");
+const styleTabs = [
+  { id: "all", label: "全部" },
+  { id: "liveAction", label: "真人风格" },
+  { id: "musicVideo", label: "MV风格" },
+  { id: "twoD", label: "2D风格" },
+  { id: "threeD", label: "3D风格" },
+] as const;
 const builtinCategory = computed(() => category.value === "builtin");
+const presetCategory = computed(() => ["style", "color", "composition"].includes(category.value) ? category.value as "style" | "color" | "composition" : undefined);
+const presetCategoryLabel = computed(() => presetCategory.value === "style" ? "风格" : presetCategory.value === "color" ? "配色" : "构图");
+const presetTabs = computed(() => [
+  { id: "official" as const, label: `官方${presetCategoryLabel.value}` },
+  { id: "mine" as const, label: `我的${presetCategoryLabel.value}` },
+  { id: "favorites" as const, label: "我的收藏" },
+  { id: "recent" as const, label: "最近使用" },
+]);
+type PresetItem = { name: string; label: string; image?: string; colors?: string[] };
+const presetRecentKey = computed(() => presetCategory.value === "style" ? "toonflow.recentStyles" : presetCategory.value === "color" ? "toonflow.recentColors" : "toonflow.recentCompositions");
+const presetFavoritesKey = computed(() => presetCategory.value === "style" ? "toonflow.styleFavorites" : presetCategory.value === "color" ? "toonflow.colorFavorites" : "toonflow.compositionFavorites");
+const presetFavoriteIds = ref<string[]>([]);
+const presetRecentIds = ref<string[]>([]);
+function readPresetIds(key: string) {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
+    if (!Array.isArray(stored) || !stored.every(item => typeof item === "string")) return [];
+    return [...new Set(stored)];
+  } catch { return []; }
+}
+function loadPresetRecords() {
+  presetFavoriteIds.value = readPresetIds(presetFavoritesKey.value);
+  presetRecentIds.value = readPresetIds(presetRecentKey.value);
+}
+function officialPresetItems(): PresetItem[] {
+  if (presetCategory.value === "style") {
+    if (styleTab.value === "liveAction") return [...liveActionStylePresets];
+    if (styleTab.value === "musicVideo") return [...musicVideoStylePresets];
+    if (styleTab.value === "twoD") return [...twoDStylePresets];
+    if (styleTab.value === "threeD") return [...threeDStylePresets];
+    return [...stylePresets];
+  }
+  return presetCategory.value === "color" ? [...colorOptions] : [...compositions];
+}
+function allPresetItems(): PresetItem[] {
+  if (presetCategory.value === "style") return [...stylePresets, ...customStyles.value.map(item => ({ name: item.name, label: item.label, image: item.image }))];
+  if (presetCategory.value === "color") return [...colorOptions, ...customColors.value.map(getCustomColorOption)];
+  return [...compositions];
+}
+function presetSourceItems(): PresetItem[] {
+  const allItems = allPresetItems();
+  if (presetTab.value === "official") return officialPresetItems();
+  if (presetTab.value === "mine") {
+    if (presetCategory.value === "style") return customStyles.value.map(item => ({ name: item.name, label: item.label, image: item.image }));
+    if (presetCategory.value === "color") return allItems.filter(item => customColors.value.some(custom => custom.name === item.name) || presetFavoriteIds.value.includes(item.name));
+    return allItems.filter(item => readPresetIds(presetFavoritesKey.value).includes(item.name));
+  }
+  const ids = presetTab.value === "favorites" ? presetFavoriteIds.value : presetRecentIds.value;
+  return ids.flatMap(id => { const item = allItems.find(candidate => candidate.name === id); return item ? [item] : []; });
+}
+const presetEntries = computed<Entry[]>(() => {
+  const query = search.value.trim().toLocaleLowerCase();
+  const items = presetSourceItems().map(item => ({
+    id: `${presetCategory.value}:${item.name}`,
+    name: item.name,
+    title: item.label,
+    content: presetCategory.value === "style" ? getStylePrompt(item.name, item)
+      : presetCategory.value === "color" ? getColorPrompt(item.name, item)
+        : getCompositionPrompt(item.name),
+    cover: item.image,
+    colors: item.colors,
+  }));
+  return items.filter(item => !query || `${item.title} ${item.content}`.toLocaleLowerCase().includes(query)).map(item => ({ ...item, kind: "prompt" as const }));
+});
+const colorEditorVisible = ref(false);
+const styleEditorVisible = ref(false);
+const search = ref("");
+const presetGrid = ref<HTMLElement>();
+watch([presetTab, styleTab, search, category], () => {
+  if (presetGrid.value) presetGrid.value.scrollTop = 0;
+}, { flush: "post" });
 const recentIds = ref<string[]>([]);
 const preferences = computed(() => settings.value.stores as Record<string, unknown> | undefined);
 const starred = computed(() => {
@@ -154,7 +284,6 @@ function toggleStar(id: string) {
   settingsStorage.setItem("creationLibraryStars", JSON.stringify([...ids]));
 }
 const builtinEditor = ref<InstanceType<typeof builtinNodeInstructions>>();
-const search = ref("");
 const draft = ref<Entry>();
 const officialPreview = ref<Entry>();
 const original = ref("");
@@ -240,6 +369,11 @@ function resetDraft() {
 }
 
 watch(visible, open => {
+  if (open) {
+    loadCustomStyles();
+    loadCustomColors();
+    loadPresetRecords();
+  }
   if (!open || !props.officialPromptsOnOpen) return;
   resetDraft();
   search.value = "";
@@ -269,6 +403,13 @@ async function selectCategory(next: typeof category.value) {
   search.value = "";
   category.value = next;
   libraryView.value = "mine";
+  if (presetCategory.value) {
+    presetTab.value = "official";
+    styleTab.value = "all";
+    loadCustomStyles();
+    loadCustomColors();
+    loadPresetRecords();
+  }
 }
 
 async function switchInstruction(next: typeof instructionType.value) {
@@ -500,9 +641,41 @@ async function sendEntry(entry: Entry) {
   try {
     await props.sendToCanvas(entry);
     recordRecent(entry.id);
+    recordPresetRecent(entry.id);
     visible.value = false;
   } catch (error) { showError(error); }
   finally { saving.value = false; }
+}
+
+function togglePresetFavorite(name?: string) {
+  if (!name || !presetCategory.value) return;
+  const next = presetFavoriteIds.value.includes(name)
+    ? presetFavoriteIds.value.filter(item => item !== name)
+    : [...presetFavoriteIds.value, name];
+  presetFavoriteIds.value = next;
+  localStorage.setItem(presetFavoritesKey.value, JSON.stringify(next));
+}
+
+function openPresetEditor() {
+  if (presetCategory.value === "color") colorEditorVisible.value = true;
+  else if (presetCategory.value === "style") styleEditorVisible.value = true;
+}
+
+function onPresetCreated() {
+  loadCustomStyles();
+  loadCustomColors();
+  presetTab.value = "mine";
+  loadPresetRecords();
+}
+
+function recordPresetRecent(id: string) {
+  if (!id.includes(":")) return;
+  const [kind, name] = id.split(":", 2);
+  const key = kind === "style" ? "toonflow.recentStyles" : kind === "color" ? "toonflow.recentColors" : kind === "composition" ? "toonflow.recentCompositions" : "";
+  if (!key || !name) return;
+  const next = [name, ...readPresetIds(key).filter(item => item !== name)].slice(0, 50);
+  localStorage.setItem(key, JSON.stringify(next));
+  presetRecentIds.value = next;
 }
 
 function recordRecent(id: string) {
@@ -539,11 +712,12 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
   :deep(.el-button) { margin: 0; padding: 0 8px; border-radius: 8px; }
 }
 :global(.el-dialog.creationLibraryDialog) {
-  --librarySelectedText: var(--el-text-color-primary);
+  --librarySelectedText: var(--el-color-primary);
   --libraryMutedText: var(--el-text-color-secondary);
   --libraryContentOffset: 176px;
   --el-dialog-border-radius: 24px;
   border: 1px solid var(--el-border-color-lighter);
+  border-radius: 24px;
   display: flex;
   flex-direction: column;
   height: min(780px, 92dvh);
@@ -614,7 +788,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
         font-size: 13px;
         svg { box-sizing: content-box; padding: 5px; }
         cursor: pointer;
-        &:hover { color: var(--librarySelectedText); }
+        &:hover { color: var(--el-text-color-primary); }
         &[aria-pressed="true"] {
           background: var(--el-fill-color-light);
           color: var(--librarySelectedText);
@@ -640,6 +814,131 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
       gap: 4px;
       :deep(.el-button) { margin: 0; padding: 0 8px; border-radius: 8px; }
     }
+  }
+  .presetSubTabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    flex-shrink: 0;
+    margin: 0 0 10px;
+    button {
+      padding: 2px 0;
+      border: 0;
+      background: transparent;
+      color: var(--libraryMutedText);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      &:hover { color: var(--el-text-color-primary); }
+      &[aria-pressed="true"] { color: var(--librarySelectedText); font-weight: 600; }
+      &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 3px; }
+    }
+  }
+  .createPresetButton {
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 9px;
+    background: var(--el-color-primary);
+    color: var(--ui-primary-foreground, #fff);
+    :deep(> span) { gap: 6px; }
+    &:hover { background: var(--el-color-primary-dark-2); }
+  }
+  .libraryBody .entryList.presetEntryList {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px 16px;
+    padding: 4px;
+    .presetCard {
+      min-width: 0;
+      .presetPreview {
+        position: relative;
+        overflow: hidden;
+        aspect-ratio: 16 / 9;
+        border-radius: 12px;
+        background: var(--el-fill-color);
+        .presetSelect {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          cursor: pointer;
+          &:focus-visible { outline: 1px solid var(--el-color-primary); outline-offset: -2px; }
+          .entryCover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+          .presetFallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; color: var(--el-text-color-primary); font-size: 13px; text-align: center; }
+        }
+        .presetFavorite {
+          position: absolute;
+          z-index: 1;
+          top: 7px;
+          left: 7px;
+          display: grid;
+          place-items: center;
+          width: 28px;
+          height: 28px;
+          padding: 0;
+          border: 1px solid #ffffff30;
+          border-radius: 8px;
+          background: #161b20bd;
+          color: #fff;
+          opacity: 0;
+          cursor: pointer;
+          transition: opacity 140ms ease;
+          &[aria-pressed="true"], &:focus-visible { opacity: 1; color: #e4c58c; }
+          &:focus-visible { outline: 2px solid var(--el-color-primary); }
+        }
+        .presetActions {
+          position: absolute;
+          right: 7px;
+          bottom: 7px;
+          display: flex;
+          gap: 4px;
+          opacity: 0;
+          transition: opacity 140ms ease;
+          button {
+            display: grid;
+            place-items: center;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border: 1px solid #ffffff30;
+            border-radius: 8px;
+            background: #161b20bd;
+            color: #fff;
+            cursor: pointer;
+            &:hover { background: #161b20e8; }
+          }
+        }
+        &:hover .presetFavorite, &:focus-within .presetFavorite,
+        &:hover .presetActions, &:focus-within .presetActions { opacity: 1; }
+        @media (hover: none) { .presetFavorite, .presetActions { opacity: 1; } }
+      }
+      .presetSwatches {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 7px;
+        span {
+          width: 18px;
+          height: 18px;
+          flex: 0 1 18px;
+          border-radius: 999px;
+          box-shadow: inset 0 0 0 1px #80808020;
+          &:first-child { width: 36px; flex-basis: 36px; }
+        }
+      }
+      .presetTitle {
+        margin: 9px 2px 0;
+        overflow: hidden;
+        color: var(--el-text-color-primary);
+        font-size: 13px;
+        line-height: 1.5;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+    @media (max-width: 720px) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   .libraryBody {
     flex: 1;

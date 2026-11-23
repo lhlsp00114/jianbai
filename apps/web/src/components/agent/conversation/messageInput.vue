@@ -866,7 +866,7 @@ defineExpose({ getDraft, clearDraft, fillPrompt, fillQueuedMessage, editMessage,
 
         &.voiceActive {
           background-color: var(--el-color-primary);
-          color: white;
+          color: var(--ui-primary-foreground, #fff);
           box-shadow: 0 0 0 4px var(--el-color-primary-light-8);
         }
       }

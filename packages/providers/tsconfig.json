@@ -4,5 +4,5 @@
     "lib": ["ESNext", "DOM"],
     "types": ["./types"]
   },
-  "include": ["index.ts", "types.d.ts"]
+  "include": ["index.ts", "types.d.ts", "src/media/tokenGo.ts"]
 }

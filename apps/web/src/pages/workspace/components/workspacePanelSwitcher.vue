@@ -26,8 +26,8 @@ const options = computed(() => [
 .panelSwitcher {
   --el-border-radius-base: var(--ui-radius-large);
   --el-segmented-color: var(--el-text-color-secondary);
-  --el-segmented-item-selected-color: var(--el-text-color-primary);
-  --el-segmented-item-selected-bg-color: color-mix(in srgb, var(--el-text-color-primary) 12%, var(--el-bg-color));
+  --el-segmented-item-selected-color: var(--el-color-primary);
+  --el-segmented-item-selected-bg-color: var(--el-color-primary-light-9);
   --el-segmented-item-hover-bg-color: color-mix(in srgb, var(--el-text-color-primary) 6%, transparent);
   min-height: 28px;
   padding: 2px;

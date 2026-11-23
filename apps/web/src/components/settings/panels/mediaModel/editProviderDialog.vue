@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="`编辑媒体供应商：${provider?.label ?? ''}`"
+    :title="readOnly ? provider?.label : `编辑媒体供应商：${provider?.label ?? ''}`"
     width="min(800px, calc(100vw - 32px))"
     alignCenter
     appendToBody
@@ -12,10 +12,10 @@
     @closed="formApi = undefined">
     <div class="providerEditor">
       <messageMarkdown v-if="provider?.readme" class="providerReadme" :content="provider.readme" />
-      <form-create v-model="formValues" v-model:api="formApi" :rule="formRules" :option="formOptions" />
+      <form-create v-if="!readOnly" v-model="formValues" v-model:api="formApi" :rule="formRules" :option="formOptions" />
       <div class="modelHeader">
         <h4>模型配置 <el-text type="info">{{ models.length }}</el-text></h4>
-        <el-button :icon="IconPlus" size="small" :disabled="saving" @click="editModel()">手动添加</el-button>
+        <el-button v-if="!readOnly" :icon="IconPlus" size="small" :disabled="saving" @click="editModel()">手动添加</el-button>
       </div>
       <div class="modelList">
         <el-card v-for="(item, index) in models" :key="index" class="modelCard" shadow="never">
@@ -29,8 +29,8 @@
             </div>
             <div class="actionButtons">
               <el-button text size="small" :icon="IconPlayerPlay" :loading="loadingTestModel === index" :disabled="saving || loadingTestModel !== undefined || item.type === 'text'" :title="item.type === 'text' ? '此处支持图片、视频和音频模型测试' : undefined" :aria-label="`测试模型 ${item.label}`" @click="testModel(index)">测试</el-button>
-              <el-button text size="small" :icon="IconEdit" :disabled="saving" :aria-label="`编辑模型 ${item.label}`" @click="editModel(index)">编辑</el-button>
-              <el-button text size="small" type="danger" :icon="IconTrash" :disabled="saving" :aria-label="`删除模型 ${item.label}`" @click="models.splice(index, 1)">删除</el-button>
+              <el-button v-if="!readOnly" text size="small" :icon="IconEdit" :disabled="saving" :aria-label="`编辑模型 ${item.label}`" @click="editModel(index)">编辑</el-button>
+              <el-button v-if="!readOnly" text size="small" type="danger" :icon="IconTrash" :disabled="saving" :aria-label="`删除模型 ${item.label}`" @click="models.splice(index, 1)">删除</el-button>
             </div>
           </div>
           <div class="modelTags">
@@ -43,8 +43,8 @@
     </div>
     <el-alert v-if="formError" class="formError" :title="formError" type="error" :closable="false" showIcon />
     <template #footer>
-      <el-button :disabled="saving" @click="visible = false">取消</el-button>
-      <el-button type="primary" :icon="IconDeviceFloppy" :loading="saving" :disabled="!formApi" @click="saveModels">保存</el-button>
+      <el-button :disabled="saving" @click="visible = false">{{ readOnly ? "关闭" : "取消" }}</el-button>
+      <el-button v-if="!readOnly" type="primary" :icon="IconDeviceFloppy" :loading="saving" :disabled="!formApi" @click="saveModels">保存</el-button>
     </template>
     <component
       :is="modelEditorDialog"
@@ -74,7 +74,7 @@ import { settings, saveSettings } from "@/stores/settings";
 import { invalidateNodeModels } from "@toonflow/nodes-scaffold/nodeAi";
 import providerTestPanel from "./providerTestPanel.vue";
 
-const { provider } = defineProps<{ provider?: MediaProvider }>();
+const { provider, readOnly } = defineProps<{ provider?: MediaProvider; readOnly?: boolean }>();
 const modelEditorDialog = shallowRef<Component>();
 const visible = defineModel<boolean>({ default: false });
 const emit = defineEmits<{ saved: [provider: MediaProvider] }>();

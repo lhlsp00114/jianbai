@@ -5,10 +5,10 @@
       <div class="guidanceContent">
       <div class="creativeEntries" role="group" aria-label="创作设置">
         <div v-for="entry in creativeEntries" :key="entry.label" class="creativeEntrySlot" :class="{ hasSelection: selectedEntry(entry.name) }">
-          <el-tooltip :disabled="!selectedEntry(entry.name) || compositionVisible || colorVisible || cameraVisible" placement="top" :showAfter="250" :showArrow="false" :popperStyle="{ padding: '5px', borderRadius: '12px' }">
-            <template #content><div><img v-if="selectedEntry(entry.name)" class="compositionHoverImage" :src="selectedEntry(entry.name)?.image" :alt="selectedEntry(entry.name)?.label" style="display: block; width: 240px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px" /><p v-if="entry.name === 'cameraEntry'" style="max-width: 240px; margin: 7px 0 0; font-size: 12px; line-height: 1.5">{{ cameraSummary }}</p></div></template>
-            <button class="creativeEntry" :class="entry.name" type="button" :disabled="entry.name === 'styleEntry'" @click="openEntry(entry.name)">
-              <img v-if="selectedEntry(entry.name)" class="entryThumbnail" :src="selectedEntry(entry.name)?.image" alt="" />
+          <el-tooltip :disabled="!selectedEntry(entry.name)?.image || styleVisible || compositionVisible || colorVisible || cameraVisible" placement="top" :showAfter="250" :showArrow="false" :popperStyle="entry.name === 'cameraEntry' ? { padding: '5px', borderRadius: '12px' } : { padding: '0', borderRadius: '9px' }">
+            <template #content><div><img v-if="selectedEntry(entry.name)?.image" class="compositionHoverImage" :src="selectedEntry(entry.name)?.image" :alt="selectedEntry(entry.name)?.label" style="display: block; width: 240px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px" /><p v-if="entry.name === 'cameraEntry'" style="max-width: 240px; margin: 7px 0 0; font-size: 12px; line-height: 1.5">{{ cameraSummary }}</p></div></template>
+            <button class="creativeEntry" :class="entry.name" type="button" @click="openEntry(entry.name)">
+              <img v-if="selectedEntry(entry.name)?.image" class="entryThumbnail" :src="selectedEntry(entry.name)?.image" alt="" />
               <span v-else class="entryIcon" aria-hidden="true" />
               <span class="entryLabel">{{ selectedEntry(entry.name)?.label || entry.label }}</span>
             </button>
@@ -33,6 +33,7 @@
   <el-dialog v-model="expanded" class="generationPromptDialog" modalClass="generationPromptMask" title="编辑生成提示词" width="min(820px, calc(100vw - 40px))" alignCenter appendToBody :showClose="false" :closeOnClickModal="false" @opened="focusEditor">
     <div ref="expandedTarget" class="expandedPromptTarget" />
   </el-dialog>
+  <compositionGallery v-model="styleVisible" :selected="node.data.stylePreset" :selectedSnapshot="node.data.stylePresetData" kind="style" @update:selected="updateStylePreset" />
   <compositionGallery v-model="compositionVisible" v-model:selected="node.data.compositionPreset" />
   <compositionGallery v-model="colorVisible" v-model:selected="node.data.colorPreset" kind="color" :selectedSnapshot="node.data.colorPresetData" />
   <cameraControl v-model="cameraVisible" :settings="node.data.cameraSettings" @update:settings="updateCameraSettings" />
@@ -48,6 +49,8 @@ import { cameraOptions, isCameraSettings, lensOptions } from "../cameraOptions";
 import cameraReferenceImage from "../assets/colors/sageCream.jpg";
 import { useNode, useVueFlow } from "@vue-flow/core";
 import { compositions } from "./compositionOptions";
+import { getStylePreset } from "../stylePresets";
+import { isCustomStyle } from "../customStyles";
 import { getColorOptions, getCustomColorOption, isCustomColor, loadCustomColors } from "../customColors";
 loadCustomColors();
 
@@ -61,6 +64,10 @@ const creativeEntries = [
 const expanded = ref(false);
 const { node } = useNode();
 const { updateNodeData } = useVueFlow();
+const selectedStyle = computed(() => {
+  const name = node.data.stylePreset;
+  return name ? getStylePreset(name, node.data.stylePresetData) ?? { label: "风格不可用", image: undefined } : undefined;
+});
 const selectedComposition = computed(() => compositions.find(item => item.name === node.data.compositionPreset));
 const selectedColor = computed(() => {
   const snapshot = node.data.colorPresetData;
@@ -73,6 +80,7 @@ watch(() => node.data.colorPreset, preset => {
 }, { immediate: true, flush: "sync" });
 const colorVisible = ref(false);
 const cameraVisible = ref(false);
+const styleVisible = ref(false);
 const selectedCamera = computed(() => {
   const settings = node.data.cameraSettings;
   return isCameraSettings(settings) ? { label: settings.enabled ? `${settings.focalLength} mm · f/${settings.aperture}` : "相机 · 已关闭", image: cameraReferenceImage } : undefined;
@@ -83,18 +91,25 @@ const cameraSummary = computed(() => {
   return `${cameraOptions.find(item => item.id === settings.camera)?.label} · ${lensOptions.find(item => item.id === settings.lens)?.label} · ${settings.focalLength} mm · f/${settings.aperture}${settings.enabled ? "" : " · 已关闭"}`;
 });
 function openEntry(name: string) {
-  if (name === "colorEntry") colorVisible.value = true;
+  if (name === "styleEntry") styleVisible.value = true;
+  else if (name === "colorEntry") colorVisible.value = true;
   else if (name === "compositionEntry") compositionVisible.value = true;
   else if (name === "cameraEntry") cameraVisible.value = true;
 }
 function clearEntry(name: string) {
   if (name === "cameraEntry") updateCameraSettings(undefined);
+  else if (name === "styleEntry") updateStylePreset("");
   else node.data[name === "colorEntry" ? "colorPreset" : "compositionPreset"] = "";
+}
+function updateStylePreset(value: string) {
+  const preset = getStylePreset(value, node.data.stylePresetData);
+  updateNodeData(node.id, { stylePreset: value || undefined, stylePresetData: isCustomStyle(preset) ? { ...preset } : undefined });
 }
 function updateCameraSettings(value: unknown) {
   updateNodeData(node.id, { cameraSettings: value });
 }
 function selectedEntry(name: string) {
+  if (name === "styleEntry") return selectedStyle.value;
   return name === "compositionEntry" ? selectedComposition.value : name === "colorEntry" ? selectedColor.value : name === "cameraEntry" ? selectedCamera.value : undefined;
 }
 const compositionVisible = ref(false);
@@ -174,7 +189,7 @@ function handleKeydown(event: KeyboardEvent) {
         color: var(--el-text-color-secondary);
         cursor: pointer;
         &:hover { background: var(--el-fill-color-darker); color: var(--el-text-color-primary); }
-        &:focus-visible { outline: 1px solid #fff; outline-offset: 2px; }
+        &:focus-visible { outline: 1px solid var(--el-color-primary); outline-offset: 2px; }
       }
     }
 
@@ -204,7 +219,7 @@ function handleKeydown(event: KeyboardEvent) {
       &:not(:disabled) {
         cursor: pointer;
         &:hover { border-color: var(--entryAccent); }
-        &:focus-visible { outline: 1px solid #fff; outline-offset: 2px; }
+        &:focus-visible { outline: 1px solid var(--el-color-primary); outline-offset: 2px; }
       }
 
       &.styleEntry { --entryAccent: #b7aa90; }
@@ -344,7 +359,7 @@ function handleKeydown(event: KeyboardEvent) {
 
       &[aria-expanded="true"] { color: #baa98d; background: color-mix(in srgb, currentColor 9%, transparent); }
       &:hover { color: var(--el-text-color-primary); background: var(--el-fill-color); }
-      &:focus-visible { outline: 1px solid #fff; outline-offset: 2px; }
+      &:focus-visible { outline: 1px solid var(--el-color-primary); outline-offset: 2px; }
 
       .guidanceIcon {
         position: relative;

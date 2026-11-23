@@ -40,15 +40,21 @@
           </span>
           <span class="sidebarText">设置</span>
         </button>
-        <a class="sidebarItem githubLink" href="https://github.com/HBAI-Ltd/Toonflow-app" target="_blank" rel="noopener noreferrer" aria-label="GitHub" title="GitHub">
+        <a class="sidebarItem githubLink" href="https://github.com/lhlsp00114/jianbai" target="_blank" rel="noopener noreferrer" aria-label="GitHub" title="GitHub">
           <icon-brand-github :size="18" aria-hidden="true" />
           <span class="sidebarText">GitHub</span>
         </a>
       </div>
     </aside>
     <main v-if="activeSection === 'tools'" class="pageScroll" aria-label="工具" />
-    <photoCraft v-if="photoCraftOpened" :class="{ backgroundEditor: activeSection !== 'photoCraft' }" :inert="activeSection !== 'photoCraft'" :aria-hidden="activeSection !== 'photoCraft'" />
-    <trumanMapPage v-if="activeSection === 'trumanMap'" />
+    <photoCraft v-if="photoCraftOpened" v-model:dirty="photoCraftDirty" :class="{ backgroundEditor: activeSection !== 'photoCraft' }" :inert="activeSection !== 'photoCraft'" :aria-hidden="activeSection !== 'photoCraft'" />
+    <el-scrollbar v-if="activeSection === 'trumanMap'" class="pageScroll">
+      <div class="pageBody">
+        <el-main class="pageContent">
+          <trumanMapPage />
+        </el-main>
+      </div>
+    </el-scrollbar>
     <el-scrollbar v-show="!['tools', 'photoCraft', 'trumanMap'].includes(activeSection)" ref="pageScroll" class="pageScroll" @scroll="updateActiveSection">
       <div class="pageBody">
         <el-main class="pageContent">
@@ -172,13 +178,14 @@ const sidebarCollapsed = ref(false);
 const pageScroll = ref<ScrollbarInstance>();
 const activeSection = ref("home");
 const photoCraftOpened = ref(false);
+const photoCraftDirty = ref(false);
 const homeSections = [
   { id: "home", label: "首页", icon: IconHome },
   { id: "infiniteCanvas", label: "无限画布", icon: IconInfinity },
   { id: "infiniteComic", label: "无限漫画", icon: IconLayoutBoard, beta: true },
+  { id: "photoCraft", label: "PS图像编辑", beta: true },
   { id: "projects", label: "项目", icon: IconFolder },
   { id: "tools", label: "工具", icon: IconTools },
-  { id: "photoCraft", label: "PS图像编辑", beta: true },
   { id: "explore", label: "探索", icon: IconCompass },
   { id: "trumanMap", label: "白模预演 TrumanMap", icon: IconCompass },
 ];
@@ -186,18 +193,19 @@ const mobileConnect = defineAsyncComponent(() => import("@/components/mobileConn
 const router = useRouter();
 const pageLifetime = new AbortController();
 async function confirmPhotoCraftLeave() {
-  if (!photoCraftOpened.value) return true;
+  if (!photoCraftOpened.value || !photoCraftDirty.value) return true;
   try {
     await ElMessageBox.confirm("离开首页会关闭 PhotoCraft。请确认图片已经保存或导出。", "离开图片编辑器", {
       confirmButtonText: "已保存，离开", cancelButtonText: "继续编辑", type: "warning",
     });
+    photoCraftDirty.value = false;
     return true;
   } catch { return false; }
 }
 onBeforeRouteLeave(() => creating.value || opening.value || confirmPhotoCraftLeave());
 
 function confirmEditorUnload(event: BeforeUnloadEvent) {
-  if (!photoCraftOpened.value) return;
+  if (!photoCraftOpened.value || !photoCraftDirty.value) return;
   event.preventDefault();
   event.returnValue = "";
 }
@@ -308,9 +316,9 @@ async function loadAdvertisements() {
   if (import.meta.env.DEV && typeof preview === "string" && ["text", "image", "web", "carousel", "stack"].includes(preview)) {
     const now = Date.now();
     const previewSlides: { title: string; subtitle: string; color: string; actionType: HomeAdvertisement["actionType"]; actionTarget: string }[] = [
-      { title: "探索创作灵感", subtitle: "从一个想法，开始你的下一个作品", color: "#273442", actionType: preview === "web" ? "web" : "path", actionTarget: preview === "web" ? "https://github.com/HBAI-Ltd/Toonflow-app" : "/home?section=explore" },
+      { title: "探索创作灵感", subtitle: "从一个想法，开始你的下一个作品", color: "#273442", actionType: preview === "web" ? "web" : "path", actionTarget: preview === "web" ? "https://github.com/lhlsp00114/jianbai" : "/home?section=explore" },
       { title: "搭建你的工作流", subtitle: "前往插件市场，发现更多创作工具", color: "#2c303b", actionType: "settings", actionTarget: "pluginMarket" },
-      { title: "一起创造更多", subtitle: "在 GitHub 了解 Toonflow 的新进展", color: "#243734", actionType: "web", actionTarget: "https://github.com/HBAI-Ltd/Toonflow-app" },
+      { title: "一起创造更多", subtitle: "在 GitHub 了解 Toonflow 的新进展", color: "#243734", actionType: "web", actionTarget: "https://github.com/lhlsp00114/jianbai" },
     ];
     const sidebar = previewSlides.map((slide, index): HomeAdvertisement => ({
       title: slide.title,
@@ -348,7 +356,7 @@ async function loadAdvertisements() {
       </svg>`)}`;
     const banner: HomeAdvertisement = {
       title: "创作灵感，从这里开始",
-      content: "探索 **节点与技能**，开始你的下一个作品。\n[创作灵感](/home?section=explore) · [插件市场](settings:pluginMarket) · [项目主页](https://github.com/HBAI-Ltd/Toonflow-app)",
+      content: "探索 **节点与技能**，开始你的下一个作品。\n[创作灵感](/home?section=explore) · [插件市场](settings:pluginMarket) · [项目主页](https://github.com/lhlsp00114/jianbai)",
       imageUrl: preview === "image" ? bannerImage : "",
       buttonText: "发现工具",
       actionType: "settings",
@@ -371,7 +379,11 @@ async function loadAdvertisements() {
   }
   try {
     const result = await http<HomeAdvertisements>({ method: "GET", url: "/api/channel/community/getAdvertisements", signal: pageLifetime.signal });
-    if (!pageLifetime.signal.aborted) advertisements.value = result;
+    if (!pageLifetime.signal.aborted) {
+      const isAccountPromotion = (item: HomeAdvertisement) => item.actionType === "settings" && item.actionTarget === "account";
+      const banners = result.banners.filter(item => !isAccountPromotion(item));
+      advertisements.value = { ...result, banner: banners[0] ?? null, banners, sidebar: result.sidebar.filter(item => !isAccountPromotion(item)) };
+    }
   } catch (error) {
     if (!pageLifetime.signal.aborted) console.warn("加载首页广告失败", error);
   }

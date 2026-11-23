@@ -47,8 +47,22 @@ const taskModels: Record<string, string> = {
   "grok-image-2-async": "grok-image-2-async",
   "seedream-5.0-pro-async": "seedream-5.0-pro-async",
   "seedream-5.5-async": "seedream-5.5-async",
+  "seedream-5.5-layer": "seedream-5.5-layer",
   "gptImage2All": "gpt-image-2-all"
 };
+const visibleModelIds = new Set([
+  "nanoBananaPro",
+  "nanoBanana2",
+  "gemini-nano-banana-2.1",
+  "gptImage2All",
+  "gpt-image-2.5-flare-async",
+  "gpt-image-2.5-sunburst-async",
+  "gpt-image-2.6-flare",
+  "gpt-image-2.6-sunburst",
+  "seedream-5.0-pro-async",
+  "seedream-5.5-async",
+  "seedream-5.5-layer",
+]);
 const gptRatios = ["1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "2:1", "1:2", "3:1", "1:3", "21:9", "9:21"];
 const nanoRatios = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
 const geminiModels: Record<string, string> = {
@@ -66,7 +80,7 @@ function modelLimits(model: string) {
   const ratios = model.startsWith("gemini") ? nanoRatios
     : model.startsWith("grok") ? ["1:1","4:3","3:4","3:2","2:3","16:9","9:16","2:1","1:2","19.5:9","9:19.5","20:9","9:20"]
     : model === "seedream-5.0-pro-async" ? ["1:1","4:3","3:4","16:9","9:16","3:2","2:3","21:9","9:21"]
-    : model === "seedream-5.5-async" ? ["1:1","21:9","16:9","3:2","5:4","4:5","2:3","9:16","9:21"]
+    : ["seedream-5.5-async", "seedream-5.5-layer"].includes(model) ? ["1:1","21:9","16:9","3:2","5:4","4:5","2:3","9:16","9:21"]
     : gptRatios;
   return { sizes, ratios };
 }
@@ -583,7 +597,7 @@ export default {
   id: "aiTudou",
   label: "土豆 API（AI-Tudou）",
   version: "2.1.2",
-  readme: "## 土豆 API 图片模型\n\n按 2026-11-17 用户指定列表提供 14 个图片模型。Gemini 使用原生 generateContent；gpt-image-2-all 及 -async 型号使用任务提交与查询；无 -async 后缀的 GPT 2.6 flare/sunburst 保留同步 generations/edits 兼容路径，官方图片文档未给出这两个同步型号的完整协议；2026-11-17已实测两个型号1K文生图，图生图未实测。\n\n异步图生图参考图仅传 HTTP(S) URL。本地图片自动上传到土豆官方图床 uploads.ai-tudou.net，单图最多 15 MB；返回链接公开可访问并保留 24 小时。Gemini 仍发送 inlineData，两个同步型号沿用 multipart image[]。不执行远端文件清理，不自动重提生图任务或切换付费模型。\n\nGPT 2.5 支持 low/medium/high/xhigh/max；其他 GPT 保留 low/medium/high。GPT 2.6 flare/sunburst 异步型号按平台 11月12日公告仅开放 1K/2K；无后缀同步型号已实测1K生成、通用2.6-async已实测1K/medium；其他档位未逐一验证。Grok 与 Seedream 使用各自文档比例，不发送 GPT 专属 quality。透明背景仅对 gpt-image-2.6-async 开放，默认开启且可手动关闭，旧节点明确保存的关闭状态仍保留：2026-11-17 实测1K/medium、background=transparent 返回真实RGBA PNG；flare/sunburst四个2.6通道接受background却返回RGB，而且output_format=png会400。不向其他型号宣称透明支持，不自动抠图。\n\n旧 Gemini、GPT Image 2 内部 ID 保留，以兼容原画布。活动价、flash-lite、Ideogram 不再列出或用于新请求；已有任务仍可凭任务 ID 查询恢复。\n\n文档：https://api.ai-tudou.net/docs/gpt-image-2\nhttps://api.ai-tudou.net/docs/gpt-image-2-5-new-docs\nhttps://api.ai-tudou.net/docs/nano-banana\nhttps://api.ai-tudou.net/docs/grok-image-2-async-docs\nhttps://api.ai-tudou.net/docs/seedream-5-0-pro-async-docs\nhttps://api.ai-tudou.net/docs/seedream-5-5-async-docs\nhttps://api.ai-tudou.net/docs/uploads",
+  readme: "## 土豆 API 图片模型\n\n按当前用户指定列表提供 11 个图片模型。Gemini 使用原生 generateContent；GPT Image 2 和 Seedream 使用任务提交与查询；GPT 2.6 flare/sunburst 使用同步 generations/edits 兼容路径。\n\n异步图生图参考图仅传 HTTP(S) URL。本地图片自动上传到土豆官方图床 uploads.ai-tudou.net，单图最多 15 MB；返回链接公开可访问并保留 24 小时。Gemini 仍发送 inlineData，不执行远端文件清理，不自动重提生图任务或切换付费模型。\n\nGPT 2.5 支持 low/medium/high/xhigh/max；其他 GPT 保留 low/medium/high。Grok 与 Seedream 使用各自文档比例，不发送 GPT 专属 quality。\n\n旧 Gemini、GPT Image 2 内部 ID 保留，以兼容原画布。\n\n文档：https://api.ai-tudou.net/docs/gpt-image-2\nhttps://api.ai-tudou.net/docs/gpt-image-2-5-new-docs\nhttps://api.ai-tudou.net/docs/nano-banana\nhttps://api.ai-tudou.net/docs/seedream-5-0-pro-async-docs\nhttps://api.ai-tudou.net/docs/seedream-5-5-async-docs\nhttps://api.ai-tudou.net/docs/uploads",
   rules: [
     {
       type: "input",
@@ -1369,8 +1383,34 @@ export default {
       "singleImage",
       "multiReference"
     ]
+  },
+  {
+    "id": "seedream-5.5-layer",
+    "label": "seedream-5.5-layer",
+    "type": "image",
+    "imageSizes": [
+      "1K",
+      "2K",
+      "4K"
+    ],
+    "imageRatios": [
+      "1:1",
+      "21:9",
+      "16:9",
+      "3:2",
+      "5:4",
+      "4:5",
+      "2:3",
+      "9:16",
+      "9:21"
+    ],
+    "mode": [
+      "text",
+      "singleImage",
+      "multiReference"
+    ]
   }
-],
+].filter(model => visibleModelIds.has(model.id)),
   async generateImage(this: Context, request: ImageRequest): Promise<MediaAsset[]> {
     const apiKey = requireApiKey(this);
     const prompt = typeof request.prompt === "string" ? request.prompt.trim() : "";

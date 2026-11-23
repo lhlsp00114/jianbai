@@ -213,7 +213,7 @@ async function renameHistory(item: AgentHistory) {
         border: 1px solid var(--el-bg-color);
         border-radius: 7px;
         background: var(--el-color-primary);
-        color: var(--el-color-white);
+        color: var(--ui-primary-foreground, #fff);
         font-size: 10px;
         line-height: 12px;
         font-variant-numeric: tabular-nums;

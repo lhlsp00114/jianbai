@@ -24,7 +24,7 @@ const fallbackIcon = {
 
 // 模型家族名与品牌图标不同的映射；同名品牌自动使用整个图标包中的资源。
 const aliases: Record<string, string[]> = {
-  openai: ["gpt", "chatgpt", "codex", "whisper", "tts", "o1", "o3", "o4", "全能图片g"],
+  openai: ["gt", "gpt", "chatgpt", "codex", "whisper", "tts", "o1", "o3", "o4", "全能图片g"],
   claude: ["anthropic"],
   qwen: ["qwq", "qvq", "qwenimage", "cosyvoice", "funasr", "sensevoice", "通义千问"],
   meta: ["llama", "meta-llama"],

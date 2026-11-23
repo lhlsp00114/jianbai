@@ -57,7 +57,7 @@ const emit = defineEmits<{ create: [] }>();
       height: 36px;
       border-radius: 50%;
       background: var(--el-color-primary);
-      color: var(--el-color-white);
+      color: var(--ui-primary-foreground, #fff);
 
       .isLoading { animation: launchSpin 1.5s linear infinite; }
 

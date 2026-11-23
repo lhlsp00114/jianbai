@@ -1198,7 +1198,7 @@ function removeRow(event: KeyboardEvent, row: Row) {
     display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px; white-space: nowrap;
     button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; min-width: 30px; height: 30px; padding: 0 7px; &:active:not(:disabled) { background: var(--studioPressedBackground); transform: scale(0.94); } }
     .transportGroup { display: flex; align-items: center; gap: 2px; flex-shrink: 0; padding: 2px; border-radius: 8px; background: var(--studioControlBackground); }
-    .playButton { width: 38px; color: var(--el-color-white, #fff); background: var(--el-color-primary); box-shadow: 0 1px 3px color-mix(in srgb, var(--el-color-primary) 40%, transparent); &:hover:not(:disabled) { background: color-mix(in srgb, var(--el-color-primary) 84%, #fff); } &:active:not(:disabled) { background: color-mix(in srgb, var(--el-color-primary) 86%, #000); } }
+    .playButton { width: 38px; color: var(--ui-primary-foreground, #fff); background: var(--el-color-primary); box-shadow: 0 1px 3px color-mix(in srgb, var(--el-color-primary) 40%, transparent); &:hover:not(:disabled) { background: color-mix(in srgb, var(--el-color-primary) 84%, #fff); } &:active:not(:disabled) { background: color-mix(in srgb, var(--el-color-primary) 86%, #000); } }
     .timeReadout { flex-shrink: 0; font-variant-numeric: tabular-nums; b { font-weight: 600; } .total { margin-inline-start: 4px; color: var(--el-text-color-secondary); } }
     .headerDivider { flex-shrink: 0; width: 1px; height: 18px; background: var(--el-border-color-lighter); }
     .editTools, .zoomGroup { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
@@ -1304,10 +1304,10 @@ function removeRow(event: KeyboardEvent, row: Row) {
 
 <style lang="scss">
 .dialogueCoveragePopover .dialogueCoverage { display: flex; flex-direction: column; gap: 8px;
-  .coveragePace { display: flex; align-items: center; gap: 4px; font-size: 12px; span { margin-right: 4px; color: var(--el-text-color-secondary); } button { padding: 2px 10px; border: 0; border-radius: 11px; cursor: pointer; background: var(--el-fill-color-light); color: var(--el-text-color-regular); &.active { background: var(--el-color-primary); color: #fff; } } }
+  .coveragePace { display: flex; align-items: center; gap: 4px; font-size: 12px; span { margin-right: 4px; color: var(--el-text-color-secondary); } button { padding: 2px 10px; border: 0; border-radius: 11px; cursor: pointer; background: var(--el-fill-color-light); color: var(--el-text-color-regular); &.active { background: var(--el-color-primary); color: var(--ui-primary-foreground, #fff); } } }
   .paceApply { align-self: flex-end; padding: 2px 4px; border: 0; cursor: pointer; background: none; color: var(--el-color-primary); font-size: 12px; }
   textarea { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--el-border-color); border-radius: 6px; background: var(--el-fill-color-blank); color: var(--el-text-color-primary); font: inherit; font-size: 12px; line-height: 1.5; resize: vertical; outline: none; &:focus { border-color: var(--el-color-primary); } }
-  .dialogueApply { align-self: flex-end; padding: 4px 12px; border: 0; cursor: pointer; border-radius: 6px; background: var(--el-color-primary); color: #fff; font-size: 12px; &:disabled { opacity: 0.5; } }
+  .dialogueApply { align-self: flex-end; padding: 4px 12px; border: 0; cursor: pointer; border-radius: 6px; background: var(--el-color-primary); color: var(--ui-primary-foreground, #fff); font-size: 12px; &:disabled { opacity: 0.5; } }
 }
 </style>
 

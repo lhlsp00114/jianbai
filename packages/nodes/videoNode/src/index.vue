@@ -7,7 +7,7 @@
     :resizeAspectRatio="previewUrl && videoPreviewSize ? videoPreviewSize.width / videoPreviewSize.height : undefined"
     selectionFrame
     topWidth="max-content"
-    toolbarAction="focus"
+    fullscreenLabel="全屏播放"
     :downloadUrl="exporting ? '' : previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
     :style="previewUrl && videoPreviewSize ? { width: `${videoPreviewSize.width + 6}px`, '--videoPreviewHeight': `${videoPreviewSize.height}px` } : { width: !outputFile && !exporting ? `${emptyMediaCardWidth}px` : undefined }"

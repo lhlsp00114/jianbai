@@ -97,9 +97,9 @@ function ratioStyle(value: string) {
     margin-bottom: 14px;
     .el-radio-button {
       flex: 1;
-      --el-radio-button-checked-bg-color: var(--el-fill-color);
-      --el-radio-button-checked-text-color: var(--el-text-color-primary);
-      --el-radio-button-checked-border-color: var(--el-text-color-regular);
+      --el-radio-button-checked-bg-color: var(--el-color-primary-light-9);
+      --el-radio-button-checked-text-color: var(--el-color-primary);
+      --el-radio-button-checked-border-color: var(--el-color-primary);
 
       :deep(.el-radio-button__inner) {
         width: 100%;
@@ -112,7 +112,7 @@ function ratioStyle(value: string) {
       }
 
       &.is-active :deep(.el-radio-button__inner) {
-        border-color: var(--el-text-color-regular);
+        border-color: var(--el-color-primary);
       }
     }
   }

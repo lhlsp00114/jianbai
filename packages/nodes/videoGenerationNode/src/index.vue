@@ -8,7 +8,7 @@
     :resizeAspectRatio="previewUrl && videoPreviewSize ? videoPreviewSize.width / videoPreviewSize.height : undefined"
     selectionFrame
     topWidth="max-content"
-    toolbarAction="focus"
+    fullscreenLabel="全屏播放"
     :downloadUrl="previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
     @fullscreen="player?.enterFullscreen()"
@@ -126,6 +126,7 @@ import { getPromptText } from "@toonflow/node-shared/promptText";
 import promptInput from "@toonflow/node-shared/promptInput";
 import promptPresets from "@toonflow/node-shared/promptPresets";
 import generationPromptPanel from "@toonflow/node-shared/generationPromptPanel";
+import { getStylePrompt } from "@toonflow/node-shared/stylePresets";
 import { getCompositionPrompt } from "@toonflow/node-shared/compositionPrompts";
 import { getColorPrompt } from "@toonflow/node-shared/colorPrompts";
 import { getCameraPrompt, isCameraSettings } from "@toonflow/node-shared/cameraPrompts";
@@ -153,7 +154,7 @@ const { id, node, nodeProps, nodeEvent, outputs, files, ai, updateNodeInternals 
   onModelsChanged: () => void refreshProviderModels(),
 });
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
-const data = computed(() => node.data as { colorPreset?: string; colorPresetData?: unknown; cameraSettings?: unknown; compositionPreset?: string; prompt: string; promptModel: PromptModel; model: string; duration?: number; resolution: string; ratio: string; mode: string; generateAudio: boolean; other: Record<string, unknown> });
+const data = computed(() => node.data as { stylePreset?: string; stylePresetData?: unknown; colorPreset?: string; colorPresetData?: unknown; cameraSettings?: unknown; compositionPreset?: string; prompt: string; promptModel: PromptModel; model: string; duration?: number; resolution: string; ratio: string; mode: string; generateAudio: boolean; other: Record<string, unknown> });
 data.value.prompt ??= "";
 data.value.promptModel ??= [];
 data.value.model ??= "";
@@ -245,6 +246,7 @@ const modelGroups = computed(() => groupNodeModels(models.value));
 function getGenerationPrompt(prompt: string, references = refList.value) {
   return [
     prompt.trim(),
+    getStylePrompt(data.value.stylePreset, data.value.stylePresetData),
     getCompositionPrompt(data.value.compositionPreset),
     getColorPrompt(data.value.colorPreset, data.value.colorPresetData),
     getCameraPrompt(data.value.cameraSettings),
@@ -406,6 +408,7 @@ async function startGeneration() {
     return { status: "generating" };
   }
   if (data.value.colorPreset && !getColorPrompt(data.value.colorPreset, data.value.colorPresetData)) throw new Error("所选配色不可用，请重新选择配色后生成");
+  if (data.value.stylePreset && !getStylePrompt(data.value.stylePreset, data.value.stylePresetData)) throw new Error("所选风格不可用，请重新选择或清除风格后生成");
   if (data.value.cameraSettings && !isCameraSettings(data.value.cameraSettings)) throw new Error("摄影参数已失效，请重新选择相机参数后生成");
   const choice = selectedModel.value;
   if (!choice) throw new Error("请先选择视频模型");
@@ -632,12 +635,14 @@ nodeTools.register({
         height: 32px;
         margin-left: 0;
         padding: 0;
-        --el-button-bg-color: var(--el-text-color-primary);
+        --el-button-bg-color: var(--el-color-primary);
         --el-button-border-color: transparent;
-        --el-button-text-color: var(--el-bg-color);
-        --el-button-hover-bg-color: var(--el-text-color-regular);
+        --el-button-text-color: var(--ui-primary-foreground, #fff);
+        --el-button-hover-bg-color: var(--el-color-primary-dark-2);
         --el-button-hover-border-color: transparent;
-        --el-button-hover-text-color: var(--el-bg-color);
+        --el-button-hover-text-color: var(--ui-primary-foreground, #fff);
+        --el-button-active-bg-color: var(--el-color-primary-dark-2);
+        --el-button-active-text-color: var(--ui-primary-foreground, #fff);
       }
     }
   }

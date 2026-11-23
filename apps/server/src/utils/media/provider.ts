@@ -1,21 +1,27 @@
 import { t, translateMessage, validationOptions } from "@/lib/i18n";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, readdir, unlink, writeAtomicSync } from "@toonflow/file";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createContext, SourceTextModule } from "node:vm";
 import type { AudioConvertOptions, Provider, ProviderTaskData, ProviderTools } from "@toonflow/providers";
+import jianbaiSourceText from "@toonflow/providers/media/tokenGo" with { type: "text" };
 import { parse, parseExpression } from "@babel/parser";
 import { z } from "zod";
 import { getRuntimePlatform } from "@/lib/platform";
 import conf from "@/utils/conf";
 import { isEnabled } from "@/utils/multiTenant/mode";
 import { accountProviderSchema, getAccountProvider, getAccountToken, providerSchema } from "@/utils/ai/provider";
+import { getJianbaiApiKey } from "@toonflow/providers/jianbai";
+import { getJianbaiBalance } from "@/utils/ai/jianbaiAccount";
 import type { ProviderSources } from "@/utils/channel/types";
 import { convertAudio } from "@/utils/media/audioProcessor";
 import { createWorkspaceFfmpeg } from "@/utils/ffmpeg";
 import { lockWorkspaceFiles, writeWorkspaceFile } from "@/utils/workspace/files";
+
+// Bun 加载原始文本，TypeScript 按模块导出推断类型。
+const jianbaiSource = jianbaiSourceText as unknown as string;
 
 type Expression = Extract<ReturnType<typeof parseExpression>, { type: "ParenthesizedExpression" }>["expression"];
 type ObjectExpression = Extract<Expression, { type: "ObjectExpression" }>;
@@ -373,7 +379,7 @@ function metadata(fileName: string, source: string) {
   const { id, label, icon, version, readme, modelsUrl, rules, models, supportsPrice, supportsBalance, terminal } = parseProvider(source);
   if (fileName !== `${id}.ts`) invalid("供应商 ID 与文件名不一致");
   return { fileName, id, label, icon, version, readme, modelsUrl, rules, models,
-    supportsPrice, supportsBalance, terminal, revision: createHash("sha256").update(source).digest("hex"), loadError: "" };
+    supportsPrice, supportsBalance: supportsBalance || id === "tokenGo", terminal, revision: createHash("sha256").update(source).digest("hex"), loadError: "" };
 }
 
 export function validateMediaProviderSource(source: string) {
@@ -434,16 +440,22 @@ async function readProvider(path: string, fileName: string) {
 export async function getMediaProvider(id: string) {
   if (!providerIdSchema.safeParse(id).success) invalid("供应商 ID 无效");
   const path = await directory();
-  if (!path) invalid("请先在媒体模型设置中添加供应商", 404);
-  const current = await readProvider(path, `${id}.ts`).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") invalid("请先在媒体模型设置中添加供应商", 404);
+  const fileName = `${id}.ts`;
+  const current = path ? await readProvider(path, fileName).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined;
     throw error;
-  });
-  return { ...metadata(current.fileName, current.source), source: current.source };
+  }) : undefined;
+  const source = current?.source ?? (id === "tokenGo" ? jianbaiSource : undefined);
+  if (!source) invalid("请先在媒体模型设置中添加供应商", 404);
+  return { ...metadata(fileName, source), source };
 }
 
 export async function getMediaProviderSource(fileName: string) {
   if (!mediaProviderFileSchema.safeParse(fileName).success) invalid("供应商文件名无效");
+  if (fileName === "tokenGo.ts") {
+    const { id, source, revision } = await getMediaProvider("tokenGo");
+    return { fileName, id, source, revision };
+  }
   if (fileName.toLowerCase() === "toonflow.ts") invalid("Toonflow 供应商由账号与余额管理，请在账号页刷新");
   const path = await directory();
   if (!path) invalid("供应商文件不存在", 404);
@@ -455,13 +467,12 @@ export async function getMediaProviderSource(fileName: string) {
 
 export async function listMediaProviders() {
   const path = await directory();
-  if (!path) return [];
-  const files = await readdir(path, { withFileTypes: true });
-  return Promise.all(files.filter(file => file.isFile() && mediaProviderFileSchema.safeParse(file.name).success)
+  const files = path ? await readdir(path, { withFileTypes: true }) : [];
+  const providers = await Promise.all(files.filter(file => file.isFile() && mediaProviderFileSchema.safeParse(file.name).success)
     .sort((left, right) => left.name.localeCompare(right.name)).map(async file => {
       let current = { fileName: file.name, id: file.name.slice(0, -3), source: "", revision: "" };
       try {
-        current = await readProvider(path, file.name);
+        current = await readProvider(path!, file.name);
         return metadata(current.fileName, current.source);
       } catch (error) {
         // ACT: 元数据损坏不影响其他供应商；仍保留原文版本，允许用户明确删除。
@@ -469,6 +480,8 @@ export async function listMediaProviders() {
         return { ...file, label: current.id, version: "", readme: "", rules: [], models: [], loadError: translateMessage(error instanceof Error ? error.message : "供应商文件无法读取") };
       }
     }));
+  if (!providers.some(provider => provider.id === "tokenGo")) providers.unshift(metadata("tokenGo.ts", jianbaiSource));
+  return providers;
 }
 
 export async function addMediaProvider(source: string, signal?: AbortSignal, allowTerminal = false) {
@@ -559,6 +572,7 @@ export async function saveMediaProvider(fileName: string, content: string | z.in
 }
 
 function getMediaProviderApiKey(id: string) {
+  if (id === "tokenGo") return getJianbaiApiKey(conf.get("settings", {}));
   const value: unknown = conf.get(`settings.mediaProviderConfigs.${id}.apiKey`);
   return typeof value === "string" ? value.trim().replace(/^Bearer(?:\s+|$)/i, "").trim() : "";
 }
@@ -643,7 +657,8 @@ export async function loadMediaProviderSource(source: string, config: Record<str
   }
   // ACT: VM 只隔离可信供应商的全局上下文；不可信代码需要独立进程等更强隔离。
   const context = createContext({
-    Buffer, atob, btoa, URL, URLSearchParams, TextEncoder, TextDecoder, Blob,
+    Buffer, atob, btoa, URL, URLSearchParams, TextEncoder, TextDecoder, Blob, FormData,
+    crypto: Object.freeze({ randomUUID }),
     AbortController, AbortSignal, setTimeout, clearTimeout,
   }, { codeGeneration: { strings: false, wasm: false } });
   const rejectImport = () => { throw new Error("供应商不能导入模块，请使用 this.tool 中的宿主工具"); };
@@ -660,6 +675,11 @@ export async function loadMediaProviderSource(source: string, config: Record<str
   const providerConfig = { ...Object.fromEntries(rules.map(rule => [rule.field, rule.value])), ...structuredClone(config) };
   const provider = {
     ...definition,
+    ...(id === "tokenGo" && !definition.getBalance ? {
+      getBalance(this: ProviderContext<{ apiKey?: string }>) {
+        return getJianbaiBalance(this.config.apiKey ?? "", this.tool.fetch);
+      },
+    } : {}),
     // 查询上下文使用原始注入 fetch，避免继承某次生成请求的取消信号。
     queryFetch: fetchRequest,
     sourceRevision: createHash("sha256").update(source).digest("hex"),

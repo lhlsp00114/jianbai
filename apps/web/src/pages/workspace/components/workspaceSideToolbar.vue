@@ -21,6 +21,11 @@
         <icon-upload :size="22" aria-hidden="true" />
       </el-button>
     </el-tooltip>
+    <el-tooltip :showArrow="false" content="节点列表" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+      <el-button class="sideToolButton" text aria-label="节点列表" @click="emit('openTool', 'search')">
+        <icon-list :size="22" aria-hidden="true" />
+      </el-button>
+    </el-tooltip>
     <el-tooltip :showArrow="false" content="创作广场" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
       <el-button class="sideToolButton" :class="{ active: libraryVisible }" text :aria-pressed="libraryVisible" aria-label="创作广场" @click="emit('openTool', 'library')">
         <icon-apps :size="'24'" :stroke="'1.7'" aria-hidden="true" />
@@ -46,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { IconApps, IconFolder, IconHistory, IconPlus, IconUpload, IconX } from "@tabler/icons-vue";
+import { IconApps, IconFolder, IconHistory, IconList, IconPlus, IconUpload, IconX } from "@tabler/icons-vue";
 import { currentUser } from "@/stores/multiTenant";
 import agentOrbButton from "./agentOrbButton.vue";
 
@@ -58,7 +63,7 @@ withDefaults(defineProps<{
   historyVisible?: boolean;
   agentVisible?: boolean;
 }>(), { agentVisible: undefined });
-const emit = defineEmits<{ openTool: [tool: "nodes" | "upload" | "library" | "assets" | "history"]; toggleAgent: [] }>();
+const emit = defineEmits<{ openTool: [tool: "nodes" | "upload" | "search" | "library" | "assets" | "history"]; toggleAgent: [] }>();
 </script>
 
 <style scoped lang="scss">
@@ -78,8 +83,10 @@ const emit = defineEmits<{ openTool: [tool: "nodes" | "upload" | "library" | "as
   overflow-y: auto;
   scrollbar-width: none;
   padding: 6px;
-  border: 1px solid var(--el-border-color-light);
+  border: 0;
   border-radius: calc(var(--ui-radius) * 2.25);
+  background: var(--el-bg-color-overlay);
+  box-shadow: 0 6px 20px #0004;
 
   &:not(:has(.sideToolButton)) { display: none; }
 
@@ -105,10 +112,10 @@ const emit = defineEmits<{ openTool: [tool: "nodes" | "upload" | "library" | "as
 
   .addNodeButton {
     border-radius: 50%;
-    background: var(--el-color-white);
-    color: var(--el-color-black);
+    background: var(--el-color-primary);
+    color: var(--ui-primary-foreground, #fff);
 
-    &:hover, &.active { background: var(--el-color-white); color: var(--el-color-black); }
+    &:hover, &.active { background: var(--el-color-primary-dark-2); color: var(--ui-primary-foreground, #fff); }
   }
 }
 </style>

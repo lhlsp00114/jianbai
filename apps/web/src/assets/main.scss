@@ -1,4 +1,5 @@
 html:root {
+  --ui-primary-foreground: #fff;
   --ui-radius: 16px;
   --ui-radius-small: calc(var(--ui-radius) * 0.5);
   --ui-radius-large: calc(var(--ui-radius) * 1.5);
@@ -34,6 +35,29 @@ html:root {
 
   .el-dialog { --el-dialog-border-radius: var(--ui-radius-large); }
   .el-tag { --el-tag-border-radius: var(--ui-radius-small); }
+
+  .el-button--primary:not(.is-plain, .is-text, .is-link, .is-dashed) {
+    --el-button-text-color: var(--ui-primary-foreground);
+    --el-button-hover-text-color: var(--ui-primary-foreground);
+    --el-button-active-text-color: var(--ui-primary-foreground);
+  }
+
+  .el-button--primary.is-plain:not(.is-text, .is-link, .is-dashed) {
+    --el-button-hover-text-color: var(--ui-primary-foreground);
+    --el-button-active-text-color: var(--ui-primary-foreground);
+  }
+
+  .el-radio__input.is-checked .el-radio__inner::after {
+    background: var(--ui-primary-foreground);
+  }
+
+  .el-checkbox__input:is(.is-checked, .is-indeterminate) .el-checkbox__inner {
+    --el-checkbox-checked-icon-color: var(--ui-primary-foreground);
+  }
+
+  .el-switch.is-checked .el-switch__action {
+    background: var(--ui-primary-foreground);
+  }
 }
 
 html,

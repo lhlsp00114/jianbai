@@ -9,7 +9,7 @@
     contentPadding="2px"
     :resizeAspectRatio="(previewUrl || inpaintGuideUrl) && imageNaturalHeight ? imageNaturalWidth / imageNaturalHeight : undefined"
     selectionFrame
-    toolbarAction="focus"
+    fullscreenLabel="放大预览"
     :downloadUrl="previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
     @fullscreen="previewVisible = true"
@@ -40,6 +40,8 @@
           :toolbarTarget="editor?.mode === 'smartEdit' ? smartEditToolbar : paintToolbar"
           :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy"
           alt="生成图片"
+          :focusOnDoubleClick="!skeleton?.documentTarget"
+          @focus="skeleton?.focusNode()"
           @preview="previewVisible = true"
           @load="resizeImage"
           @error="showNodeError('无法预览该图片', '图片预览失败')" />
@@ -155,6 +157,7 @@ import { getModelFormValues, useImageModelForm } from "@toonflow/node-shared/use
 import promptInput from "@toonflow/node-shared/promptInput";
 import promptPresets from "@toonflow/node-shared/promptPresets";
 import generationPromptPanel from "@toonflow/node-shared/generationPromptPanel";
+import { getStylePrompt } from "@toonflow/node-shared/stylePresets";
 import { getCompositionPrompt } from "@toonflow/node-shared/compositionPrompts";
 import { getColorPrompt } from "@toonflow/node-shared/colorPrompts";
 import { getCameraPrompt, isCameraSettings } from "@toonflow/node-shared/cameraPrompts";
@@ -195,7 +198,7 @@ const { id, node, nodeProps, nodeEvent, outputs, files, ai, updateNodeInternals 
 const { findNode, nodeTypes, updateNode } = useVueFlow();
 const getPersistence = useNodePersistence();
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
-const data = computed(() => node.data as { colorPreset?: string; colorPresetData?: unknown; cameraSettings?: unknown; compositionPreset?: string; prompt: string; promptModel: PromptModel; multiAnglePrompt?: string; lightingPrompt?: string; model: string; size: string; ratio: string; other: Record<string, unknown>; inpaint?: ImageInpaint; mediaTask?: { state: string; applied?: boolean } });
+const data = computed(() => node.data as { stylePreset?: string; stylePresetData?: unknown; colorPreset?: string; colorPresetData?: unknown; cameraSettings?: unknown; compositionPreset?: string; prompt: string; promptModel: PromptModel; multiAnglePrompt?: string; lightingPrompt?: string; model: string; size: string; ratio: string; other: Record<string, unknown>; inpaint?: ImageInpaint; mediaTask?: { state: string; applied?: boolean } });
 const variationPresets = [
   { id: "multiAngle", label: "多角度", value: "{{preset multiAngle}}", icon: IconCameraRotate, iconColor: "#0f766e", field: "multiAnglePrompt",
     legacyPrompt: /^Photograph the scene in reference image \{\{ref 1\}\} from a NEW CAMERA POSITION\.[\s\S]+Output one finished image without added cameras, guides or text labels\.$/ },
@@ -301,6 +304,7 @@ const generationPrompt = computed(() => {
   });
   return [
     data.value.inpaint?.mode === "outpaint" ? buildOutpaintPrompt(prompt, data.value.inpaint.outpaintContext, readOutpaintInstruction()) : prompt,
+    getStylePrompt(data.value.stylePreset, data.value.stylePresetData),
     getCompositionPrompt(data.value.compositionPreset),
     getColorPrompt(data.value.colorPreset, data.value.colorPresetData),
     getCameraPrompt(data.value.cameraSettings),
@@ -469,6 +473,7 @@ async function startGeneration() {
     return { status: "generating" };
   }
   if (data.value.colorPreset && !getColorPrompt(data.value.colorPreset, data.value.colorPresetData)) throw new Error("所选配色不可用，请重新选择配色后生成");
+  if (data.value.stylePreset && !getStylePrompt(data.value.stylePreset, data.value.stylePresetData)) throw new Error("所选风格不可用，请重新选择或清除风格后生成");
   if (data.value.cameraSettings && !isCameraSettings(data.value.cameraSettings)) throw new Error("摄影参数已失效，请重新选择相机参数后生成");
   const panoramas = panoramaPromptPresets.filter(preset => data.value.prompt.includes(preset.value));
   if (panoramas.length > 1) throw new Error("720全景和360环绕的比例要求不同，请只保留其中一个全景预设");
@@ -739,12 +744,14 @@ nodeTools.register({
         margin-left: 0;
         padding: 0;
         border-radius: 10px;
-        --el-button-bg-color: var(--el-text-color-primary);
+        --el-button-bg-color: var(--el-color-primary);
         --el-button-border-color: transparent;
-        --el-button-text-color: var(--el-bg-color);
-        --el-button-hover-bg-color: var(--el-text-color-regular);
+        --el-button-text-color: var(--ui-primary-foreground, #fff);
+        --el-button-hover-bg-color: var(--el-color-primary-dark-2);
         --el-button-hover-border-color: transparent;
-        --el-button-hover-text-color: var(--el-bg-color);
+        --el-button-hover-text-color: var(--ui-primary-foreground, #fff);
+        --el-button-active-bg-color: var(--el-color-primary-dark-2);
+        --el-button-active-text-color: var(--ui-primary-foreground, #fff);
       }
     }
   }

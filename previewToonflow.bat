@@ -19,7 +19,10 @@ if not exist "node_modules" (
 
 echo Building plugins and nodes...
 "%bunExe%" run dev:plugins
-if errorlevel 1 goto failed
+if errorlevel 1 (
+  if not exist "build\tools\pluginDeveloper.tool.js" goto failed
+  echo Plugin rebuild failed. Using the existing plugin build.
+)
 
 echo Building Web frontend...
 pushd apps\web

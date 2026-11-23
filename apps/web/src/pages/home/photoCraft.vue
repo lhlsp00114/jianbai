@@ -23,12 +23,14 @@ import release from "../../../photoCraftRelease.json";
 
 const editorRoot = ref<HTMLElement>();
 const editorFrame = ref<HTMLIFrameElement>();
+const dirty = defineModel<boolean>("dirty", { default: false });
 const expanded = ref(false);
 const modeLabel = computed(() => expanded.value ? "切换为页面模式" : "切换为全屏模式");
 const changingMode = ref(false);
 const imageModels = shallowRef<NodeMediaModel[]>([]);
 const imageModelsLoading = ref(false);
 let removeEditorShortcuts: (() => void) | undefined;
+let removeEditorActivity: (() => void) | undefined;
 let removeModelSubscription: (() => void) | undefined;
 let imageModelsRequest: Promise<void> | undefined;
 const keyboard = (navigator as Navigator & {
@@ -120,8 +122,10 @@ function loadImageModels(fresh = false) {
 
 function bindEditorShortcuts() {
   removeEditorShortcuts?.();
+  removeEditorActivity?.();
   const frameWindow = editorFrame.value?.contentWindow;
   if (!frameWindow) return;
+  const markDirty = () => { dirty.value = true; };
   const preventBrowserShortcut = (event: KeyboardEvent) => {
     if (event.isComposing || event.getModifierState("AltGraph")) return;
     // 保留原生文字选择、剪贴板、撤销和光标操作，编辑器自身仍接收全部原始事件。
@@ -142,9 +146,17 @@ function bindEditorShortcuts() {
   // 全屏期间由顶层页面锁定浏览器保留键，再在此取消默认行为，原始事件仍交给编辑器。
   frameWindow.addEventListener("keydown", preventBrowserShortcut, true);
   frameWindow.addEventListener("wheel", preventBrowserZoom, { capture: true, passive: false });
+  frameWindow.document.addEventListener("pointerdown", markDirty, true);
+  frameWindow.document.addEventListener("keydown", markDirty, true);
+  frameWindow.document.addEventListener("input", markDirty, true);
   removeEditorShortcuts = () => {
     frameWindow.removeEventListener("keydown", preventBrowserShortcut, true);
     frameWindow.removeEventListener("wheel", preventBrowserZoom, true);
+  };
+  removeEditorActivity = () => {
+    frameWindow.document.removeEventListener("pointerdown", markDirty, true);
+    frameWindow.document.removeEventListener("keydown", markDirty, true);
+    frameWindow.document.removeEventListener("input", markDirty, true);
   };
 }
 function exportPsd() {
@@ -158,6 +170,7 @@ function exportPsd() {
 }
 onBeforeUnmount(() => {
   removeEditorShortcuts?.();
+  removeEditorActivity?.();
   removeModelSubscription?.();
   document.removeEventListener("fullscreenchange", handleFullscreenChange);
   releaseKeyboard();

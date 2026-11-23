@@ -1,5 +1,5 @@
 <template>
-  <nodeSkeleton v-bind="nodeProps" :topVisible="node.selected" :bottomVisible="node.selected && !editorOpen && !loadError" topWidth="max-content" :bottomWidth="660" :downloadUrl="downloadUrl" :downloadName="(document.title.trim() || '分镜脚本') + '.md'" toolbarAction="focus" :style="{ width: '350px' }">
+  <nodeSkeleton v-bind="nodeProps" :topVisible="node.selected" :bottomVisible="node.selected && !editorOpen && !loadError" topWidth="max-content" :bottomWidth="660" :downloadUrl="downloadUrl" :downloadName="(document.title.trim() || '分镜脚本') + '.md'" fullscreenLabel="全屏打开脚本编辑器" :fullscreenDisabled="!!loadError" :style="{ width: '350px' }" @fullscreen="openEditor()">
     <template #topActions><el-button :icon="IconMovie" text :disabled="!!loadError" @click.stop="openEditor()">打开脚本编辑器</el-button></template>
     <div class="summaryContent" @dblclick.stop="openEditor()">
       <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" />

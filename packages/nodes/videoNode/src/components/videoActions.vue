@@ -490,7 +490,7 @@ async function process() {
           padding: 0;
           border: 0;
           background: var(--el-color-primary);
-          color: #fff;
+          color: var(--ui-primary-foreground, #fff);
           cursor: ew-resize;
           touch-action: none;
           &.startHandle { transform: translateX(-100%); border-radius: 6px 0 0 6px; }

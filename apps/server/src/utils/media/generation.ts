@@ -6,7 +6,7 @@ import { setTimeout } from "node:timers/promises";
 import type { Provider, ProviderTaskData } from "@toonflow/providers";
 import type { GeneratedMedia, MediaGenerationRequest, MediaModel, MediaReference } from "@toonflow/tools-scaffold/runtime";
 import conf from "@/utils/conf";
-import { getAccountProvider } from "@/utils/ai/provider";
+import { getJianbaiApiKey } from "@toonflow/providers/jianbai";
 import { getMediaProvider, listMediaProviders, loadMediaProviderSource } from "@/utils/media/provider";
 import { lockWorkspaceFiles, resolveWorkspacePath, writeWorkspaceFile } from "@/utils/workspace/files";
 import { beginGeneration, getProviderPrice } from "@/utils/media/billing";
@@ -64,9 +64,9 @@ function imageOptions(value: unknown, pattern: RegExp) {
 export async function listMediaModels(): Promise<MediaModel[]> {
   if (modelGateway.enabled()) return modelGateway.catalog(["image", "video", "audio"]);
   const installedProviders = await listMediaProviders();
-  installedProviders.sort((left, right) => Number(right.id === "toonflow") - Number(left.id === "toonflow"));
+  installedProviders.sort((left, right) => Number(right.id === "tokenGo") - Number(left.id === "tokenGo"));
   // ACT: 模型能力以已安装源码为准，读取目录不请求在线预设；旧源码需更新后才能获得新增能力。
-  return installedProviders.filter(provider => provider.id !== "toonflow" || !!getAccountProvider()).flatMap(provider => provider.models.flatMap(model => {
+  return installedProviders.filter(provider => provider.id.toLowerCase() !== "toonflow").flatMap(provider => provider.models.flatMap(model => {
     if (model.type !== "image" && model.type !== "video" && model.type !== "audio") return [];
     return [{
       providerId: provider.id, providerLabel: provider.label, modelId: model.id, label: model.label, type: model.type,
@@ -230,7 +230,9 @@ async function configuredProvider(request: MediaGenerationRequest, mediaType: "i
   const info = await getMediaProvider(request.providerId);
   if (!resume && !info.models.some(model => model.id === request.modelId && model.type === mediaType)) invalid("所选媒体模型不存在或类型不匹配，请重新选择");
   const configurations = record(conf.get("settings", {}).mediaProviderConfigs);
-  const provider = await loadMediaProviderSource(info.source, record(configurations[info.id]), signal, undefined, directory, saveTaskData);
+  const config = record(configurations[info.id]);
+  if (info.id === "tokenGo") config.apiKey = getJianbaiApiKey(conf.get("settings", {}));
+  const provider = await loadMediaProviderSource(info.source, config, signal, undefined, directory, saveTaskData);
   return { provider, request };
 }
 

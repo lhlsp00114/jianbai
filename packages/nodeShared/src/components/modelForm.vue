@@ -59,9 +59,9 @@ for (const [name, component] of Object.entries({
       .el-radio-button {
         flex: 1;
         min-width: 0;
-        --el-radio-button-checked-bg-color: var(--el-fill-color);
-        --el-radio-button-checked-text-color: var(--el-text-color-primary);
-        --el-radio-button-checked-border-color: var(--el-text-color-regular);
+        --el-radio-button-checked-bg-color: var(--el-color-primary-light-9);
+        --el-radio-button-checked-text-color: var(--el-color-primary);
+        --el-radio-button-checked-border-color: var(--el-color-primary);
 
         .el-radio-button__inner {
           width: 100%;
@@ -74,7 +74,7 @@ for (const [name, component] of Object.entries({
           &:hover { color: var(--el-text-color-primary); }
         }
 
-        &.is-active .el-radio-button__inner { border-color: var(--el-text-color-regular); }
+        &.is-active .el-radio-button__inner { border-color: var(--el-color-primary); }
       }
     }
   }

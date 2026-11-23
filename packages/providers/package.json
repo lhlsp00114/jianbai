@@ -8,7 +8,9 @@
   },
   "exports": {
     ".": "./index.ts",
+    "./jianbai": "./src/jianbai.ts",
     "./types": "./types.d.ts",
-    "./media/aiTudou": "./src/media/aiTudou.ts"
+    "./media/aiTudou": "./src/media/aiTudou.ts",
+    "./media/tokenGo": "./src/media/tokenGo.ts"
   }
 }

@@ -484,7 +484,7 @@ defineExpose({ handleKeydown, openMenu, closeMenu });
             border: 1px solid var(--el-border-color);
             border-radius: 3px;
 
-            &.selected { background: var(--el-color-primary); border-color: var(--el-color-primary); color: white; }
+            &.selected { background: var(--el-color-primary); border-color: var(--el-color-primary); color: var(--ui-primary-foreground, #fff); }
           }
         }
       }

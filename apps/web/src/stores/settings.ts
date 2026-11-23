@@ -47,7 +47,9 @@ export const settingsStorage = {
   },
 };
 
-export const defaultUiSettings = { theme: "dark", language: "system", primaryColor: "#409eff", fontScale: 100, mobileScale: 75, radius: 16, startupAnimation: true };
+export const adaptivePrimaryColor = "adaptiveMonochrome";
+export const defaultCanvasEdgeColor = "#409eff";
+export const defaultUiSettings = { theme: "dark", language: "system", primaryColor: adaptivePrimaryColor, fontScale: 100, mobileScale: 75, radius: 16, startupAnimation: true };
 export const uiSettings = computed(() => {
   const raw = settings.value.ui;
   const ui = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
@@ -84,7 +86,7 @@ export const generalSettings = computed(() => {
     canvasCompositingEnabled: general.canvasCompositingEnabled === true,
     canvasEdgeAnimationEnabled: general.canvasEdgeAnimationEnabled !== false,
     canvasEdgeColorMode: general.canvasEdgeColorMode === "none" || general.canvasEdgeColorMode === "custom" ? general.canvasEdgeColorMode : "theme",
-    canvasEdgeColor: typeof general.canvasEdgeColor === "string" && /^#[\da-f]{6}$/i.test(general.canvasEdgeColor) ? general.canvasEdgeColor : defaultUiSettings.primaryColor,
+    canvasEdgeColor: typeof general.canvasEdgeColor === "string" && /^#[\da-f]{6}$/i.test(general.canvasEdgeColor) ? general.canvasEdgeColor : defaultCanvasEdgeColor,
     canvasShortcuts: Object.fromEntries(canvasShortcutFields.map(field => {
       if (savedBindings.has(field.id)) return [field.id, savedBindings.get(field.id)];
       const binding = defaultCanvasShortcuts[field.id];

@@ -32,82 +32,6 @@
     <div ref="projectMenuTarget" class="projectMenuTarget" />
     <div class="workspaceTools">
       <workspacePanelSwitcher class="panelSwitcher" :activePanel="activePanel" :showComic="isComicProject" @change="switchPanel" />
-      <div class="bottomTools">
-        <el-card v-if="activePanel === 'canvas'" class="toolMenu" shadow="never" :bodyStyle="{ padding: '2px 4px' }">
-          <div class="toolMenuContent" role="toolbar" aria-label="画布工具">
-            <el-tooltip :content="selectedTool === 'move' ? '移动工具，点击切换为抓手' : '抓手工具，点击切换为移动'" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button
-                class="toolButton"
-                text
-                :type="selectedTool === 'hand' ? 'primary' : 'default'"
-                :aria-pressed="selectedTool === 'hand'"
-                aria-label="切换抓手/移动工具"
-                @click="selectedTool = selectedTool === 'move' ? 'hand' : 'move'">
-                <component :is="selectedTool === 'move' ? IconPointer : IconHandStop" :size="18" aria-hidden="true" />
-              </el-button>
-            </el-tooltip>
-            <el-tooltip content="搜索节点" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="toolButton" text :disabled="!canvasPanelRef?.canvasReady || settingsVisible" aria-label="搜索节点" @click="canvasPanelRef?.openNodeSearch()">
-                <icon-search :size="18" aria-hidden="true" />
-              </el-button>
-            </el-tooltip>
-            <el-tooltip :content="appearanceLabel" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="toolButton" text :aria-label="appearanceLabel" @click="updateUiSettings({ theme: appearanceDark ? 'light' : 'dark' })">
-                <component :is="appearanceDark ? IconMoon : IconSun" :size="18" aria-hidden="true" />
-              </el-button>
-            </el-tooltip>
-            <el-tooltip :content="['撤销', shortcutLabel(generalSettings.canvasShortcuts.undo)].filter(Boolean).join(' · ')" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="toolButton" text data-canvas-history :disabled="!canvasPanelRef?.canvasReady || (!textHistory && !canvasPanelRef?.canUndo) || historyBusy || settingsVisible" aria-label="撤销" @mousedown.prevent @click="changeHistory('undo')">
-                <icon-arrow-back-up :size="18" aria-hidden="true" />
-              </el-button>
-            </el-tooltip>
-            <el-tooltip :content="['重做', shortcutLabel(generalSettings.canvasShortcuts.redo)].filter(Boolean).join(' · ')" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-              <el-button class="toolButton" text data-canvas-history :disabled="!canvasPanelRef?.canvasReady || (!textHistory && !canvasPanelRef?.canRedo) || historyBusy || settingsVisible" aria-label="重做" @mousedown.prevent @click="changeHistory('redo')">
-                <icon-arrow-forward-up :size="18" aria-hidden="true" />
-              </el-button>
-            </el-tooltip>
-            <el-tooltip :showArrow="false" content="帮助" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]" :disabled="helpVisible">
-              <span class="toolTrigger">
-                <el-popover v-model:visible="helpVisible" trigger="click" placement="top-end" :width="196">
-                  <template #reference>
-                    <el-button class="toolButton" text aria-label="帮助">
-                      <icon-help :size="18" />
-                    </el-button>
-                  </template>
-                  <div class="helpMenu">
-                    <el-button class="helpAction" text :icon="IconKeyboard" @click="showShortcuts">快捷键</el-button>
-                    <el-button
-                      class="helpAction"
-                      tag="a"
-                      text
-                      :icon="IconBook"
-                      href="https://qcn7xdsqgc4z.feishu.cn/docx/RXFqdgR2Xo0dXZxGfd0cZCGgnwf"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      @click="helpVisible = false">
-                      使用教程
-                    </el-button>
-                    <el-button
-                      class="helpAction"
-                      tag="a"
-                      text
-                      :icon="IconBug"
-                      href="https://docs.qq.com/smartsheet/form/EmvmQBrmlPmr%2Fss_vsqk2v%2FvhiGzE?tab=ss_vsqk2v"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Toonflow 需求/BUG反馈表"
-                      @click="helpVisible = false">
-                      汇报 BUG
-                    </el-button>
-                    <el-button class="helpAction" text :icon="IconBrandWechat" @click="showContact('community')">加入交流群</el-button>
-                    <el-button class="helpAction" text :icon="IconBriefcase" @click="showContact('business')">商务合作</el-button>
-                  </div>
-                </el-popover>
-              </span>
-            </el-tooltip>
-          </div>
-        </el-card>
-      </div>
       <el-tooltip v-if="!agentVisible" content="见白 Agent" placement="top" :showArrow="false" :hideAfter="0">
         <agentOrbButton class="agentButton" :aria-expanded="agentVisible" aria-controls="agentPanel" @click="agentVisible = true" />
       </el-tooltip>
@@ -144,7 +68,6 @@ import { translate } from "@toonflow/i18n/vue";
 import { computed, defineAsyncComponent, nextTick, onMounted, onScopeDispose, provide, ref, shallowRef, watch, type ComponentPublicInstance } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import axios from "axios";
-import { IconPointer, IconHandStop, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase, IconSun, IconMoon, IconArrowBackUp, IconArrowForwardUp, IconKeyboard } from "@tabler/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { QRCode } from "tdesign-vue-next";
 import type { AgentMention } from "@toonflow/server/agent/types";
@@ -152,9 +75,8 @@ import settings from "@/components/settings/index.vue";
 import modelLoginGuide from "@/components/modelLoginGuide.vue";
 import { multiTenantEnabled, toonflowAccountToken } from "@/stores/settings";
 import { useWorkspaceStore } from "@/stores/workspace";
-import { generalSettings, updateUiSettings } from "@/stores/settings";
+import { generalSettings } from "@/stores/settings";
 import { shortcutLabel, canvasShortcutFields } from "@/lib/canvasShortcuts";
-import { appearanceDark } from "@/lib/appearance";
 import type { CanvasTextHistory } from "@toonflow/node-shared/canvasTextHistory";
 import { registerWorkspaceControl, waitForControlValue } from "@/lib/mcpControl";
 import anonymousData from "@/lib/anonymousData";
@@ -174,7 +96,6 @@ const isComicProject = computed(() => workspaceStore.project?.projectKind === "i
 const activePanel = ref<"canvas" | "document">(isComicProject.value && route.query.panel === "document" ? "document" : "canvas");
 const createDefaultCanvas = ref(activePanel.value === "canvas");
 const selectedTool = ref<"move" | "hand">("move");
-const appearanceLabel = computed(() => appearanceDark.value ? "深色模式，点击切换为浅色模式" : "浅色模式，点击切换为深色模式");
 const textHistory = shallowRef<CanvasTextHistory>();
 const historyBusy = ref(false);
 provide("canvasTextHistory", textHistory);
@@ -253,6 +174,16 @@ function showContact(type: "community" | "business") {
   contactVisible.value = true;
 }
 const canvasPanelRef = ref<InstanceType<typeof canvasPanel>>();
+provide("workspaceBottomActions", {
+  undoDisabled: () => !canvasPanelRef.value?.canvasReady || (!textHistory.value && !canvasPanelRef.value?.canUndo) || historyBusy.value || settingsVisible.value,
+  redoDisabled: () => !canvasPanelRef.value?.canvasReady || (!textHistory.value && !canvasPanelRef.value?.canRedo) || historyBusy.value || settingsVisible.value,
+  undo: () => void changeHistory("undo"),
+  redo: () => void changeHistory("redo"),
+  helpVisible,
+  showShortcuts,
+  showContact,
+  shortcutLabel: (id: "undo" | "redo") => shortcutLabel(generalSettings.value.canvasShortcuts[id]),
+});
 const projectMenuTarget = ref<HTMLElement>();
 const floatingAgentRef = ref<InstanceType<typeof floatingAgent>>();
 watch([activePanel, () => workspaceStore.project?.directory, () => canvasPanelRef.value?.canvasId], () => {
@@ -395,7 +326,7 @@ async function switchPanel(value: string | number | boolean) {
 
 async function openInitialWorkspaceTool() {
   const tool = route.query.tool;
-  if (!isComicProject.value || activePanel.value !== "canvas" || (tool !== "nodes" && tool !== "history" && tool !== "upload")) return;
+  if (!isComicProject.value || activePanel.value !== "canvas" || (tool !== "nodes" && tool !== "history" && tool !== "upload" && tool !== "search")) return;
   const upload = workspaceStore.pendingCanvasUpload;
   workspaceStore.pendingCanvasUpload = null;
   if (tool === "upload" && (!upload || upload.directory !== workspaceStore.project?.directory)) return;
@@ -404,6 +335,7 @@ async function openInitialWorkspaceTool() {
     const panel = await waitForControlValue(() => canvasPanelRef.value?.canvasReady ? canvasPanelRef.value : undefined, signal);
     if (activePanel.value !== "canvas") return;
     if (tool === "upload" && upload) await panel.uploadFiles(upload.files);
+    else if (tool === "search") panel.openNodeSearch();
     else if (tool === "nodes" || tool === "history") panel.toggleWorkspaceTool(tool);
   } catch (error) {
     if (!controlLifetime.signal.aborted) ElMessage.error(error instanceof Error ? error.message : "画布工具尚未就绪");
@@ -503,39 +435,6 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
       pointer-events: auto;
     }
 
-    .bottomTools {
-      position: absolute;
-      bottom: 15px;
-      left: 50%;
-      z-index: 5;
-      transform: translateX(-50%);
-      pointer-events: auto;
-
-      .toolMenu {
-        flex-shrink: 0;
-        transition: none;
-
-        .toolMenuContent {
-          display: flex;
-          align-items: center;
-          gap: 2px;
-
-          .toolButton {
-            width: 28px;
-            height: 28px;
-            margin: 0;
-            padding: 0;
-
-          }
-
-          .toolTrigger { display: inline-flex; }
-
-          .el-divider { margin: 0; }
-        }
-      }
-
-    }
-
     .agentButton {
       position: absolute;
       right: 15px;
@@ -543,17 +442,6 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
       z-index: 5;
       pointer-events: auto;
     }
-  }
-}
-
-.helpMenu {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-
-  .helpAction {
-    justify-content: flex-start;
-    margin-left: 0;
   }
 }
 

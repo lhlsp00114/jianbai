@@ -53,7 +53,7 @@
           <icon-palette :size="18" />
           主题颜色
         </h3>
-        <span class="settingValue">{{ uiSettings.primaryColor.toUpperCase() }}</span>
+        <span class="settingValue">{{ appearancePrimaryColor.toUpperCase() }}</span>
       </div>
       <p class="description">用于按钮、选中状态与创作背景。</p>
       <div class="colorOptions">
@@ -62,15 +62,16 @@
           :key="color.value"
           class="colorSwatch"
           circle
-          :style="{ '--swatchColor': color.value }"
+          :class="{ adaptiveSwatch: color.value === adaptivePrimaryColor }"
+          :style="{ '--swatchColor': color.value === adaptivePrimaryColor ? appearancePrimaryColor : color.value }"
           :aria-label="color.label"
-          :aria-pressed="uiSettings.primaryColor.toLowerCase() === color.value"
+          :aria-pressed="selectedColor === color.value"
           :title="color.label"
           @click="updateUiSettings({ primaryColor: color.value })">
-          <icon-check v-if="uiSettings.primaryColor.toLowerCase() === color.value" :size="18" />
+          <icon-check v-if="selectedColor === color.value" :size="18" />
         </el-button>
         <el-color-picker
-          :modelValue="uiSettings.primaryColor"
+          :modelValue="appearancePrimaryColor"
           colorFormat="hex"
           aria-label="自定义主题颜色"
           @change="changeColor" />
@@ -133,7 +134,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watchEffect } from "vue";
+import { computed, nextTick, ref, watchEffect } from "vue";
 import {
   IconSun,
   IconMoon,
@@ -144,7 +145,8 @@ import {
   IconCheck,
   IconRestore,
 } from "@tabler/icons-vue";
-import { defaultUiSettings, uiSettings, updateUiSettings } from "@/stores/settings";
+import { adaptivePrimaryColor, defaultUiSettings, uiSettings, updateUiSettings } from "@/stores/settings";
+import { appearancePrimaryColor } from "@/lib/appearance";
 import { isMobile } from "@/lib/platform";
 import languageSelect from "@/components/languageSelect.vue";
 
@@ -163,6 +165,7 @@ const themes = [
   { value: "system", label: "跟随系统", description: "自动切换", icon: IconDeviceDesktop },
 ];
 const colors = [
+  { value: adaptivePrimaryColor, label: "自适应黑白" },
   { value: "#409eff", label: "天空蓝" },
   { value: "#6366f1", label: "鸢尾紫" },
   { value: "#a855f7", label: "薰衣紫" },
@@ -170,6 +173,9 @@ const colors = [
   { value: "#e89524", label: "琥珀橙" },
   { value: "#18a17c", label: "松石绿" },
 ];
+const selectedColor = computed(() => uiSettings.value.primaryColor === adaptivePrimaryColor
+  ? adaptivePrimaryColor
+  : uiSettings.value.primaryColor.toLowerCase());
 function changeColor(value: string | null) {
   if (value) updateUiSettings({ primaryColor: value });
 }
@@ -297,6 +303,13 @@ function changeTheme(value: string) {
         border: 0;
         color: #fff;
         background: var(--swatchColor);
+
+        &.adaptiveSwatch {
+          border: 1px solid var(--el-border-color);
+          background: linear-gradient(90deg, #000 50%, #fff 50%);
+
+          svg { filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+        }
 
         &[aria-pressed="true"] {
           outline: 2px solid var(--swatchColor);

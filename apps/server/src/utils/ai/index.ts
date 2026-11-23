@@ -29,11 +29,14 @@ export async function getConfiguredModel(providerId: string, modelId: string) {
   const model = resolved?.model ?? provider.models.find(item => item.id === modelId);
   if (!model) throw Object.assign(new Error("所选模型不存在，请重新选择"), { status: 400 });
   const baseUrl = getProviderBaseUrl(provider.apiUrl, provider.protocol);
+  // ACT: 旧节点保存的是 CLI 别名，见白 API 目录使用 gpt 前缀。
+  const upstreamModelId = !execution && providerId === "tokenGo" && baseUrl === "https://jianbai.token6688.com/v1" && model.id === "gt-5.6-sol"
+    ? "gpt-5.6-sol" : model.id;
   const upstreamProviderId = execution?.route.providerId ?? providerId;
   const limits = getModelLimits(upstreamProviderId, model);
   return {
     provider,
-    model: { ...model, label: execution?.route.label ?? model.label, ...getModelReasoning(upstreamProviderId, model, provider.protocol), contextWindow: limits.contextWindow, maxOutputTokens: limits.maxTokens },
+    model: { ...model, id: upstreamModelId, label: execution?.route.label ?? model.label, ...getModelReasoning(upstreamProviderId, model, provider.protocol), contextWindow: limits.contextWindow, maxOutputTokens: limits.maxTokens },
     baseUrl, execution, route: execution?.route, revision: execution?.revision, publicProviderId: providerId, publicModelId: modelId,
   };
 }
@@ -42,10 +45,14 @@ export type ConfiguredModel = Awaited<ReturnType<typeof getConfiguredModel>>;
 
 export async function listAiModels() {
   if (modelGateway.enabled()) return modelGateway.catalog(["text"]);
-  return getConfiguredProviders().flatMap(item => {
+  const providers = getConfiguredProviders()
+    .filter(provider => provider?.id?.toLowerCase() !== "toonflow")
+    .sort((left, right) => Number(right?.id === "tokenGo") - Number(left?.id === "tokenGo"));
+  return providers.flatMap(item => {
     const parsed = providerSchema.extend({ id: z.string().min(1), label: z.string() }).safeParse(item);
     if (!parsed.success) return [];
     const provider = parsed.data;
+    if (provider.id === "tokenGo" && !provider.apiKey.trim()) return [];
     return provider.models.filter(model => model.id.trim()).map(model => {
       const limits = getModelLimits(provider.id, model);
       return {

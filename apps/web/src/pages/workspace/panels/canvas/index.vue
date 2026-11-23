@@ -78,12 +78,14 @@
       <canvasViewportHint v-if="active && !settingsVisible && project?.directory && canvasReady" :key="canvasId" />
       <canvasMenu ref="canvasMenuRef" v-model:canvasId="canvasId" :menuTarget="menuTarget" :menuHidden="menuHidden" :directory="project?.directory" :initialCanvasId="initialCanvasId" :createDefaultCanvas="createDefaultCanvas" :activateCanvas="activateCanvas" :flushSave="flushCanvases ?? flushCanvasSave">
         <assetLibrary v-if="currentUser?.role !== 'user'" ref="assetLibraryRef" v-model="assetsVisible" :directory="project?.directory" />
+        <nodeSearch ref="nodeSearchRef" :directory="project?.directory" :disabled="!active || settingsVisible || !canvasId || !project?.directory" />
       </canvasMenu>
       <canvasControls
         v-if="canvasId"
         ref="canvasControlsRef"
         v-model:snapEnabled="snapEnabled"
         v-model:showEdges="showEdges"
+        v-model:selectedTool="selectedTool"
         :canvasId="canvasId"
         :directory="project?.directory"
         :batchHistory="canvasHistory.batch"
@@ -111,7 +113,6 @@
         :getSignal="() => canvasController.signal"
         :disabled="!canvasId || !project?.directory"
         :directory="project?.directory" />
-      <nodeSearch ref="nodeSearchRef" :disabled="!active || settingsVisible || !canvasId || !project?.directory" />
     </vue-flow>
     <div v-if="snapGuideStyle" class="snapGuides" aria-hidden="true">
       <span class="snapGuide snapGuideVertical" :style="{ left: `${snapGuideStyle.left}px` }" />
@@ -988,10 +989,11 @@ function getCanvasCenterPosition() {
   return rect ? screenToFlowCoordinate({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : undefined;
 }
 
-function toggleWorkspaceTool(tool: "nodes" | "upload" | "library" | "assets" | "history") {
+function toggleWorkspaceTool(tool: "nodes" | "upload" | "search" | "library" | "assets" | "history") {
   if (!props.active || props.settingsVisible) return;
   if (tool === "nodes") nodePanelVisible.value = !nodePanelVisible.value;
   else if (tool === "upload") void uploadFromPanel();
+  else if (tool === "search") nodeSearchRef.value?.open();
   else if (tool === "library") libraryVisible.value = !libraryVisible.value;
   else if (tool === "assets" && currentUser.value?.role !== "user") assetsVisible.value = !assetsVisible.value;
   else if (tool === "history") historyVisible.value = !historyVisible.value;
@@ -1875,14 +1877,12 @@ const defaultEdgeOptions = markRaw({
 }
 
 .canvas {
-  --canvasSelectionColor: #fff;
+  --canvasSelectionColor: var(--el-color-primary);
   position: relative;
   width: 100%;
   height: 100%;
 
   html:not(.dark) & {
-    --canvasSelectionColor: color-mix(in srgb, var(--el-color-primary), var(--el-text-color-primary));
-
     :deep(.nodeSkeleton .cardContainer > .contentCard.selectionFrame:not(.selected)) {
       border-color: var(--el-card-border-color, var(--el-border-color-light));
     }

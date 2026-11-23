@@ -3,6 +3,7 @@ import type { Response } from "express";
 import { z } from "zod";
 import type { ProviderBalance, ProviderPrice, ProviderPriceRequest } from "@toonflow/providers";
 import conf from "@/utils/conf";
+import { getJianbaiApiKey } from "@toonflow/providers/jianbai";
 import { getMediaProvider, loadMediaProviderSource } from "@/utils/media/provider";
 
 type RuntimeProvider = Awaited<ReturnType<typeof loadMediaProviderSource>>;
@@ -113,7 +114,8 @@ function getAccount(provider: RuntimeProvider) {
 export async function getProviderBalance(providerId: string, apiKey?: string): Promise<BalanceSnapshot> {
   const { source } = await getMediaProvider(providerId);
   const configs = conf.get("settings", {}).mediaProviderConfigs as Record<string, Record<string, unknown>> | undefined;
-  const provider = await loadMediaProviderSource(source, { ...configs?.[providerId], ...(apiKey === undefined ? {} : { apiKey }) });
+  const configuredKey = providerId === "tokenGo" ? getJianbaiApiKey(conf.get("settings", {})) : undefined;
+  const provider = await loadMediaProviderSource(source, { ...configs?.[providerId], ...(configuredKey ? { apiKey: configuredKey } : {}), ...(apiKey === undefined ? {} : { apiKey }) });
   const account = getAccount(provider);
   if (account.provider && account.provider.sourceRevision !== provider.sourceRevision) account.epoch++;
   account.provider = provider;

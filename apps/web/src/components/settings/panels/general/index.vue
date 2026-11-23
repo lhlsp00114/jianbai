@@ -101,7 +101,7 @@
             :modelValue="generalSettings.canvasEdgeColor"
             colorFormat="hex"
             aria-label="节点连线自选颜色"
-            @change="(value) => updateGeneralSettings({ canvasEdgeColor: value || defaultUiSettings.primaryColor })" />
+            @change="(value) => updateGeneralSettings({ canvasEdgeColor: value || defaultCanvasEdgeColor })" />
         </div>
       </div>
     </section>
@@ -114,7 +114,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
-import { defaultUiSettings, generalSettings, uiSettings, updateGeneralSettings, updateUiSettings } from "@/stores/settings";
+import { defaultCanvasEdgeColor, generalSettings, uiSettings, updateGeneralSettings, updateUiSettings } from "@/stores/settings";
 import { currentUser, publicWeb } from "@/stores/multiTenant";
 import { getNotificationPermission, requestNotificationPermission } from "@/lib/notification";
 import { actualPlatform } from "@/lib/platform";

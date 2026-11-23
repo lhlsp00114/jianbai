@@ -629,14 +629,14 @@ async function copyImageToCanvas(reference: ComicReference) {
     if (await openCanvas()) ElMessage.success("已复制，在画布粘贴即可添加图片节点");
   } catch (error) { showError(error); }
 }
-async function openCanvas(tool?: "nodes" | "upload" | "history") {
+async function openCanvas(tool?: "nodes" | "upload" | "search" | "history") {
   return !await router.push({ path: "/workspace", query: { tool, comicFile: comicPath === comicFileName ? undefined : comicPath } });
 }
 function switchWorkspacePanel(value: string | number | boolean) {
   if (value === "canvas") return openCanvas();
   if (value === "document") return router.push({ path: "/workspace", query: { panel: "document", comicFile: comicPath === comicFileName ? undefined : comicPath } });
 }
-function openWorkspaceTool(tool: "nodes" | "upload" | "library" | "assets" | "history") {
+function openWorkspaceTool(tool: "nodes" | "upload" | "search" | "library" | "assets" | "history") {
   if (tool === "library") libraryVisible.value = !libraryVisible.value;
   else if (tool === "assets") assetsVisible.value = !assetsVisible.value;
   else if (tool === "upload") canvasUploadInput.value?.click();

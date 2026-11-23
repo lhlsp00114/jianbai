@@ -1,7 +1,7 @@
 <template>
   <div class="providerList">
     <div class="itemList">
-      <toonflowProviderCard scope="text" :provider="customProviders.find(item => item.id.toLowerCase() === 'toonflow')" />
+      <jianbaiProviderCard scope="text" :provider="jianbaiTextProvider" />
       <el-card v-for="item in visibleProviders" :key="item.id" class="providerItem" shadow="never">
         <div class="providerHeader">
           <div v-if="item.icon" class="providerMark" aria-hidden="true">
@@ -45,7 +45,8 @@ import { ElMessage } from "element-plus";
 import { customProviders, saveSettings, type CustomProvider } from "@/stores/settings";
 import { IconPlus, IconEdit, IconTrash, IconArrowUp } from "@tabler/icons-vue";
 import { getBuiltinSource, useBuiltinUpgrades, type BuiltinLanguageProvider } from "@/lib/builtinProviders";
-import toonflowProviderCard from "../../toonflowProviderCard.vue";
+import jianbaiProviderCard from "../../toonflowProviderCard.vue";
+import { jianbaiId, jianbaiTextProvider } from "@/lib/jianbaiAccount";
 
 defineProps<{ visible?: boolean }>();
 const upgradeVersion = useBuiltinUpgrades("language");
@@ -55,7 +56,7 @@ const editingProvider = ref<CustomProvider>();
 const deletingId = ref("");
 const upgradingId = ref("");
 const busy = computed(() => !!deletingId.value || !!upgradingId.value);
-const visibleProviders = computed(() => customProviders.value.filter(item => item.id.toLowerCase() !== "toonflow"));
+const visibleProviders = computed(() => customProviders.value.filter(item => item.id !== jianbaiId && item.id.toLowerCase() !== "toonflow"));
 
 function getProviderVersion(provider: CustomProvider) {
   const version = provider.version;

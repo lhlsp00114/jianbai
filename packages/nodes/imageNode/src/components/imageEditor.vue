@@ -1,6 +1,6 @@
 <template>
   <div class="imageEditor" :class="{ editing: mode, cropping: mode === 'crop', previewUnavailable: preparingPreview || previewError }" :style="{ '--imageRatio': imageRatio }" :aria-busy="preparingPreview">
-    <img ref="sourceImage" :src="previewSrc" :alt="alt" draggable="false" title="双击放大预览" @dblclick.stop="!mode && !preparingPreview && !previewError && emit('preview')" @load="imageLoaded" @error="handleError" />
+    <img ref="sourceImage" :src="previewSrc" :alt="alt" draggable="false" :title="mode || preparingPreview || previewError ? undefined : focusOnDoubleClick ? '双击聚焦节点' : '双击放大预览'" @dblclick.stop="onImageDoubleClick" @load="imageLoaded" @error="handleError" />
     <div v-if="preparingPreview || previewError" class="previewStatus" role="status">{{ preparingPreview ? "正在生成兼容预览…" : previewError }}</div>
     <canvas
       v-if="mode && mode !== 'crop' && mode !== 'color'"
@@ -83,8 +83,8 @@ import imageCrop from "./imageCrop.vue";
 import imageColorAdjust from "./imageColorAdjust.vue";
 import { createColorRenderer, type ColorSettings } from "../imageColor";
 
-const props = defineProps<{ src: string; alt: string; toolbarTarget?: HTMLElement; disabled?: boolean }>();
-const emit = defineEmits<{ load: [event: Event]; error: [error: Error]; preview: []; close: [] }>();
+const props = defineProps<{ src: string; alt: string; toolbarTarget?: HTMLElement; disabled?: boolean; focusOnDoubleClick?: boolean }>();
+const emit = defineEmits<{ load: [event: Event]; error: [error: Error]; focus: []; preview: []; close: [] }>();
 const { src: previewSrc, preparing: preparingPreview, error: previewError, handleError, handleLoaded } = useMediaPreview(() => props.src, "image");
 watch(previewError, message => { if (message) emit("error", new Error(message)); });
 const { node } = useNode();
@@ -97,6 +97,13 @@ const sourceImage = ref<HTMLImageElement>();
 const imageRatio = ref(1);
 const paintCanvas = ref<HTMLCanvasElement>();
 const mode = ref<"mark" | "smartEdit" | "crop" | "color">();
+
+function onImageDoubleClick() {
+  if (mode.value || preparingPreview.value || previewError.value) return;
+  if (props.focusOnDoubleClick) emit("focus");
+  else emit("preview");
+}
+
 const busy = ref(false);
 let operation: AbortController | undefined;
 const {

@@ -44,12 +44,12 @@
           <slot name="topRightActions" />
           <el-button
             v-if="fullscreenVisible"
-            :icon="focusOnToolbar ? IconFocus2 : IconMaximize"
-            :disabled="!focusOnToolbar && !downloadUrl"
+            :icon="IconMaximize"
+            :disabled="fullscreenDisabled ?? !downloadUrl"
             text
-            :title="focusOnToolbar ? '聚焦节点' : '全屏'"
-            :aria-label="focusOnToolbar ? '聚焦节点' : '全屏'"
-            @click.stop="focusOnToolbar ? focusNode() : emit('fullscreen')" />
+            :title="fullscreenLabel"
+            :aria-label="fullscreenLabel"
+            @click.stop="emit('fullscreen')" />
           <el-button
             :tag="downloadUrl ? 'a' : 'button'"
             :href="downloadUrl || undefined"
@@ -176,7 +176,6 @@ import {
   IconFolderPlus,
   IconDownload,
   IconMaximize,
-  IconFocus2,
   IconBox,
   IconLoader2,
   IconSend,
@@ -210,7 +209,8 @@ const props = withDefaults(
       downloadUrl?: string;
       downloadName?: string;
       fullscreenVisible?: boolean;
-      toolbarAction?: "fullscreen" | "focus";
+      fullscreenDisabled?: boolean;
+      fullscreenLabel?: string;
     }
   >(),
   {
@@ -222,7 +222,8 @@ const props = withDefaults(
     selectionFrame: false,
     readOnly: false,
     fullscreenVisible: true,
-    toolbarAction: "fullscreen",
+    fullscreenDisabled: undefined,
+    fullscreenLabel: "全屏",
     topWidth: "20vw",
     bottomWidth: "20vw",
   }
@@ -235,7 +236,6 @@ const cardHeight = computed(() => Math.max(100, ...handleGroups.value.map((group
 const { id: nodeId, node } = useNode();
 const documentContext = inject<NodeDocumentContext | undefined>("nodeDocument", undefined);
 const documentTarget = computed(() => props.readOnly ? undefined : documentContext?.targets.get(nodeId));
-const focusOnToolbar = computed(() => props.toolbarAction === "focus" && !documentTarget.value);
 const skeletonElement = ref<HTMLElement>();
 const canvasSize = shallowRef<{ width: string; height: string }>();
 let documentLease: symbol | undefined;
@@ -465,7 +465,7 @@ watch(documentTarget, (target, _, onCleanup) => {
   });
 }, { immediate: true });
 
-defineExpose({ focusNode });
+defineExpose({ focusNode, documentTarget });
 
 function zoomCanvas(event: WheelEvent) {
   if (documentTarget.value) return;
@@ -482,7 +482,8 @@ const slotsHiddenByInteraction = ref(false);
 // ACT: 多选只操作节点；未选中的节点仍可通过 v-model 主动打开槽位。
 const slotsVisible = computed(() => !slotsHiddenByInteraction.value && (!node.selected || getSelectedNodes.value.length <= 1));
 onSelectionStart(() => {
-  slotsHiddenByInteraction.value = true;
+  // ACT: 只隐藏当前已选节点的浮动槽位，避免每个节点在框选开始时都触发一次响应式更新。
+  if (node.selected) slotsHiddenByInteraction.value = true;
 });
 onNodeDragStart(({ nodes }) => {
   if (nodes.some((item) => item.id === nodeId)) slotsHiddenByInteraction.value = true;

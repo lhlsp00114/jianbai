@@ -17,8 +17,8 @@
             <span>{{ mobileConnectionLabel }}</span>
           </el-dropdown-item>
           <el-dropdown-item class="accountMenuItem" :icon="IconBrandGithub" command="github">Github</el-dropdown-item>
-          <el-dropdown-item v-if="loggedIn" class="accountMenuItem" :icon="IconLogout" command="logout" :disabled="loggingOut">退出登录</el-dropdown-item>
-          <el-dropdown-item v-else class="accountMenuItem" :icon="IconLogin" command="account">登录</el-dropdown-item>
+          <el-dropdown-item v-if="publicWeb && loggedIn" class="accountMenuItem" :icon="IconLogout" command="logout" :disabled="loggingOut">退出登录</el-dropdown-item>
+          <el-dropdown-item v-else-if="!publicWeb" class="accountMenuItem" :icon="IconLogin" command="account">账号与余额</el-dropdown-item>
         </el-dropdown-menu>
       </template>
     </el-dropdown>
@@ -33,22 +33,22 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { IconBrandGithub, IconDeviceDesktop, IconDownload, IconLogin, IconLogout, IconQrcode, IconSettings } from "@tabler/icons-vue";
 import { locale, translate } from "@toonflow/i18n/vue";
-import type { Login, PreviewData } from "@toonflow/server/channel";
 import http from "@/lib/http";
-import { multiTenantEnabled, saveSettings, settings, toonflowAccountToken } from "@/stores/settings";
+import { multiTenantEnabled } from "@/stores/settings";
+import { jianbaiMediaKey, jianbaiTextConnected, type JianbaiBalance } from "@/lib/jianbaiAccount";
 import { currentUser, publicWeb } from "@/stores/multiTenant";
 import { hasDesktopUpdate } from "@/stores/desktopUpdate";
 import { deviceHubEnabled, mobileConnection, mobileConnectionLabel } from "@/lib/mobile";
 
 defineProps<{ collapsed: boolean }>();
 const emit = defineEmits<{ openSettings: []; openAccount: []; openUpdate: []; openDeviceLink: [] }>();
-const loggedIn = computed(() => publicWeb.value ? !!currentUser.value : !!toonflowAccountToken.value);
-const accountName = computed(() => (publicWeb.value ? currentUser.value?.userName : (settings.value.toonflowAccount as Partial<Login> | null)?.info?.userName) || translate("未登录"));
-const showBalance = computed(() => loggedIn.value && (publicWeb.value ? currentUser.value?.role === "user" : !multiTenantEnabled.value));
+const loggedIn = computed(() => publicWeb.value ? !!currentUser.value : !multiTenantEnabled.value && (!!jianbaiMediaKey.value || jianbaiTextConnected.value));
+const accountName = computed(() => publicWeb.value ? currentUser.value?.userName || translate("未登录") : "见白 AI");
+const showBalance = computed(() => loggedIn.value && (publicWeb.value ? currentUser.value?.role === "user" : !!jianbaiMediaKey.value));
 const balanceText = ref("");
 const balanceError = ref("");
 const loggingOut = ref(false);
-const moneyFormat = computed(() => new Intl.NumberFormat(locale.value, { style: "currency", currency: "CNY", minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+const numberFormat = computed(() => new Intl.NumberFormat(locale.value, { maximumFractionDigits: 6 }));
 let controller: AbortController | undefined;
 
 async function refreshBalance() {
@@ -62,9 +62,8 @@ async function refreshBalance() {
       const result = await http<{ wallets: { currency: "CNY" | "USD"; balance: string }[] }>({ method: "GET", url: "/api/multiTenant/user/balance", signal: request.signal });
       if (!request.signal.aborted) balanceText.value = result.wallets.map(wallet => `${wallet.balance} ${wallet.currency}`).join(" / ");
     } else {
-      const token = toonflowAccountToken.value;
-      const result = await http<PreviewData>({ method: "GET", url: "/api/channel/account/getPreviewData", signal: request.signal, headers: { Authorization: `Bearer ${token}` } });
-      if (!request.signal.aborted && toonflowAccountToken.value === token) balanceText.value = moneyFormat.value.format(result.totalPoints);
+      const result = await http<JianbaiBalance>({ method: "POST", url: "/api/ai/jianbaiAccount", data: {}, signal: request.signal });
+      if (!request.signal.aborted) balanceText.value = `${numberFormat.value.format(result.balance)} 积分`;
     }
   } catch (error) {
     if (!request.signal.aborted) balanceError.value = error instanceof Error ? error.message : translate("加载余额失败，请刷新重试");
@@ -75,18 +74,12 @@ async function handleCommand(command: string) {
   if (command === "settings") emit("openSettings");
   if (command === "account") emit("openAccount");
   if (command === "deviceLink") emit("openDeviceLink");
-  if (command === "github") window.open("https://github.com/HBAI-Ltd/Toonflow-app", "_blank", "noopener,noreferrer");
-  if (command !== "logout" || loggingOut.value) return;
+  if (command === "github") window.open("https://github.com/lhlsp00114/jianbai", "_blank", "noopener,noreferrer");
+  if (command !== "logout" || !publicWeb.value || loggingOut.value) return;
   loggingOut.value = true;
   try {
-    if (publicWeb.value) {
-      await http({ method: "POST", url: "/api/multiTenant/user/logout" });
-      window.location.reload();
-    } else {
-      const token = toonflowAccountToken.value;
-      const saved = await saveSettings(() => toonflowAccountToken.value === token ? { toonflowAccount: null } : undefined);
-      if (saved) ElMessage.success("已退出登录");
-    }
+    await http({ method: "POST", url: "/api/multiTenant/user/logout" });
+    window.location.reload();
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : translate("退出登录失败"));
   } finally {
@@ -94,7 +87,7 @@ async function handleCommand(command: string) {
   }
 }
 
-watch([publicWeb, currentUser, toonflowAccountToken, multiTenantEnabled, locale], () => {
+watch([publicWeb, currentUser, jianbaiMediaKey, showBalance, locale], () => {
   controller?.abort();
   balanceText.value = "";
   balanceError.value = "";

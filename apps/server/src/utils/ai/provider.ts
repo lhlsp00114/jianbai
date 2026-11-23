@@ -2,6 +2,7 @@ import { getBuiltinModels, getBuiltinProviders } from "@earendil-works/pi-ai/pro
 import { getSupportedThinkingLevels, type KnownApi, type Model, type ThinkingLevelMap } from "@earendil-works/pi-ai";
 import { defaultThinkingLevels, thinkingLevels, type ThinkingLevel } from "@/lib/modelReasoning";
 import conf from "@/utils/conf";
+import { getJianbaiTextProvider } from "@toonflow/providers/jianbai";
 import { findModelContextLimits } from "@/utils/ai/modelContextLimits";
 import { validateHeaderName, validateHeaderValue } from "node:http";
 import { z } from "zod";
@@ -67,7 +68,8 @@ export function getAccountProvider() {
 export function getConfiguredProviders() {
   const providers = conf.get("settings", {}).customProviders;
   const account = getAccountProvider();
-  return [...(account ? [account] : []), ...(Array.isArray(providers) ? providers.filter(item => typeof item?.id !== "string" || item.id.toLowerCase() !== "toonflow") : [])];
+  const jianbai = getJianbaiTextProvider(conf.get("settings", {}));
+  return [...(account ? [account] : []), ...(jianbai ? [jianbai] : []), ...(Array.isArray(providers) ? providers.filter(item => (typeof item?.id !== "string" || item.id.toLowerCase() !== "toonflow") && (!jianbai || item?.id !== jianbai.id)) : [])];
 }
 
 const builtinModels: Model<KnownApi>[] = getBuiltinProviders().flatMap(provider => getBuiltinModels(provider));

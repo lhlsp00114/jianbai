@@ -4,6 +4,7 @@ import { onScopeDispose, ref, watch } from "vue";
 import type { ProviderBalance } from "@toonflow/providers";
 import { multiTenantEnabled, settings, toonflowAccountToken } from "@/stores/settings";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { jianbaiId, jianbaiMediaKey } from "@/lib/jianbaiAccount";
 
 type BalanceSnapshot = { accountId: string; balance: ProviderBalance | null; revision: number };
 
@@ -80,9 +81,9 @@ export function useProviderBalances() {
     const configs = settings.value.mediaProviderConfigs as Record<string, Record<string, unknown>> | undefined;
     const accountProvider = settings.value.toonflowProvider as { id?: string } | null | undefined;
     const previousEntries = new Map(providerBalances.value.map(entry => [entry.id, entry]));
-    providerBalances.value = providers.filter(item => item.supportsBalance
+    providerBalances.value = providers.filter(item => item.supportsBalance && (item.id !== jianbaiId || !!jianbaiMediaKey.value)
       && (item.id !== "toonflow" || (toonflowAccountToken.value && (accountProvider?.id === "Toonflow" || accountProvider?.id === "toonflow")))).map(provider => {
-      const configKey = JSON.stringify([configs?.[provider.id] ?? {}, provider.id === "toonflow" ? toonflowAccountToken.value : ""]);
+      const configKey = JSON.stringify([configs?.[provider.id] ?? {}, provider.id === jianbaiId ? jianbaiMediaKey.value : "", provider.id === "toonflow" ? toonflowAccountToken.value : ""]);
       const previous = previousEntries.get(provider.id);
       if (previous?.configKey === configKey) {
         previous.label = provider.label;
@@ -188,6 +189,7 @@ export function useProviderBalances() {
     scheduleRefresh();
   }
   watch(() => providerBalances.value.map(entry => entry.accountId).join(","), scheduleSubscribe);
+  watch(jianbaiMediaKey, invalidate);
   watch(multiTenantEnabled, invalidate, { flush: "sync" });
   watch(() => JSON.stringify(settings.value.mediaProviderConfigs), invalidate, { immediate: true, flush: "sync" });
   watch(() => workspaceStore.project?.lastOpenedAt, scheduleRefresh);
