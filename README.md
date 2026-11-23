@@ -27,43 +27,25 @@
 
 ## 产品预览
 
-见白的核心入口是一张可自由组织的创作画布。用户可以从节点菜单添加内容，也可以把生成结果、参考素材和后续编辑放在同一条创作链路中。
+下面的视觉素材为见白项目专门生成，用于表达产品的创作方向和界面形态。它们不是上游项目截图，也不代表某个固定版本的实际界面。
 
 <p align="center">
-  <img src="./docs/images/screenshots/home.webp" alt="见白首页" width="49%" />
-  <img src="./docs/images/screenshots/canvasDocument.webp" alt="见白画布" width="49%" />
+  <img src="./docs/images/jianbaiCanvas.png" alt="见白无限画布概念图" width="100%" />
 </p>
 
-| 画布创作 | 节点工作流 |
-| --- | --- |
-| 通过无限画布组织图片、文本、视频、音频和生成任务。 | 将提示词、参考图、模型、参数和结果连接成可追踪流程。 |
+见白的核心入口是一张可以自由组织内容的无限画布。图片、文本、视频、音频和生成任务都可以作为节点放置在同一空间中，通过连线保留创作关系。
 
 <p align="center">
-  <img src="./docs/images/screenshots/canvasNodeMenu.webp" alt="节点菜单" width="49%" />
-  <img src="./docs/images/screenshots/assetLibrary.webp" alt="素材库" width="49%" />
+  <img src="./docs/images/jianbaiLayers.png" alt="见白图层编辑概念图" width="100%" />
 </p>
 
-| 节点菜单 | 素材管理 |
-| --- | --- |
-| 按创作任务快速添加图片、视频、音频、脚本和其他工具节点。 | 在项目工作区内管理素材，继续使用已有内容完成后续创作。 |
+图层分离节点用于承载一次任务返回的多张图层。用户可以选择图层、调整顺序和显示状态，继续编辑或合并成新的结果。
 
 <p align="center">
-  <img src="./docs/images/screenshots/canvasAgent.webp" alt="Agent 协作" width="49%" />
-  <img src="./docs/images/screenshots/videoGenerationNode.webp" alt="视频生成节点" width="49%" />
+  <img src="./docs/images/jianbaiStoryboard.png" alt="见白分镜预演概念图" width="100%" />
 </p>
 
-| Agent 协作 | 多媒体生成 |
-| --- | --- |
-| 让 Agent 理解画布上下文，辅助查询节点、整理工作区和推进创作任务。 | 通过节点调用图像、视频等模型，将生成结果直接留在画布中。 |
-
-<p align="center">
-  <img src="./docs/images/screenshots/trumanMapWorld.webp" alt="TrumanMap 白模预演" width="49%" />
-  <img src="./docs/images/screenshots/trumanMapTimeline.webp" alt="TrumanMap 时间轴" width="49%" />
-</p>
-
-| 场景预演 | 镜头规划 |
-| --- | --- |
-| 在正式生成前搭建场景、角色和空间关系。 | 用时间轴和镜头视图整理叙事节奏与画面结构。 |
+分镜和白模预演用于整理场景、镜头、角色位置和时间顺序，让创作者在正式生成前先完成视觉规划。
 
 ## 一次创作如何进行
 
