@@ -41,7 +41,8 @@ export function isLocalWorkspaceRequest(req: Request) {
   const origin = req.get("origin");
   const localOrigin = `${req.protocol}://${req.get("host")}`;
   const sameOrigin = origin === undefined ? req.get("referer")?.startsWith(`${localOrigin}/`) : origin === localOrigin;
-  return isLocalHostRequest(req) && sameOrigin && req.get("x-toonflow-workspace") === "1";
+  const viteDevProxy = getRuntimePlatform().development && req.get("x-toonflow-local-client") === "1";
+  return isLocalHostRequest(req) && (sameOrigin || viteDevProxy) && req.get("x-toonflow-workspace") === "1";
 }
 
 export async function resolveWorkspace(req: Request, path: string) {
