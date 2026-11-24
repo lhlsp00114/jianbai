@@ -1,0 +1,54 @@
+name: 汇总见白 1.0.2 发布附件
+on:
+  push:
+    branches: [codex/build-1.0.2]
+    paths: [.github/workflows/uploadRelease102.yml]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  upload:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: jianbai-1.0.2-windowsX64
+          run-id: 45358035179
+          github-token: ${{ github.token }}
+          path: releaseAssets
+      - uses: actions/download-artifact@v8
+        with:
+          name: jianbai-1.0.2-windowsArm64
+          run-id: 45358040068
+          github-token: ${{ github.token }}
+          path: releaseAssets
+      - uses: actions/download-artifact@v8
+        with:
+          name: jianbai-1.0.2-linuxX64
+          run-id: 45358044354
+          github-token: ${{ github.token }}
+          path: releaseAssets
+      - uses: actions/download-artifact@v8
+        with:
+          name: jianbai-1.0.2-linuxArm64
+          run-id: 45358049322
+          github-token: ${{ github.token }}
+          path: releaseAssets
+      - uses: actions/download-artifact@v8
+        with:
+          name: jianbai-1.0.2-androidArm64
+          run-id: 45358055048
+          github-token: ${{ github.token }}
+          path: releaseAssets
+      - name: 上传并校验发布草稿
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(releaseAssets/*)
+          test "${#files[@]}" -eq 13
+          release="$(gh api "repos/$GITHUB_REPOSITORY/releases/456521467")"
+          jq -e '.draft and .tag_name == "v1.0.2" and .target_commitish == "135f710eee34445c12ada3121f61db81292b08ad"' <<< "$release" >/dev/null
+          gh release upload v1.0.2 "${files[@]}" --repo "$GITHUB_REPOSITORY"
+          gh api "repos/$GITHUB_REPOSITORY/releases/456521467" | jq -e '.draft and (.assets | length == 13 and all(.state == "uploaded" and .size > 0))' >/dev/null
