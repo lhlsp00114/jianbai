@@ -79,7 +79,8 @@ if (!initial) {
     previousHash = previous.hash;
     if (platform === "linux" && previous.deb !== undefined) {
       const deb = previous.deb;
-      if (deb?.file !== `toonflow-${previous.version}-linux-${process.arch}.deb`
+      const packageSuffix = `${previous.version}-linux-${process.arch}.deb`;
+      if (![ `jianbai-${packageSuffix}`, `toonflow-${packageSuffix}` ].includes(deb?.file)
         || !Number.isSafeInteger(deb.size) || deb.size <= 0 || typeof deb.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(deb.sha256)) {
         throw new Error("上一构建的 Debian 安装包信息无效。");
       }
@@ -101,9 +102,9 @@ if (manifest.version !== version) {
   throw new Error("本次构建的更新 JSON 与请求版本不一致。");
 }
 const names: string[] = [manifest.artifact.file];
-if (isMac) names.push(`toonflow-${version}-macos-${process.arch}.pkg`);
+if (isMac) names.push(`jianbai-${version}-macos-${process.arch}.pkg`);
 else if (platform === "linux") {
-  const packageName = `toonflow-${version}-linux-${process.arch}.deb`;
+  const packageName = `jianbai-${version}-linux-${process.arch}.deb`;
   if (manifest.deb?.file !== packageName) throw new Error("本次 Linux 构建缺少 Debian 安装包清单。");
   names.push(packageName);
   if (previousDeb) {
@@ -113,7 +114,7 @@ else if (platform === "linux") {
     await writeAtomic(join(artifactDir, manifestName), JSON.stringify(manifest));
   }
 }
-else names.push(`toonflow-${version}${process.arch === "arm64" ? "-win-arm64" : ""}-Setup.exe`);
+else names.push(`jianbai-${version}${process.arch === "arm64" ? "-win-arm64" : ""}-Setup.exe`);
 if (previousHash) names.push(`${prefix}-${previousHash}.patch`);
 for (const name of names) {
   if (!existsSync(join(artifactDir, name))) throw new Error(`构建产物缺失，未创建发布快照：${name}`);

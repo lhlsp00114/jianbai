@@ -24,7 +24,7 @@
       </footer>
     </section>
     <div class="artPanel" aria-hidden="true">
-      <canvasIntro />
+      <img class="whaleArtwork" :src="whaleArtwork" alt="" />
       <div class="artBrand">
         <span class="artLogo" v-html="logoSvg" />
         <span class="artName">见白</span>
@@ -43,7 +43,7 @@ import { jianbaiDashboard, jianbaiMediaKey } from "@/lib/jianbaiAccount";
 import jianbaiKeyForm from "@/components/settings/jianbaiKeyForm.vue";
 import { useHelloStore } from "@/stores/hello";
 import logoSvg from "@toonflow/assets/jianbaiLogo.svg?raw";
-import canvasIntro from "./canvasIntro.vue";
+import whaleArtwork from "@toonflow/assets/jianbaiWhale.jpg";
 import languageSelect from "@/components/languageSelect.vue";
 import { mobileConnectionLabel } from "@/lib/mobile";
 
@@ -162,7 +162,19 @@ async function completeSetup() {
     padding: 28px;
     border-radius: calc(var(--ui-radius) * 1.125);
     overflow: hidden;
-    background: #181b20;
+    background: #181818;
+
+    .whaleArtwork {
+      position: absolute;
+      inset-inline: 0;
+      top: 50%;
+      width: 100%;
+      height: auto;
+      transform: translateY(-50%);
+      filter: grayscale(1);
+      mask-image: linear-gradient(transparent, #000 13%, #000 87%, transparent);
+      pointer-events: none;
+    }
 
     .artBrand {
       position: relative;

@@ -39,7 +39,7 @@ const stagingParent = resolve(projectDir, "build/desktop/pkg");
 mkdirSync(stagingParent, { recursive: true });
 const stagingDir = mkdtempSync(join(stagingParent, "payload"));
 const appName = `${desktopConfig.app.name.replace(/ /g, "")}.app`;
-const outputName = `toonflow-${version}-macos-${process.arch}.pkg`;
+const outputName = `jianbai-${version}-macos-${process.arch}.pkg`;
 try {
   const tarPath = join(stagingDir, "app.tar");
   await write(tarPath, Bun.zstdDecompressSync(await file(join(artifactDir, archiveName)).arrayBuffer()));
@@ -95,7 +95,7 @@ try {
     writeAtomicSync(join(scriptsDir, "prepareRuntime"), `#!/bin/sh
 set -eu
 consoleUser=$(/usr/bin/stat -f '%Su' /dev/console)
-case "$consoleUser" in ''|root|loginwindow) echo '请登录 Mac 桌面后重新安装 Toonflow。' >&2; exit 1;; esac
+case "$consoleUser" in ''|root|loginwindow) echo '请登录 Mac 桌面后重新安装见白。' >&2; exit 1;; esac
 consoleUid=$(/usr/bin/id -u "$consoleUser")
 /bin/launchctl print "gui/$consoleUid" >/dev/null
 scriptDirectory=$(CDPATH= cd -- "$(/usr/bin/dirname "$0")" && pwd -P)

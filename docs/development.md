@@ -164,7 +164,7 @@ bun run build:desktop
 bun run package:desktop
 ```
 
-Windows x64 安装包为 `toonflow-<版本>-Setup.exe`，ARM64 为 `toonflow-<版本>-win-arm64-Setup.exe`，分别位于 `build/desktop/artifacts/`、`build/desktop/artifacts/windowsArm64/`。
+Windows x64 安装包为 `jianbai-<版本>-Setup.exe`，ARM64 为 `jianbai-<版本>-win-arm64-Setup.exe`，分别位于 `build/desktop/artifacts/`、`build/desktop/artifacts/windowsArm64/`。
 
 NSIS 安装包不内置 Bun。安装器会自动打开“必要运行时下载”，提供 npmmirror、CNPM 备用线路、GitHub 官方源、SourceForge 镜像四个预设入口，并在系统代理和直连之间自动回退；所有组合失败后才提示重试。npmmirror 与 CNPM 属于同一维护体系，使用不同下载入口，不视为两个独立镜像运营方。高级设置默认折叠，下载中可以暂停、切换来源或取消，缓存位于 `%LOCALAPPDATA%/local.toonflow.desktop/runtime/bun/<版本>/<架构>`。下载的 ZIP 与可执行文件均校验固定大小和 SHA-256，不接受任意版本替换。`/S` 安装使用相同下载流程，不显示交互窗口。首次下载成功后，重新安装可以复用已校验缓存。
 
@@ -184,7 +184,7 @@ bun run build:desktop
 TOONFLOW_EXTERNAL_RUNTIME=1 bun run package:desktop
 ```
 
-启动库脚本会下载固定版本的 ThorVG 源码并校验摘要。安装包为 `toonflow-<版本>-macos-<架构>.pkg`，产物分别位于 `build/desktop/artifacts/macArm64/` 和 `build/desktop/artifacts/macX64/`。双击 PKG 按提示继续安装，完成后从“应用程序”打开 Toonflow。
+启动库脚本会下载固定版本的 ThorVG 源码并校验摘要。安装包为 `jianbai-<版本>-macos-<架构>.pkg`，产物分别位于 `build/desktop/artifacts/macArm64/` 和 `build/desktop/artifacts/macX64/`。双击 PKG 按提示继续安装，完成后从“应用程序”打开见白。
 
 打包入口使用 `apps/desktop/scripts/packageMacPkg.ts`。签名需要 Developer ID Application 和 Developer ID Installer 两种证书及各自匹配的私钥，分别用于应用和 PKG。
 
@@ -209,7 +209,7 @@ bun run build:desktop
 bun run package:desktop
 ```
 
-安装包为 `toonflow-<版本>-linux-<架构>.deb`，产物分别位于 `build/desktop/artifacts/linuxX64/`、`build/desktop/artifacts/linuxArm64/`。使用 `sudo apt install ./安装包文件名.deb` 安装时会准备所需系统依赖与 FFmpeg，并先安装 `Pre-Depends` 声明的 `ca-certificates`、`curl`、`unzip`。安装需要可访问下载源的网络。
+安装包为 `jianbai-<版本>-linux-<架构>.deb`，产物分别位于 `build/desktop/artifacts/linuxX64/`、`build/desktop/artifacts/linuxArm64/`。使用 `sudo apt install ./安装包文件名.deb` 安装时会准备所需系统依赖与 FFmpeg，并先安装 `Pre-Depends` 声明的 `ca-certificates`、`curl`、`unzip`。安装需要可访问下载源的网络。
 
 DEB 不内置 Bun 二进制。`preinst` 在首次安装、重装或升级的解包前阶段，准备 `apps/desktop/runtimeInfo.json` 锁定版本与架构的 ZIP，校验固定大小和 SHA-256，再流式解压指定成员到缓存临时文件并校验二进制大小和 SHA-256；下载或校验失败会在解包前中止安装。`postinst` 在配置阶段复核缓存与解压出的二进制，最后原子替换 `/opt/toonflow/bin/bun`；该阶段已有有效运行时可直接复用，不重新下载。
 
@@ -228,40 +228,40 @@ DEB 不内置 Bun 二进制。`preinst` 在首次安装、重装或升级的解�
 
 1. 提交要发布的代码，在 SourceTree 中选中该提交，点击 **标签**。
 2. 填写完整标签名，例如 `v2.0.0`，确认标签指向要发布的提交。
-3. 在左侧标签列表右键这个新标签，选择 **推送标签**，目标选择正式仓库 `origin`。只推送本次标签，不勾选“推送所有标签”。
+3. 在左侧标签列表右键这个新标签，选择 **推送标签**，目标选择见白仓库 `lhlsp00114/jianbai`（当前工作区的远程名为 `backup`）。只推送本次标签，不勾选“推送所有标签”。
 
-推送标签会一并上传它所引用的提交，无需创建或推送发布分支。GitHub Actions 会自动运行 **Release Toonflow**，构建六种桌面目标与 Android ARM64，全部成功后创建对应 GitHub Release。
+推送标签会一并上传它所引用的提交，无需创建或推送发布分支。GitHub Actions 会自动运行 **发布见白**，构建六种桌面目标与 Android ARM64，全部成功后创建对应 GitHub Release。
 
 也可在仓库终端执行下面两条命令（将 `2.0.0` 换成本次版本）：
 
 ```sh
 git tag -a v2.0.0 -m "Release v2.0.0"
-git push --no-follow-tags origin refs/tags/v2.0.0:refs/tags/v2.0.0
+git push --no-follow-tags backup refs/tags/v2.0.0:refs/tags/v2.0.0
 ```
 
 版本格式为小写 `v` 加 `X.Y.Z`；轻量标签和附注标签均支持。使用新的版本号，不覆盖已有标签。构建失败时，在 Actions 中查看日志；代码不变可重跑任务，修改代码后使用新版本号。
 
 **一次构建全部平台**
 
-在 GitHub 仓库打开 **Actions → Release Toonflow → Run workflow**，选择要发布的可信分支，填写版本号（例如 `2.0.1`），将 `ref` 留空后运行。推送 `vX.Y.Z` 标签同样会触发发布。包含任一种 Mac 的签名构建要求 `ref` 与触发工作流的分支或标签指向同一提交，不允许借此切换到其他提交；在 Debug 工作流仅构建 Windows、Linux 或 Android 时可指定其他 `ref`。
+在见白仓库 `lhlsp00114/jianbai` 打开 **Actions → 发布见白 → Run workflow**，选择要发布的可信分支，填写版本号（例如 `2.0.1`），将 `ref` 留空后运行。推送 `vX.Y.Z` 标签同样会触发发布。包含任一种 Mac 的签名构建要求 `ref` 与触发工作流的分支或标签指向同一提交，不允许借此切换到其他提交。在见白构建工作流仅构建 Windows、Linux 或 Android 时可指定其他 `ref`。
 
 工作流使用各系统与架构的原生运行器构建，全部成功后统一上传到对应 GitHub Release：
 
 | 平台 | 安装包 | 更新文件 |
 | --- | --- | --- |
-| Windows x64 | `toonflow-<版本号>-Setup.exe` | `stable-win-x64-*` |
-| Windows ARM64 | `toonflow-<版本号>-win-arm64-Setup.exe` | `stable-win-arm64-*` |
-| macOS Intel | `toonflow-<版本号>-macos-x64.pkg` | `stable-macos-x64-*` |
-| macOS Apple Silicon | `toonflow-<版本号>-macos-arm64.pkg` | `stable-macos-arm64-*` |
-| Linux x64 | `toonflow-<版本号>-linux-x64.deb` | `stable-linux-x64-*` |
-| Linux ARM64 | `toonflow-<版本号>-linux-arm64.deb` | `stable-linux-arm64-*` |
-| Android ARM64 | `toonflow-<版本号>-android-arm64.apk` | APK 随 Release 发布，不使用桌面更新清单 |
+| Windows x64 | `jianbai-<版本号>-Setup.exe` | `stable-win-x64-*` |
+| Windows ARM64 | `jianbai-<版本号>-win-arm64-Setup.exe` | `stable-win-arm64-*` |
+| macOS Intel | `jianbai-<版本号>-macos-x64.pkg` | `stable-macos-x64-*` |
+| macOS Apple Silicon | `jianbai-<版本号>-macos-arm64.pkg` | `stable-macos-arm64-*` |
+| Linux x64 | `jianbai-<版本号>-linux-x64.deb` | `stable-linux-x64-*` |
+| Linux ARM64 | `jianbai-<版本号>-linux-arm64.deb` | `stable-linux-arm64-*` |
+| Android ARM64 | `jianbai-<版本号>-android-arm64.apk` | APK 随 Release 发布，不使用桌面更新清单 |
 
 各桌面目标包含完整更新包 `.tar.zst`、更新清单 `*-update.json`，以及**GitHub 最新发布版 → 当前版本**的 `<平台前缀>-<旧 hash>.patch`。首次发布找不到该目标清单（HTTP 404）时只生成安装包和完整更新包；Intel Mac 首次遇到旧 SDK 清单时也只生成统一 SDK 的首版完整包。其他网络错误、无效清单或缺失 patch 会中止构建。版本号必须高于更新源中的上一版。
 
-构建固定使用 GitHub Releases 的 `releases/latest/download` 读取上一版清单及完整包，用于生成补丁。GitHub Actions 使用当前工作流仓库（`GITHUB_SERVER_URL` / `GITHUB_REPOSITORY`），本机构建默认使用 `HBAI-Ltd/Toonflow-app`。此地址写入 SDK 的构建配置，不受客户端设置影响；客户端运行时在“设置 → 关于”选择更新源，默认使用官方源 `https://api.toonflow.net/version/desktopUpdates`，也可切换到 GitHub Releases。开发者选项可保存一个自定义更新文件目录地址，保存后会出现在“关于”的更新源下拉框。Release 工作流会上传安装包和更新文件到 GitHub Release，再通过配置的托管接口登记六个桌面目标；使用独立更新服务时按下方命令单独同步。
+构建和客户端默认使用见白仓库 `lhlsp00114/jianbai` 的 GitHub Releases。发布工作流将安装包和更新文件统一上传到该仓库的 GitHub Release，构建脚本从 `releases/latest/download` 读取上一版清单和完整包以生成补丁。独立更新服务仍可单独同步。
 
-[Debug 工作流](../.github/workflows/debug.yml) 可单独选择平台或全部平台，产物保留 7 天，不创建 Release。默认只打完整包，勾选 `generatePatch` 可验证增量构建。CI 构建和归档检查不等于已验证真实安装、GUI 启动或 macOS Gatekeeper。
+[见白构建工作流](../.github/workflows/debug.yml) 可单独选择平台或全部平台，产物保留 7 天，不创建 Release。默认只打完整包，勾选 `generatePatch` 可验证增量构建。CI 构建和归档检查不等于已验证真实安装、GUI 启动或 macOS Gatekeeper。
 
 **Windows 代码签名**
 

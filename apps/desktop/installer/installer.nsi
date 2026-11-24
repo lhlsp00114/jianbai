@@ -292,8 +292,13 @@ installApp:
   WriteRegStr HKCU "Software\Classes\toonflow\DefaultIcon" "" '$\"$INSTDIR\app\Resources\app.ico$\",0'
   WriteRegStr HKCU "Software\Classes\toonflow\shell\open\command" "" '$\"$INSTDIR\app\Resources\app\protocolLauncher.exe$\" $\"%1$\"'
   IfErrors installFailed
-  CreateShortCut "$DESKTOP\${appName}.lnk" "$INSTDIR\app\Resources\app\startupLauncher.exe" "" "$INSTDIR\app\Resources\app.ico"
+  ; ACT: 旧版本用 app.ico，改用独立路径避免 Explorer 继续显示该路径缓存的上游图标。
+  ClearErrors
+  File "/oname=$INSTDIR\jianbaiShortcut.ico" "${appIcon}"
+  IfErrors shortcutFailed
+  CreateShortCut "$DESKTOP\${appName}.lnk" "$INSTDIR\app\Resources\app\startupLauncher.exe" "" "$INSTDIR\jianbaiShortcut.ico" 0
   IfErrors 0 installDone
+shortcutFailed:
   ; ACT: 快捷方式不影响程序使用，失败时保留成功安装结果并告知手动启动路径。
   MessageBox MB_OK|MB_ICONEXCLAMATION "见白 已安装，但无法创建桌面快捷方式。可以从以下位置启动：$\r$\n$INSTDIR\app\Resources\app\startupLauncher.exe" /SD IDOK
   Goto installDone
@@ -354,6 +359,10 @@ Section "Uninstall"
   ${EndIf}
   ClearErrors
   ; ACT: 清理成功后才移除卸载入口；文件被占用时保留入口供用户重试。
+  ${If} ${FileExists} "$INSTDIR\jianbaiShortcut.ico"
+    Delete "$INSTDIR\jianbaiShortcut.ico"
+    IfErrors uninstallFailed
+  ${EndIf}
   Delete "$INSTDIR\UninstallNSIS.exe"
   IfErrors uninstallFailed
   Delete "$INSTDIR\toonflow.ini"

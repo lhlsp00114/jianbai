@@ -13,6 +13,7 @@
     :style="previewUrl && videoPreviewSize ? { width: `${videoPreviewSize.width + 6}px`, '--videoPreviewHeight': `${videoPreviewSize.height}px` } : { width: !outputFile && !exporting ? `${emptyMediaCardWidth}px` : undefined }"
     @fullscreen="player?.enterFullscreen()">
     <template v-if="videoResolution" #titleMeta><span :title="`${videoResolution} 像素`" :aria-label="`视频分辨率：${videoResolution}`">{{ videoResolution }}</span></template>
+    <template #contextActions><eagleMenuItem :file="outputFile" /></template>
     <template #topActions>
       <el-button :icon="IconMusic" text :disabled="!outputFile || uploading || exporting || actions?.processing" @click.stop="actions?.open('extractAudio')">提取音轨</el-button>
       <el-button :icon="IconLayersSubtract" text :disabled="!outputFile || uploading || exporting || actions?.processing" @click.stop="actions?.open('separate')">分离音视频</el-button>
@@ -89,6 +90,7 @@ import videoActions from "./components/videoActions.vue";
 import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
 import { emptyMediaCardWidth, getMediaPreviewSize } from "@toonflow/node-shared/mediaPreviewSize";
 import mediaHistory from "@toonflow/node-shared/mediaHistory";
+import eagleMenuItem from "@toonflow/node-shared/eagleMenuItem";
 
 defineOptions({
   inheritAttrs: false,

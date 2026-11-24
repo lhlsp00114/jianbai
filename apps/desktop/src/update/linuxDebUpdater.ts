@@ -97,7 +97,8 @@ export default function createLinuxDebUpdater(resourcesDirectory: string, dataDi
         || typeof next.hash !== "string" || !buildPattern.test(next.hash)) throw new Error(t`更新清单不匹配当前应用`);
       if (Bun.semver.order(next.version, info.version) < 0) throw new Error(t`更新源版本 ${next.version} 早于当前版本 ${info.version}，已阻止降级`);
       // 旧版清单未记录 DEB 摘要；同构建无须更新，不能用缺少校验值的包执行系统安装。
-      if (next.hash !== info.hash && !validAsset(next.deb, `toonflow-${next.version}-linux-${process.arch}.deb`)) {
+      if (next.hash !== info.hash && !validAsset(next.deb, `jianbai-${next.version}-linux-${process.arch}.deb`)
+        && !validAsset(next.deb, `toonflow-${next.version}-linux-${process.arch}.deb`)) {
         throw new Error(t`更新清单不匹配当前应用`);
       }
       target = next;
@@ -128,11 +129,11 @@ export default function createLinuxDebUpdater(resourcesDirectory: string, dataDi
   }
 
   async function findBase(sha256: string) {
-    const name = `toonflow-${local.version}-linux-${process.arch}.deb`;
+    const packageSuffix = `${local.version}-linux-${process.arch}.deb`;
     const candidates = [join(cache, `${local.hash}.deb`), join("/var/cache/apt/archives", `toonflow_${local.version}_${process.arch === "arm64" ? "arm64" : "amd64"}.deb`)];
     const downloads = await execFileAsync("/usr/bin/xdg-user-dir", ["DOWNLOAD"], { timeout: 3000 }).then(result => result.stdout.trim()).catch(() => "");
     for (const directory of new Set([downloads, join(homedir(), "Downloads"), join(homedir(), "下载")])) {
-      if (isAbsolute(directory)) candidates.push(join(directory, name));
+      if (isAbsolute(directory)) candidates.push(join(directory, `jianbai-${packageSuffix}`), join(directory, `toonflow-${packageSuffix}`));
     }
     for (const path of candidates) if (await matches(path, sha256).catch(() => false)) return path;
   }

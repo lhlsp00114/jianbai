@@ -16,6 +16,7 @@
     @fullscreen="previewVisible = true"
     :style="{ width: !outputFile && !data.rotationDraft ? `${emptyMediaCardWidth}px` : previewUrl && imageWidth ? `${imageWidth + 6}px` : undefined }">
     <template v-if="imageResolution" #titleMeta><span :title="`${imageResolution} 像素`" :aria-label="`图片分辨率：${imageResolution}`">{{ imageResolution }}</span></template>
+    <template #contextActions><eagleMenuItem :file="outputFile" /></template>
     <template v-if="(editor?.mode && editor.mode !== 'smartEdit') || data.rotationDraft" #top><div ref="paintToolbar" /></template>
     <template #topActions>
       <el-button :icon="IconSparkles" :disabled="uploading || layerSplit?.splitting || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="智能改图" aria-label="智能改图" @click.stop="startEditor('smartEdit')">智能改图</el-button>
@@ -133,6 +134,7 @@ import type { OutpaintDraftInput } from "./imageOutpaint";
 import { useImageRotation, type ImageRotation } from "./useImageRotation";
 import imageViewer from "@toonflow/node-shared/imageViewer";
 import mediaHistory from "@toonflow/node-shared/mediaHistory";
+import eagleMenuItem from "@toonflow/node-shared/eagleMenuItem";
 
 defineOptions({
   inheritAttrs: false,

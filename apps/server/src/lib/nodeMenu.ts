@@ -1,5 +1,7 @@
 export const storyboardNodeType = "canvasStoryboard";
 
+const defaultHiddenNodeTypes = new Set(["remote-imageNode", "remote-videoNode", "remote-audioNode", "remote-imageLayerNode"]);
+
 export type NodeMenuItem = {
   id: string;
   label: string;
@@ -92,7 +94,7 @@ export function resolveNodeMenu(saved: NodeMenuItem[], nodes: { type: string; la
   for (const node of [...nodes].sort((left, right) => (order[left.type] ?? 10) - (order[right.type] ?? 10) || left.type.localeCompare(right.type))) {
     if (existing.has(node.type)) continue;
     existing.add(node.type);
-    const newItem = { id: `node:${node.type}`, type: node.type, label: node.label, hidden: false };
+    const newItem = { id: `node:${node.type}`, type: node.type, label: node.label, hidden: defaultHiddenNodeTypes.has(node.type) };
     if (node.type === "remote-audioGenerationNode" && insertAfter(items, "remote-videoGenerationNode", newItem)) continue;
     const audioTarget = existing.has("remote-audioNode") ? "remote-audioNode"
       : existing.has("remote-audioGenerationNode") ? "remote-audioGenerationNode" : "remote-videoGenerationNode";

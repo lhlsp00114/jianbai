@@ -52,7 +52,7 @@ export default {
       "build/ext": "ext",
       "packages/skills": "skills",
       ...(startupTarget ? {
-        [process.platform === "win32" ? "packages/startup/assets/jianbaiStartup.json" : "packages/startup/assets/startup.json"]: "startup/startup.json",
+        "packages/startup/assets/jianbaiStartup.json": "startup/startup.json",
         "packages/startup/assets/license.txt": "startup/license.txt",
         [`packages/startup/assets/${startupTarget}`]: `startup/${startupTarget}`,
       } : {}),
@@ -64,7 +64,7 @@ export default {
       autoGrantPermissions: ["microphone", "notifications"],
     },
     mac: {
-      icons: "packages/assets/logo.iconset",
+      icons: "packages/assets/jianbai.iconset",
       createDmg: false,
       entitlements: { "com.apple.security.device.audio-input": true },
       // ACT: CI 同时开启签名与公证；本地未配置凭据时仍可构建未签名包。
@@ -72,7 +72,7 @@ export default {
       notarize: process.env.macCodesign === "1",
     },
     linux: {
-      icon: "packages/assets/logo.iconset/icon_256x256.png",
+      icon: "packages/assets/jianbai.iconset/icon_256x256.png",
     },
   },
   release: {

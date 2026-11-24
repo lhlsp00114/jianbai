@@ -93,14 +93,14 @@ const bridgeResult = await Bun.build({
 if (!bridgeResult.success) throw new AggregateError(bridgeResult.logs, "构建移动端浏览器桥接失败");
 await copyFile(join(projectRoot, "apps/web/node_modules/jsqr/LICENSE"), join(staging, "assets/jsqrLicense.txt"));
 
-const apk = join(buildRoot, "toonflowMobile.apk");
+const apk = join(buildRoot, "jianbaiMobile.apk");
 const resources = join(staging, "res");
 const manifest = join(staging, "manifest.xml");
 const manifestSource = await readFile(join(mobileRoot, "native/manifest.xml"), "utf8");
 await writeAtomic(manifest, manifestSource.replace(/ package="[^"]+"/, "").replace(/ android:version(?:Code|Name)="[^"]+"/g, "").replace(/ android:(?:debuggable|extractNativeLibs)="(?:true|false)"/g, "").replace(/\s*<uses-sdk\b[^>]*\/>/, ""));
 await cp(join(mobileRoot, "native/res"), resources, { recursive: true });
 await mkdir(join(resources, "drawable-nodpi"), { recursive: true });
-await copyFile(join(projectRoot, "packages/assets/logo.iconset/icon_512x512.png"), join(resources, "drawable-nodpi/logo.png"));
+await copyFile(join(projectRoot, "packages/assets/jianbai.iconset/icon_512x512.png"), join(resources, "drawable-nodpi/logo.png"));
 await run([
   java, "-cp", gradleLauncher, "org.gradle.launcher.GradleMain", "--offline", "--no-daemon", "--console=plain",
   "--gradle-user-home", join(buildRoot, "gradleHome"), "--project-cache-dir", join(buildRoot, "gradleProject"),

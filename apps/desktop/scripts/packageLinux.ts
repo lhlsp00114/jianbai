@@ -30,7 +30,7 @@ if (typeof archiveName !== "string" || !archiveName.startsWith(`${prefix}-`)
 
 await mkdir(stagingParent, { recursive: true });
 const stagingDir = await mkdtemp(join(stagingParent, "payload"));
-const outputName = `toonflow-${version}-linux-${process.arch}.deb`;
+const outputName = `jianbai-${version}-linux-${process.arch}.deb`;
 try {
   const packageRoot = join(stagingDir, "package");
   const appRoot = join(packageRoot, "opt/toonflow");
@@ -94,11 +94,11 @@ try {
     "",
   ].join("\n"), { mode: 0o755 });
   await writeAtomic(join(desktopDir, "toonflow.desktop"), [
-    "[Desktop Entry]", "Version=1.0", "Type=Application", "Name=Toonflow",
+    "[Desktop Entry]", "Version=1.0", "Type=Application", "Name=见白",
     "Exec=/usr/bin/toonflow %u", "Icon=toonflow", "Terminal=false", "StartupNotify=true",
     "Categories=AudioVideo;Graphics;", "MimeType=x-scheme-handler/toonflow;", "",
   ].join("\n"), { mode: 0o644 });
-  await copyFile(resolve(projectDir, "packages/assets/logo.iconset/icon_256x256.png"), join(iconDir, "toonflow.png"));
+  await copyFile(resolve(projectDir, desktopConfig.build.linux.icon), join(iconDir, "toonflow.png"));
   await chmod(join(iconDir, "toonflow.png"), 0o644);
   const sizeKiB = (await $`du -sk ${join(packageRoot, "opt")} ${join(packageRoot, "usr")}`.text())
     .trim().split("\n").reduce((sum, line) => sum + Number(line.split(/\s+/)[0]), 0)
@@ -110,8 +110,8 @@ try {
     `Installed-Size: ${sizeKiB}`,
     "Pre-Depends: ca-certificates, curl, unzip",
     "Depends: libc6 (>= 2.39), libstdc++6, libgcc-s1, libgtk-3-0t64 | libgtk-3-0, libwebkit2gtk-4.1-0, libayatana-appindicator3-1, librsvg2-2, libpipewire-0.3-0t64 | libpipewire-0.3-0, zenity, ffmpeg, util-linux, xdg-utils, apt, pkexec | policykit-1",
-    "Homepage: https://github.com/HBAI-Ltd/Toonflow-app",
-    "Description: Toonflow AI creative workspace", " Local AI workflow for scripts, images and video.", "",
+    "Homepage: https://github.com/lhlsp00114/jianbai",
+    "Description: Jianbai AI creative workspace", " Local AI workflow for scripts, images and video.", "",
   ].join("\n"), { mode: 0o644 });
   // ACT: 包管理器负责 /opt 内的程序升级；安装与卸载均不触碰用户目录中的项目和配置。
   const stagedOutput = join(stagingDir, outputName);
