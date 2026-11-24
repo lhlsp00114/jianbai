@@ -1484,8 +1484,12 @@ function zoomCanvas(event: WheelEvent | (Event & { scale: number })) {
     factor = event.type === "gesturechange" && gestureScale !== undefined ? event.scale / gestureScale : 1;
     gestureScale = event.type === "gestureend" ? undefined : event.scale;
   } else {
-    // ACT: Chromium 捏合发送 Ctrl+wheel，但不发送 Control 按键；WebKit 使用上方原生 gesture 事件。
-    const pinching = event.ctrlKey && !pressedCodes.has("ControlLeft") && !pressedCodes.has("ControlRight");
+    const mode = event.deltaMode;
+    const wheelY = event.deltaY;
+    if (!Number.isFinite(wheelY)) return;
+    // ACT: Chromium 的捏合和丢失 Ctrl 按键状态的滚轮都可能发出 Ctrl+wheel。仅对细小的像素增量使用捏合灵敏度。
+    const pinching = event.ctrlKey && mode === 0 && Math.abs(wheelY) < 40
+      && !pressedCodes.has("ControlLeft") && !pressedCodes.has("ControlRight");
     // 无需按键的滚轮缩放让节点控件保留自己的滚动；显式缩放快捷键及捏合仍沿用原行为。
     if (defaultWheelZoom.value && !pinching && !zoomKeyPressed.value
       && event.target.closest(".nowheel, input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='slider']")) return;
@@ -1495,12 +1499,10 @@ function zoomCanvas(event: WheelEvent | (Event & { scale: number })) {
       factor = 1;
     } else if (pinching && gestureScale !== undefined) {
       factor = 1;
-    } else if (pinching) {
-      factor = 2 ** (-event.deltaY * 0.02);
     } else {
-      // ACT: 捏合已单独处理；实体滚轮只按 deltaMode 换算，避免 Vue Flow 基于 UA 的额外倍率。
-      const delta = -event.deltaY * (event.deltaMode === 1 ? 0.05 : event.deltaMode ? 1 : 0.002);
-      factor = 2 ** delta;
+      // 合并的滚轮事件或按页滚动不应让画布一次跳过多个缩放级别。
+      const delta = -wheelY * (pinching ? 0.02 : mode === 1 ? 0.05 : mode ? 1 : 0.002);
+      factor = 2 ** Math.max(-0.25, Math.min(0.25, delta));
     }
     point = { x: event.clientX, y: event.clientY };
   }
