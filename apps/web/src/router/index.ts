@@ -3,6 +3,7 @@ import { useHelloStore } from "@/stores/hello";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { publicWeb } from "@/stores/multiTenant";
 import { adminRoute } from "@/pages/multiTenant/router";
+import { jianbaiMediaKey } from "@/lib/jianbaiAccount";
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
@@ -12,7 +13,6 @@ const router = createRouter({
     },
     {
       path: "/hello",
-      beforeEnter: async () => publicWeb.value || await useHelloStore().load() ? { path: "/home", replace: true } : true,
       component: () => import("@/pages/hello/index.vue"),
     },
     {
@@ -37,4 +37,14 @@ const router = createRouter({
     adminRoute,
   ],
 });
+
+router.beforeEach(async to => {
+  if (publicWeb.value) return to.path === "/hello" ? { path: "/home", replace: true } : true;
+  if (to.path === "/hello") {
+    return await useHelloStore().load() ? { path: "/home", replace: true } : true;
+  }
+  if (!jianbaiMediaKey.value && !await useHelloStore().load()) return { path: "/hello", replace: true };
+  return true;
+});
+
 export default router;

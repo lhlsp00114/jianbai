@@ -2,7 +2,7 @@ import { computed, inject, onScopeDispose, toValue, watch, type MaybeRefOrGetter
 import { runAgentLoop, type AgentTool, type AgentToolResult } from "@earendil-works/pi-agent-core";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context, type ImageContent, type Message, type Model } from "@earendil-works/pi-ai";
 import { EventSourceParserStream } from "eventsource-parser/stream";
-import type { MediaGenerationRequest, MediaModel } from "@toonflow/tools-scaffold/runtime";
+import type { GeneratedMedia, MediaGenerationRequest, MediaModel } from "@toonflow/tools-scaffold/runtime";
 import type { NodeOutput } from "./values";
 import { readNodeModels, subscribeNodeModels } from "./modelCatalog";
 export { invalidateNodeModels, readNodeModels, subscribeNodeModels } from "./modelCatalog";
@@ -74,13 +74,13 @@ export type NodeImageRequest = {
   size?: string;
   other?: Record<string, unknown>;
 };
-export type NodeImageResult = { path: string; mimeType: string; mediaType: "image" };
+export type NodeImageResult = { path: string; mimeType: string; mediaType: "image"; imageLayer?: GeneratedMedia["imageLayer"] };
 export type NodeVideoRequest = Omit<MediaGenerationRequest, "size"> & { directory: string; outputDirectory: string };
 export type NodeVideoResult = { path: string; mimeType: string; mediaType: "video" };
 export type NodeMediaPriceRequest = (NodeImageRequest & { mediaType: "image" }) | (NodeVideoRequest & { mediaType: "video" }) | (NodeAudioRequest & { mediaType: "audio" });
 export type NodeMediaPrice = { price: string; tips: string };
 export type NodeAudioRequest = Pick<MediaGenerationRequest, "providerId" | "modelId" | "prompt" | "images" | "audios" | "voice" | "speed" | "volume" | "pitch" | "language" | "format" | "sampleRate" | "other"> & { directory: string; outputDirectory: string };
-export type NodeAudioResult = { path: string; mimeType: string; mediaType: "audio" };
+export type NodeAudioResult = { path: string; mimeType: string; mediaType: "audio"; text?: string };
 export type NodeAiRequest = {
   providerId: string;
   modelId: string;
@@ -425,7 +425,7 @@ export function useNodeAi(options: { onModelsChanged?: () => unknown } = {}) {
       waitingSignal.removeEventListener("abort", abort);
     }
     try {
-      return await mediaTasks.wait(input.directory, taskId, waitingSignal, options) as { path: string; mimeType: string; mediaType: T }[];
+      return await mediaTasks.wait(input.directory, taskId, waitingSignal, options) as (GeneratedMedia & { mediaType: T })[];
     } catch (error) {
       if (!options.taskId && (error as { mediaTaskDisconnected?: boolean })?.mediaTaskDisconnected) void cancelMedia(input.directory, taskId).catch(() => {});
       throw error;

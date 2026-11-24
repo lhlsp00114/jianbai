@@ -11,6 +11,7 @@ import { getMediaProvider, listMediaProviders, loadMediaProviderSource } from "@
 import { lockWorkspaceFiles, resolveWorkspacePath, writeWorkspaceFile } from "@/utils/workspace/files";
 import { beginGeneration, getProviderPrice } from "@/utils/media/billing";
 import { detectMimeType, readPriceReference } from "@/utils/media/priceReference";
+import { imageLayerSchema } from "@/utils/media/schemas";
 import { modelGateway } from "@/utils/multiTenant/gateway";
 
 const maxMediaSize = 100 * 1024 * 1024;
@@ -35,10 +36,11 @@ export function isMediaNotSubmitted(cause: unknown) {
 }
 const mediaExtensions: Record<string, string> = {
   "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif",
-  "image/avif": "avif", "image/bmp": "bmp", "image/tiff": "tiff",
+  "image/avif": "avif", "image/bmp": "bmp", "image/tiff": "tiff", "image/svg+xml": "svg",
   "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "video/ogg": "ogv",
   "audio/mpeg": "mp3", "audio/wav": "wav", "audio/ogg": "ogg", "audio/webm": "webm",
   "audio/flac": "flac", "audio/aac": "aac", "audio/mp4": "m4a", "audio/opus": "opus", "audio/pcm": "pcm",
+  "text/plain": "txt",
 };
 
 function invalid(message: string): never {
@@ -73,13 +75,19 @@ export async function listMediaModels(): Promise<MediaModel[]> {
       supportsPrice: "supportsPrice" in provider && provider.supportsPrice === true,
       rules: model.rules,
       mode: model.mode, durationResolutionMap: model.durationResolutionMap, audio: model.audio,
-      ...(model.type === "audio" ? { voices: model.voices } : {}),
+      ...(model.type === "audio" ? { voices: model.voices, audioOptions: model.audioOptions, maxPromptLength: model.maxPromptLength,
+        maxReferenceImages: model.maxReferenceImages, promptOptional: model.promptOptional } : {}),
       ...(model.type === "video" ? {
-        imageRatios: imageOptions(model.imageRatios, /^[1-9]\d{0,3}:[1-9]\d{0,3}$/),
+        imageRatios: imageOptions(model.imageRatios, /^(?:adaptive|[1-9]\d{0,3}:[1-9]\d{0,3})$/),
+        videoVariants: model.videoVariants,
+        maxPromptLength: model.maxPromptLength,
+        promptOptional: model.promptOptional,
       } : {}),
       ...(model.type === "image" ? {
         imageSizes: imageOptions(model.imageSizes, /^[^\u0000-\u001f\u007f]+$/),
-        imageRatios: imageOptions(model.imageRatios, /^[1-9]\d{0,3}:[1-9]\d{0,3}$/),
+        maxReferenceImages: model.maxReferenceImages,
+        maxPromptLength: model.maxPromptLength,
+        imageRatios: imageOptions(model.imageRatios, /^(?:auto|[1-9]\d{0,3}:[1-9]\d{0,3})$/),
       } : {}),
     } as MediaModel];
   }));
@@ -147,6 +155,11 @@ async function downloadAssetOnce(url: string, signal?: AbortSignal) {
 
 async function assetBytes(asset: MediaAsset, mediaType: "image" | "video" | "audio", signal?: AbortSignal) {
   if (!asset || asset.mediaType !== mediaType) invalid("供应商返回的媒体类型不正确");
+  if (asset.text !== undefined && (typeof asset.text !== "string" || asset.text.length > 1000000)) invalid("供应商返回的文本结果过长或无效");
+  if (asset.type === "text") {
+    if (!asset.text.trim()) invalid("供应商返回的文本结果为空");
+    return { bytes: new TextEncoder().encode(asset.text), mimeType: "text/plain", text: asset.text };
+  }
   let bytes: Uint8Array;
   let mimeType = asset.mimeType ?? "";
   if (asset.type === "url") {
@@ -166,24 +179,25 @@ async function assetBytes(asset: MediaAsset, mediaType: "image" | "video" | "aud
   if (!bytes.byteLength || bytes.byteLength > maxMediaSize) invalid("生成文件为空或超过 100 MB");
   mimeType = detectMimeType(bytes, mimeType);
   if (!mimeType.startsWith(`${mediaType}/`) || !mediaExtensions[mimeType]) invalid("生成结果不是支持的图片、视频或音频格式");
-  return { bytes, mimeType };
+  return { bytes, mimeType, ...(asset.text ? { text: asset.text } : {}) };
 }
 
 function resumableAssets(assets: MediaAsset[], mediaType: "image" | "video" | "audio") {
   for (const asset of assets) {
-    if (!asset || asset.mediaType !== mediaType || !["url", "base64", "binary"].includes(asset.type)) invalid("供应商返回的媒体类型不正确");
+    if (!asset || asset.mediaType !== mediaType || !["url", "base64", "binary", ...(mediaType === "audio" ? ["text"] : [])].includes(asset.type)) invalid("供应商返回的媒体类型不正确");
     if (asset.type === "url" && (typeof asset.url !== "string" || !/^https?:\/\//i.test(asset.url))) invalid("生成结果必须使用 HTTP 或 HTTPS 地址");
+    if ("imageLayer" in asset && asset.imageLayer !== undefined && (mediaType !== "image" || !imageLayerSchema.safeParse(asset.imageLayer).success)) invalid("供应商返回的图层位置无效");
   }
   return assets.every(asset => asset.type === "url") ? assets.map(asset => {
     const value = asset as Extract<MediaAsset, { type: "url" }>;
-    return { type: "url" as const, mediaType, url: value.url, ...(typeof value.mimeType === "string" ? { mimeType: value.mimeType } : {}) };
+    return { type: "url" as const, mediaType, url: value.url, ...(typeof value.mimeType === "string" ? { mimeType: value.mimeType } : {}), ...(typeof value.text === "string" ? { text: value.text } : {}), ...(value.imageLayer ? { imageLayer: value.imageLayer } : {}) };
   }) : undefined;
 }
 
 async function prepareRequest<T>(directory: string | undefined, mediaType: "image" | "video" | "audio", request: MediaGenerationRequest,
   read: (cwd: string, reference: MediaReference, type: string, signal?: AbortSignal) => Promise<T>, signal?: AbortSignal) {
   // ACT: 仅向已适配引用映射的内置供应商传递，其他第三方适配器仍接收原有公共参数。
-  const referenceOrder = mediaType === "video" && ["toonflow", "apiMart", "metaso", "compshare"].includes(request.providerId) ? request.referenceOrder : undefined;
+  const referenceOrder = mediaType === "video" && ["tokenGo", "toonflow", "apiMart", "metaso", "compshare"].includes(request.providerId) ? request.referenceOrder : undefined;
   if (referenceOrder) {
     const media = { image: request.images, video: request.videos, audio: request.audios };
     for (const [index, reference] of referenceOrder.entries()) {
@@ -294,7 +308,7 @@ async function executeMedia(
   markSubmitted: () => void,
 ): Promise<GeneratedMedia[]> {
   signal?.throwIfAborted();
-  if (!request.prompt.trim()) invalid("请输入生成提示词");
+  if (mediaType !== "audio" && !request.prompt.trim()) invalid("请输入生成提示词");
   const modelRouteCipher = task?.modelRouteCipher;
   const directory = await realpath(cwd);
   const outputDirectory = request.outputDirectory ?? "assets/generated";
@@ -310,7 +324,7 @@ async function executeMedia(
       if (!info.isFile() || info.size > maxMediaSize) invalid("任务结果文件已被修改，不能覆盖");
       const bytes = await readFile(path, { signal });
       if (createHash("sha256").update(bytes).digest("hex") !== file.hash) invalid("任务结果文件已被修改，不能覆盖");
-      saved.set(file.index, { path: file.path, mimeType: file.mimeType, mediaType });
+      saved.set(file.index, { path: file.path, mimeType: file.mimeType, mediaType, ...(file.text ? { text: file.text } : {}), ...(file.imageLayer ? { imageLayer: file.imageLayer } : {}) });
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   }
   if (checkpoint?.assetCount && saved.size === checkpoint.assetCount && [...saved.keys()].every(index => index >= 0 && index < checkpoint.assetCount!)) {
@@ -338,10 +352,16 @@ async function executeMedia(
         task ? data => task.save({ providerData: data }) : undefined, false, modelRouteCipher);
       const generate = mediaType === "image" ? provider.generateImage : mediaType === "video" ? provider.generateVideo : provider.generateAudio;
       if (typeof generate !== "function") invalid(t`此供应商不支持${translateMessage({ image: "图片", video: "视频", audio: "音频" }[mediaType])}生成`);
+      if (mediaType === "audio" && !upstreamRequest.prompt.trim() && !provider.models.find(model => model.id === upstreamRequest.modelId)?.promptOptional) invalid("请输入音频生成文本");
       const rules = Array.isArray(provider.rules) ? provider.rules : [];
       if (provider.id !== "toonflow" && rules.some(rule => rule.field === "apiKey")
         && (typeof provider.config.apiKey !== "string" || !provider.config.apiKey.trim())) invalid("请先在媒体模型设置中配置供应商 API Key");
-      const { type, ...parameters } = await prepareRequest(directory, mediaType, upstreamRequest, readReference, signal);
+      const read = async (cwd: string, reference: MediaReference, type: string, signal?: AbortSignal) => {
+        const content = await readReference(cwd, reference, type, signal);
+        if (!["video", "audio"].includes(mediaType) || upstreamRequest.providerId !== "tokenGo" || type === "image") return content;
+        return { ...content, metadata: await readPriceReference(cwd, reference, type, signal) };
+      };
+      const { type, ...parameters } = await prepareRequest(directory, mediaType, upstreamRequest, read, signal);
       signal?.throwIfAborted();
       requireGenerationMode(task);
       if (!modelRouteCipher) finish = beginGeneration(provider);
@@ -369,7 +389,7 @@ async function executeMedia(
         await task!.save({ assets: resumableAssets(assets, mediaType) });
         content = await assetBytes(assets[index]!, mediaType, signal);
       }
-      const { bytes, mimeType } = content;
+      const { bytes, mimeType, text } = content;
       signal?.throwIfAborted();
       const output = await resolveWorkspacePath(directory, outputDirectory, true);
       const release = lockWorkspaceFiles([output.path]);
@@ -377,7 +397,8 @@ async function executeMedia(
         await mkdir(output.path, { recursive: true });
         const file = join(outputDirectory, `${mediaType}${task ? `${task.taskId.replaceAll("-", "")}${index}` : crypto.randomUUID()}.${mediaExtensions[mimeType]}`);
         const { path } = await resolveWorkspacePath(directory, file);
-        const outputFile = { path: relative(directory, path).replace(/\\/g, "/"), mimeType, mediaType };
+        const asset = assets[index]!;
+        const outputFile = { path: relative(directory, path).replace(/\\/g, "/"), mimeType, mediaType, ...(text ? { text } : {}), ...("imageLayer" in asset && asset.imageLayer ? { imageLayer: asset.imageLayer } : {}) };
         if (task) {
           const fileRecord = { ...outputFile, index, hash: createHash("sha256").update(bytes).digest("hex") };
           await task.save({ files: [...(checkpoint?.files ?? []).filter(item => item.index !== index), fileRecord] });

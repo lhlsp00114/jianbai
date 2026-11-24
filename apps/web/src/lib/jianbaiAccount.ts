@@ -2,8 +2,8 @@ import { computed } from "vue";
 import { settings, saveSettings, multiTenantEnabled, type CustomProvider } from "@/stores/settings";
 
 import http from "@/lib/http";
-import { jianbaiId, jianbaiTextModel, getJianbaiRoutes, type JianbaiRouteId, jianbaiOrigin, getJianbaiApiKey, getJianbaiTextProvider } from "@toonflow/providers/jianbai";
-export { jianbaiId, jianbaiOrigin, jianbaiTextModel } from "@toonflow/providers/jianbai";
+import { jianbaiId, jianbaiTextModels, getJianbaiRoutes, type JianbaiRouteId, jianbaiOrigin, getJianbaiApiKey, getJianbaiTextProvider } from "@toonflow/providers/jianbai";
+export { jianbaiId, jianbaiOrigin, jianbaiTextModels } from "@toonflow/providers/jianbai";
 export const jianbaiDashboard = jianbaiOrigin + "/zh-CN/dashboard";
 export const jianbaiTextProvider = computed(() => getJianbaiTextProvider(settings.value));
 export const jianbaiTextConnected = computed(() => !!jianbaiMediaKey.value);
@@ -31,7 +31,7 @@ export async function saveJianbaiRoute(routeId: JianbaiRouteId, apiKey: string, 
     const providers: CustomProvider[] = Array.isArray(currentSettings.customProviders) ? currentSettings.customProviders : [];
     const current = providers.find(item => item.id === jianbaiId);
     const provider: CustomProvider = { ...current, id: jianbaiId, label: "见白 AI", apiUrl: jianbaiOrigin + "/v1",
-      apiKey: activeKey, protocol: "openai-responses", models: current?.models ?? [jianbaiTextModel] };
+      apiKey: activeKey, protocol: "openai-responses", models: getJianbaiTextProvider(currentSettings)?.models ?? jianbaiTextModels };
     const configs = currentSettings.mediaProviderConfigs as Record<string, Record<string, unknown>> | undefined;
     return {
       customProviders: current ? providers.map(item => item === current ? provider : item) : [...providers, provider],

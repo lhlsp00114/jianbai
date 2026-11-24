@@ -105,7 +105,7 @@ import { getMediaMimeType } from "@toonflow/node-shared/mediaTypes";
 
 type MediaType = "image" | "video" | "audio";
 type HistoryNode = { id: string; type: string; label: string; prompt: string; model: string; promptModel?: unknown };
-type HistoryItem = { name: string; path: string; nodeId: string; mediaType: MediaType; mimeType: string };
+type HistoryItem = { name: string; path: string; nodeId: string; mediaType: MediaType; mimeType: string; modifiedAt?: number };
 
 const props = defineProps<{ directory?: string; nodeIds: string[]; nodes: HistoryNode[] }>();
 const emit = defineEmits<{ send: [item: HistoryItem] }>();
@@ -166,7 +166,7 @@ watch([visible, () => props.directory, () => props.nodeIds.join("\n")], async ([
     const nodeIds = new Set(props.nodeIds);
     const generationNodeIds = new Set(props.nodes.filter(node => node.type === "remote-imageGenerationNode" || node.type === "remote-videoGenerationNode" || node.type === "remote-audioGenerationNode").map(node => node.id));
     const nodeDirectories = roots.filter(entry => entry.type === "directory" && nodeIds.has(entry.name) && generationNodeIds.has(entry.name));
-    const histories = await Promise.all(nodeDirectories.map(entry => files.list(entry.path)));
+    const histories = await Promise.all(nodeDirectories.map(entry => files.list(entry.path, undefined, { includeModifiedAt: true })));
     if (cancelled || currentRequest !== requestId) return;
     entries.value = histories.flatMap(history => history.entries.flatMap(entry => {
       if (entry.type !== "file") return [];
@@ -174,8 +174,8 @@ watch([visible, () => props.directory, () => props.nodeIds.join("\n")], async ([
       const mediaType = mimeType?.split("/")[0];
       if ((mediaType !== "image" && mediaType !== "video" && mediaType !== "audio") || mimeType === "audio/pcm") return [];
       if (!new RegExp(`^${mediaType}[a-f\\d]{32}\\d*\\.[a-z\\d]+$`, "i").test(entry.name)) return [];
-      return [{ name: entry.name, path: entry.path, nodeId: entry.path.split("/")[1] ?? "", mediaType: mediaType as MediaType, mimeType }];
-    })).sort((left, right) => right.path.localeCompare(left.path, "zh-CN", { numeric: true }));
+      return [{ name: entry.name, path: entry.path, nodeId: entry.path.split("/")[1] ?? "", mediaType: mediaType as MediaType, mimeType, modifiedAt: entry.modifiedAt }];
+    })).sort((left, right) => (right.modifiedAt ?? 0) - (left.modifiedAt ?? 0) || right.path.localeCompare(left.path, "zh-CN", { numeric: true }));
   } catch (error) {
     if (!cancelled) {
       entries.value = [];
@@ -348,16 +348,33 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
 
 <style lang="scss" scoped>
 :global(.generationHistoryDialog) {
+  --el-dialog-border-radius: 24px;
   display: flex;
   flex-direction: column;
   height: min(800px, 85dvh);
   max-height: calc(100dvh - 32px);
   overflow: hidden;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 24px;
+  background: var(--el-bg-color-overlay);
+  box-shadow: var(--el-box-shadow-light);
+}
+
+:global(.generationHistoryDialog > .el-dialog__header) {
+  flex-shrink: 0;
+  padding: 20px 22px 8px;
+}
+
+:global(.generationHistoryDialog > .el-dialog__header .el-dialog__title) {
+  color: var(--el-text-color-primary);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 :global(.generationHistoryDialog > .el-dialog__body) {
   flex: 1;
   min-height: 0;
+  padding: 8px 22px 22px;
   overflow: hidden;
 }
 
@@ -365,7 +382,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
   display: flex;
   flex-direction: column;
   height: 100%;
-  :deep(.el-tabs__header) { flex-shrink: 0; margin-bottom: 16px; }
+  :deep(.el-tabs__header) { flex-shrink: 0; margin-bottom: 12px; }
+  :deep(.el-tabs__item) { height: 38px; padding: 0 14px; color: var(--el-text-color-secondary); font-size: 13px; }
+  :deep(.el-tabs__item.is-active) { color: var(--el-text-color-primary); font-weight: 600; }
   :deep(.el-tabs__content) { flex: 1; min-height: 0; overflow: hidden; }
   :deep(.el-tab-pane) { display: flex; flex-direction: column; height: 100%; gap: 12px; }
   :deep(.el-alert) { flex-shrink: 0; }
@@ -391,7 +410,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
     overflow: hidden;
     padding: 0;
     border: 1px solid var(--el-border-color-lighter);
-    border-radius: 6px;
+    border-radius: 10px;
     background: var(--el-fill-color-light);
     cursor: default;
 
@@ -409,7 +428,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
       gap: 2px;
       padding: 4px;
       border: 1px solid rgb(255 255 255 / 18%);
-      border-radius: 8px;
+      border-radius: 10px;
       background: rgb(20 22 27 / 88%);
       opacity: 0;
       transition: opacity 120ms ease;
@@ -436,7 +455,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleViewerKeydown)
     gap: 16px;
     min-height: 56px;
     padding: 8px 12px;
-    border-bottom: 1px solid var(--el-border-color-lighter);
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 10px;
+    background: var(--el-fill-color-lighter);
 
     span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     audio { width: 100%; height: 36px; }

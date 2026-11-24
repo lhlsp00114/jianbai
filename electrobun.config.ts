@@ -1,5 +1,6 @@
 import type { ElectrobunConfig } from "./.hutch/devkit/api/config/ElectrobunConfig";
 import { fileURLToPath } from "node:url";
+import { jianbaiUpdateBaseUrl } from "./apps/server/src/types/desktop.ts";
 
 const startupTarget = process.platform === "darwin" ? (process.arch === "x64" ? "macX64" : "macArm64")
   : process.platform === "win32" && process.arch === "x64" ? "windowsX64" : undefined;
@@ -51,7 +52,7 @@ export default {
       "build/ext": "ext",
       "packages/skills": "skills",
       ...(startupTarget ? {
-        "packages/startup/assets/startup.json": "startup/startup.json",
+        [process.platform === "win32" ? "packages/startup/assets/jianbaiStartup.json" : "packages/startup/assets/startup.json"]: "startup/startup.json",
         "packages/startup/assets/license.txt": "startup/license.txt",
         [`packages/startup/assets/${startupTarget}`]: `startup/${startupTarget}`,
       } : {}),
@@ -59,7 +60,7 @@ export default {
     buildFolder: "build/desktop/app",
     artifactFolder: `build/desktop/artifacts${desktopTarget ? `/${desktopTarget}` : ""}`,
     win: {
-      icon: "packages/assets/logo.ico",
+      icon: "packages/assets/jianbaiIcon.ico",
       autoGrantPermissions: ["microphone", "notifications"],
     },
     mac: {
@@ -76,7 +77,7 @@ export default {
   },
   release: {
     // ACT: 构建基线和补丁固定取个人 GitHub 仓库。
-    baseUrl: `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY || "HBAI-Ltd/Toonflow-app"}/releases/latest/download`,
+    baseUrl: jianbaiUpdateBaseUrl,
     // ACT: 常规构建不访问更新服务器；release:desktop 显式开启增量构建。
     generatePatch: process.env.generateUpdatePatch === "1",
   },

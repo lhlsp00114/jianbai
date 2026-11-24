@@ -38,7 +38,7 @@ import type { InputInstance } from "element-plus";
 
 const props = defineProps<{ directory?: string; disabled?: boolean }>();
 const flow = useVueFlow();
-const visible = ref(false);
+const visible = defineModel<boolean>({ default: false });
 const query = ref("");
 const activeIndex = ref(0);
 const searchInput = ref<InputInstance>();
@@ -70,6 +70,11 @@ function open() {
   visible.value = true;
 }
 
+function toggle() {
+  if (visible.value) visible.value = false;
+  else open();
+}
+
 function navigateResults(event: Event | KeyboardEvent) {
   if (!(event instanceof KeyboardEvent) || event.isComposing || !["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) return;
   event.preventDefault();
@@ -89,7 +94,7 @@ async function selectNode(index: number) {
   await flow.fitView({ nodes: [node.id], padding: 0.4, maxZoom: 1.4, duration: 200 });
 }
 
-defineExpose({ open });
+defineExpose({ open, toggle });
 </script>
 
 <style lang="scss" scoped>

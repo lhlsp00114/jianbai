@@ -1,37 +1,48 @@
 <template>
-  <el-popover ref="settingsPopover" v-model:visible="settingsVisible" trigger="click" placement="top-start" :appendTo="settingsTarget" width="min(340px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '14px' }">
+  <el-select
+    v-if="modes.length"
+    v-model="mode"
+    class="modeSelect nodrag nopan nowheel"
+    size="small"
+    :disabled="disabled"
+    placement="top-start"
+    :fallbackPlacements="['bottom-start']"
+    aria-label="视频生成模式"
+    @pointerdown.stop
+    @mousedown.stop
+    @keydown.stop>
+    <el-option v-for="item in modes" :key="item.value" :value="item.value" :label="item.label" />
+  </el-select>
+  <el-popover ref="settingsPopover" v-model:visible="settingsVisible" trigger="click" placement="top-start" :appendTo="settingsTarget" width="min(420px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '20px', borderRadius: '14px' }">
     <template #reference>
       <el-button ref="settingsTrigger" class="settingsButton" text size="small" :disabled="disabled" :aria-expanded="settingsVisible" aria-label="视频生成设置">
-        <span class="ratioShape" :style="ratioStyle(ratio)" aria-hidden="true" />
-        <span>{{ [ratio, resolution, duration ? `${duration}秒` : ''].filter(Boolean).join(' · ') }}</span>
+        <span v-if="ratios.length" class="ratioShape" :style="ratioStyle(ratio)" aria-hidden="true" />
+        <span>{{ [ratios.length ? (ratio === 'adaptive' ? '自适应' : ratio) : '', resolution, duration ? `${duration}秒` : ''].filter(Boolean).join(' · ') || '视频设置' }}</span>
         <component :is="settingsVisible ? IconChevronDown : IconChevronUp" :size="14" aria-hidden="true" />
       </el-button>
     </template>
-    <div class="generationSettings nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop @wheel.stop>
-      <div v-if="modes.length" class="sectionLabel">生成模式</div>
-      <el-select v-if="modes.length" v-model="mode" :disabled="disabled" :teleported="false" aria-label="视频生成模式">
-        <el-option v-for="item in modes" :key="item.value" :value="item.value" :label="item.label" />
-      </el-select>
+    <div ref="settingsSurface" :id="settingsSurfaceId" class="settingsSurface nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop @wheel.stop>
+    <div v-if="settingsSurface" class="generationSettings">
       <div v-if="durations.length || resolutions.length" class="outputOptions">
         <div v-if="durations.length" class="outputField">
           <div class="sectionLabel">时长</div>
-          <el-select v-model="duration" :disabled="disabled" :teleported="false" aria-label="视频时长">
+          <el-select v-model="duration" :disabled="disabled" :appendTo="`#${settingsSurfaceId}`" placement="top-start" :fallbackPlacements="['top-start', 'top-end']" aria-label="视频时长">
             <el-option v-for="item in durations" :key="item" :value="item" :label="`${item}秒`" />
           </el-select>
         </div>
         <div v-if="resolutions.length" class="outputField">
           <div class="sectionLabel">分辨率</div>
-          <el-select v-model="resolution" :disabled="disabled" :teleported="false" aria-label="视频分辨率">
+          <el-select v-model="resolution" :disabled="disabled" :appendTo="`#${settingsSurfaceId}`" placement="top-start" :fallbackPlacements="['top-start', 'top-end']" aria-label="视频分辨率">
             <el-option v-for="item in resolutions" :key="item" :value="item" :label="item" />
           </el-select>
         </div>
       </div>
-      <div class="sectionLabel">通用比例</div>
-      <div class="ratioOptions" role="group" aria-label="视频比例">
+      <div v-if="ratios.length" class="sectionLabel">比例</div>
+      <div v-if="ratios.length" class="ratioOptions" role="group" aria-label="视频比例">
         <el-button v-for="item in ratios" :key="item" class="ratioButton" :disabled="disabled" :aria-label="`比例 ${item}`" :aria-pressed="ratio === item" @click="ratio = item">
           <span class="ratioContent">
             <span class="ratioShape" :style="ratioStyle(item)" aria-hidden="true" />
-            <span>{{ item }}</span>
+            <span>{{ item === "adaptive" ? "自适应" : item }}</span>
           </span>
         </el-button>
       </div>
@@ -39,13 +50,14 @@
         <span class="sectionLabel">生成音频</span>
         <el-switch v-model="generateAudio" :disabled="disabled" aria-label="生成音频" />
       </div>
-      <modelForm v-model="other" :rules="model?.rules" :disabled="disabled" />
+      <modelForm class="modelOptions" v-model="other" :rules="settingsRules" :disabled="disabled" />
+    </div>
     </div>
   </el-popover>
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref, watch, type Ref } from "vue";
+import { computed, inject, ref, useId, watch, type Ref } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
 import { ElButton, ElPopover, ElSelect, ElOption, ElSwitch } from "element-plus";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
@@ -53,7 +65,16 @@ import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
 import modelForm from "@toonflow/node-shared/modelForm";
 
 const props = defineProps<{ model?: NodeMediaModel; disabled?: boolean; ratios: string[] }>();
+const settingsSurfaceId = `videoSettings${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+// 面板插入 DOM 后再创建控件，确保内嵌下拉菜单的 Teleport 目标已存在。
+const settingsSurface = ref<HTMLElement>();
+const modelRules = computed(() => props.model?.rules);
+const settingsRules = computed(() => (modelRules.value ?? []).map(rule =>
+  ["select", "el-select"].includes(String(rule.type))
+    ? { ...rule, props: { ...rule.props, teleported: true, appendTo: `#${settingsSurfaceId}`, placement: "top-start", fallbackPlacements: ["top-start", "top-end"] } }
+    : rule));
 const settingsVisible = ref(false);
+watch(() => props.disabled, disabled => { if (disabled) settingsVisible.value = false; });
 const expandedPrompt = inject<Ref<boolean> | undefined>("expandedGenerationPrompt", undefined);
 watch(() => expandedPrompt?.value, () => { settingsVisible.value = false; });
 const settingsPopover = ref<InstanceType<typeof ElPopover>>();
@@ -76,11 +97,11 @@ const mode = defineModel<string>("mode", { required: true });
 const generateAudio = defineModel<boolean>("generateAudio", { required: true });
 const other = defineModel<Record<string, unknown>>("other", { required: true });
 const modeLabels: Record<string, string> = {
-  text: "文生视频", singleImage: "单图参考", startEndRequired: "首尾帧必填", endFrameOptional: "尾帧可选", startFrameOptional: "首帧可选",
+  text: "文生视频", singleImage: "单图参考", startEndRequired: "首尾帧", endFrameOptional: "尾帧可选", startFrameOptional: "首帧可选",
 };
 const modes = computed(() => (props.model?.mode ?? []).map(item => ({
   value: JSON.stringify(item),
-  label: Array.isArray(item) ? "混合参考" : modeLabels[item] ?? item,
+  label: Array.isArray(item) ? "全能参考" : modeLabels[item] ?? item,
 })));
 const mappings = computed(() => props.model?.durationResolutionMap ?? []);
 const durations = computed(() => [...new Set(mappings.value.flatMap(item => item.duration))].sort((a, b) => a - b));
@@ -91,81 +112,39 @@ function resolutionsFor(value: number | undefined) {
 }
 
 function ratioStyle(value: string) {
+  if (value === "adaptive") return { width: "16px", height: "16px", borderStyle: "dashed" };
   const [width = 1, height = 1] = value.split(":").map(Number);
   return { width: `${16 * Math.min(width / height, 1)}px`, height: `${16 * Math.min(height / width, 1)}px` };
 }
 </script>
 
 <style scoped lang="scss">
-.ratioShape {
-  display: inline-block;
-  flex-shrink: 0;
-  border: 1px solid currentColor;
-  border-radius: 2px;
-  box-sizing: border-box;
-}
+@use "@toonflow/node-shared/generationSettings.scss";
 
-.settingsButton {
-  flex-shrink: 0;
-  :deep(> span) { gap: 6px; }
+.modeSelect {
+  width: 96px;
+  flex: 0 0 96px;
 }
-
 .generationSettings {
-  text-align: left;
-
-  .sectionLabel {
-    margin-bottom: 8px;
-    color: var(--el-text-color-secondary);
-    font-size: 12px;
-    font-weight: 500;
-  }
-
-  > .el-select { margin-bottom: 14px; }
-
   .outputOptions {
     display: flex;
     gap: 12px;
-    margin-bottom: 14px;
+    margin-bottom: 18px;
     .outputField { flex: 1; min-width: 0; }
   }
-
-  .ratioOptions {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
-
-    .ratioButton {
-      height: 60px;
-      margin: 0;
-      padding: 8px 4px;
-      color: var(--el-text-color-secondary);
-      --el-button-bg-color: var(--el-fill-color-light);
-      --el-button-hover-bg-color: var(--el-fill-color);
-      --el-button-hover-text-color: var(--el-text-color-primary);
-      --el-button-hover-border-color: var(--el-border-color-darker);
-
-      &[aria-pressed="true"] {
-        color: var(--el-text-color-primary);
-        border-color: var(--el-text-color-regular);
-        background: var(--el-fill-color);
-      }
-
-      .ratioContent {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-      }
-    }
-  }
-
   .audioOption {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 14px;
+    margin-top: 18px;
     .sectionLabel { margin: 0; }
+  }
+  :deep(.el-select__wrapper) {
+    min-height: 34px;
+    border-radius: 8px;
+    background: var(--el-fill-color-light);
+    box-shadow: none;
+    &.is-hovering, &.is-focused { box-shadow: 0 0 0 1px var(--el-border-color) inset; }
   }
 }
 </style>

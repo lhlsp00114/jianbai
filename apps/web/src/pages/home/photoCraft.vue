@@ -202,7 +202,7 @@ const editorUrl = `${import.meta.env.BASE_URL}photoCraft/v${release.version.repl
 .photoCraft {
   position: relative;
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;

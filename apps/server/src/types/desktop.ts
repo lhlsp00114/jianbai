@@ -1,7 +1,11 @@
+export const jianbaiReleasesUrl = "https://github.com/lhlsp00114/jianbai/releases";
+export const jianbaiUpdateBaseUrl = `${jianbaiReleasesUrl}/latest/download`;
+
 export type PluginInstallType = "node" | "tool" | "skill" | "provider" | "agent" | "ext";
 export type PluginInstallRequest = { type: PluginInstallType; url: string; fileName: string };
 
 export type desktopUpdateAttempt = {
+  releaseRepository: string;
   attemptId: string;
   runtimeId: string;
   channel: string;

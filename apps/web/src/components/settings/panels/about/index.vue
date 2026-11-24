@@ -20,7 +20,7 @@
           </div>
         </div>
         <div class="updateActions">
-          <el-button v-if="isMobile" tag="a" size="small" type="primary" plain :href="`${repositoryUrl}/releases/latest`" target="_blank" rel="noopener noreferrer">
+          <el-button v-if="isMobile" tag="a" size="small" type="primary" plain :href="jianbaiReleasesUrl" target="_blank" rel="noopener noreferrer">
             前往 GitHub 更新
           </el-button>
           <template v-else>
@@ -29,8 +29,7 @@
                 <icon-brand-github v-if="updateSource === 'github'" :size="14" aria-hidden="true" />
                 <icon-world v-else :size="14" aria-hidden="true" />
               </template>
-              <el-option label="官方源" value="official" />
-              <el-option label="GitHub" value="github" />
+              <el-option label="见白 GitHub" value="github" />
               <el-option v-if="customUpdateUrl" label="自定义源" value="custom" />
             </el-select>
             <el-badge isDot :hidden="!hasDesktopUpdate">
@@ -52,9 +51,8 @@
       <div v-if="!isMobile && snapshot?.installFailure" class="installFailureNotice" role="alert">
         <strong>上次更新未成功</strong>
         <p>{{ snapshot.installFailure.message }}</p>
-        <p>请前往 GitHub 最新发布页或官网 toonflow.net，选择适合当前系统的完整安装包，关闭客户端后重新安装。</p>
+        <p>请前往见白发布页，选择适合当前系统的完整安装包，关闭客户端后重新安装。</p>
         <el-button tag="a" type="primary" size="small" :href="snapshot.installFailure.downloadUrl" target="_blank" rel="noopener noreferrer">前往下载页</el-button>
-        <el-button tag="a" size="small" href="https://toonflow.net" target="_blank" rel="noopener noreferrer">前往官网</el-button>
       </div>
     </el-card>
 
@@ -72,13 +70,14 @@
       <div class="cardHeader">
         <div class="cardLabel">
           <icon-brand-wechat :size="20" aria-hidden="true" />
-          <span>微信交流群</span>
+          <span>见白微信交流群</span>
         </div>
-        <el-popover trigger="click" placement="top" title="微信扫码加入交流群" :width="196">
+        <el-popover trigger="click" placement="top" title="见白微信交流群" :width="196">
           <template #reference>
-            <el-button size="small" :icon="IconQrcode">展示二维码</el-button>
+            <el-button size="small">{{ communityUrl ? "展示二维码" : "查看说明" }}</el-button>
           </template>
           <q-r-code
+            v-if="communityUrl"
             :value="communityUrl"
             :size="168"
             type="svg"
@@ -86,27 +85,16 @@
             bgColor="#ffffff"
             borderless
             role="img"
-            aria-label="Toonflow 交流群二维码" />
+            aria-label="见白微信交流群二维码" />
           <div class="tips">
-            Toonflow 是为爱发电的开源项目。欢迎文明交流、友善反馈；回复可能需要一些时间，请避免责问或命令式沟通，感谢你的理解与尊重。
+            <p v-if="!communityUrl">见白微信交流群的二维码暂未发布。</p>
+            <p>欢迎在见白交流群分享创作经验、提出建议和反馈问题。感谢你的理解与支持。</p>
           </div>
         </el-popover>
       </div>
     </el-card>
 
-    <el-card class="infoCard" shadow="never">
-      <div class="cardHeader">
-        <div class="cardLabel">
-          <icon-shield-lock :size="20" aria-hidden="true" />
-          <span>隐私</span>
-        </div>
-        <el-button size="small" aria-haspopup="dialog" @click="privacyVisible = true">查看</el-button>
-      </div>
-    </el-card>
-
-    <el-dialog v-model="privacyVisible" title="隐私" width="min(660px, calc(100vw - 32px))" alignCenter appendToBody destroyOnClose>
-      <privacy />
-    </el-dialog>
+    <p class="repositoryAcknowledgment">见白基于 Toonflow 开发。感谢原作者、维护者和每一位社区贡献者，你们分享的代码和持续的维护，为见白打下了基础。</p>
 
     <el-dialog v-model="resultVisible" title="版本更新" width="min(480px, 92vw)" alignCenter appendToBody>
       <div class="updateResult" aria-live="polite" :aria-busy="working">
@@ -157,7 +145,7 @@
       </div>
       <template #footer>
         <el-button size="small" @click="resultVisible = false">关闭</el-button>
-        <el-button v-if="updateError && !snapshot?.installFailure && !updateInProgress" tag="a" size="small" :href="`${repositoryUrl}/releases/latest`" target="_blank" rel="noopener noreferrer">前往下载页</el-button>
+        <el-button v-if="updateError && !snapshot?.installFailure && !updateInProgress" tag="a" size="small" :href="jianbaiReleasesUrl" target="_blank" rel="noopener noreferrer">前往下载页</el-button>
         <el-button v-if="snapshot?.installFailure" tag="a" type="primary" size="small" :href="snapshot.installFailure.downloadUrl" target="_blank" rel="noopener noreferrer">前往下载页</el-button>
         <el-button v-else-if="snapshot?.updating && !working" size="small" type="primary" @click="runUpdate('read')">重新读取状态</el-button>
         <el-button
@@ -175,6 +163,7 @@
 
 <script setup lang="ts">
 import { translate, t } from "@toonflow/i18n/vue";
+import { jianbaiReleasesUrl } from "@toonflow/server/desktop";
 
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from "vue";
 import { publicWeb } from "@/stores/multiTenant";
@@ -191,7 +180,6 @@ import {
   IconCircleCheck,
   IconArrowRight,
   IconBrandWechat,
-  IconQrcode,
 } from "@tabler/icons-vue";
 import logoUrl from "@toonflow/assets/jianbaiLogo.svg";
 import { saveSettings } from "@/stores/settings";
@@ -208,9 +196,8 @@ import {
   startDesktopUpdate,
 } from "@/stores/desktopUpdate";
 
-const privacy = defineAsyncComponent(() => import("./privacy.vue"));
 const repositoryUrl = "https://github.com/HBAI-Ltd/Toonflow-app";
-const communityUrl = "https://work.weixin.qq.com/u/vc66e4c7f8432af0d8?v=5.0.13.84802&bb=c03c3ad130";
+const communityUrl = "";
 const clientBuild = ref<{ version: string; channel: string }>();
 const currentVersion = computed(() => "1.0.0");
 const isPatchUpdate = computed(() => !!snapshot.value?.updateAvailable && snapshot.value.latestVersion === snapshot.value.version);
@@ -223,7 +210,6 @@ const updateProgress = computed(() => snapshot.value?.updateProgress);
 const updatePercentage = computed(() => !updateInProgress.value && snapshot.value?.updateReady ? 100
   : updateProgress.value?.total ? Math.min(100, Math.floor(updateProgress.value.received / updateProgress.value.total * 100)) : 0);
 const resultVisible = ref(false);
-const privacyVisible = ref(false);
 const controller = new AbortController();
 const resultTitle = computed(() => {
   if (snapshot.value?.installFailure) return translate("上次更新未成功");
@@ -272,7 +258,7 @@ function openUpdate() {
 async function saveUpdateSource(source: string) {
   if (actualPlatform.isRemoteConnection) return;
   if (source === updateSource.value || sourceSaving.value || working.value) return;
-  if (source !== "official" && source !== "github" && (source !== "custom" || !customUpdateUrl.value)) return;
+  if (source !== "github" && (source !== "custom" || !customUpdateUrl.value)) return;
   sourceSaving.value = true;
   try {
     await saveSettings(() => ({ desktopUpdateSource: source }));
@@ -321,6 +307,14 @@ async function runUpdate(nextAction: "read" | "check" | "download" | "apply") {
   display: flex;
   flex-direction: column;
   gap: 12px;
+
+  .repositoryAcknowledgment {
+    margin: 0;
+    padding-inline: 14px;
+    color: var(--el-text-color-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+  }
 
   .brand {
     display: flex;
@@ -511,6 +505,9 @@ async function runUpdate(nextAction: "read" | "check" | "download" | "apply") {
   color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 1.7;
+
+  p { margin: 0; }
+  p + p { margin-top: 6px; }
 }
 
 

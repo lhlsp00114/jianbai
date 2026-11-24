@@ -78,11 +78,10 @@ if (isWindows) {
   const assemblyInfo = resolve(protocolDir, "assemblyInfo.cs");
   writeAtomicSync(assemblyInfo, [
     "using System.Reflection;",
-    '[assembly: AssemblyTitle("Toonflow")]',
-    '[assembly: AssemblyProduct("Toonflow")]',
-    '[assembly: AssemblyCompany("HBAI-Ltd")]',
-    '[assembly: AssemblyDescription("Toonflow desktop component")]',
-    '[assembly: AssemblyCopyright("Copyright (c) HBAI-Ltd")]',
+    '[assembly: AssemblyTitle("见白")]',
+    '[assembly: AssemblyProduct("见白")]',
+    '[assembly: AssemblyCompany("见白")]',
+    '[assembly: AssemblyDescription("见白桌面组件")]',
     `[assembly: AssemblyVersion("${version}.0")]`,
     `[assembly: AssemblyFileVersion("${version}.0")]`,
     `[assembly: AssemblyInformationalVersion("${version}")]`,
@@ -90,7 +89,7 @@ if (isWindows) {
   ].join("\n"));
   await prepareRuntime();
   await $`${csc} /nologo /target:winexe ${helperPlatform} /optimize+ /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /out:${resolve(protocolDir, "runtimeDownloader.exe")} ${assemblyInfo} ${resolve(projectDir, "build/desktop/runtime/runtimeConfig.cs")} ${resolve(projectDir, "apps/desktop/native/runtimeDownloader.cs")}`;
-  await $`${csc} /nologo /target:winexe ${helperPlatform} /optimize+ /reference:System.Windows.Forms.dll /out:${resolve(protocolDir, "startupLauncher.exe")} ${assemblyInfo} ${resolve(projectDir, "apps/desktop/native/startupLauncher.cs")}`;
+  await $`${csc} /nologo /target:winexe ${helperPlatform} /optimize+ /win32icon:${resolve(projectDir, desktopConfig.build.win.icon)} /reference:System.Windows.Forms.dll /out:${resolve(protocolDir, "startupLauncher.exe")} ${assemblyInfo} ${resolve(projectDir, "apps/desktop/native/startupLauncher.cs")}`;
   await $`${csc} /nologo /target:winexe ${helperPlatform} /optimize+ /reference:System.Windows.Forms.dll /reference:System.Web.Extensions.dll /out:${resolve(protocolDir, "protocolLauncher.exe")} ${assemblyInfo} ${resolve(projectDir, "apps/desktop/native/protocolLauncher.cs")}`;
   await $`${csc} /nologo /target:winexe ${helperPlatform} /optimize+ /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /out:${resolve(protocolDir, "saveFileDialog.exe")} ${assemblyInfo} ${resolve(projectDir, "apps/desktop/native/saveFileDialog.cs")}`;
   await $`${csc} /nologo /target:winexe ${helperPlatform} /optimize+ /reference:System.Web.Extensions.dll /reference:System.Windows.Forms.dll /reference:Microsoft.CSharp.dll /out:${resolve(protocolDir, "updateHelper.exe")} ${assemblyInfo} ${resolve(projectDir, "apps/desktop/native/updateHelper.cs")}`;

@@ -14,7 +14,7 @@ const execFileAsync = promisify(execFile);
 const hashPattern = /^[a-zA-Z0-9]{1,64}$/;
 const versionPattern = /^\d+\.\d+\.\d+$/;
 type versionInfo = { identifier: string; name: string; channel: string; version: string; hash: string; baseUrl: string };
-type preparedUpdate = { version: string; hash: string; archiveSha256: string; arch: string };
+type preparedUpdate = { version: string; hash: string; archiveSha256: string; arch: string; baseUrl: string };
 type updateLifecycle = { requestQuitApproval(): unknown; cancelQuitApproval(approval: unknown): void; quitAfterApproval(approval: unknown): void };
 
 export function confirmWindowsUpdateStartup(resourcesDirectory: string, failed = false) {
@@ -87,7 +87,7 @@ export default function createWindowsUpdater(resourcesDirectory: string, lifecyc
     if (!regularFile(preparedPath)) return;
     try {
       const record = JSON.parse(readFileSync(preparedPath, "utf8"));
-      if (record.arch === process.arch && typeof record.version === "string" && typeof record.hash === "string" && typeof record.archiveSha256 === "string"
+      if (record?.baseUrl === localInfo.baseUrl && record.arch === process.arch && typeof record.version === "string" && typeof record.hash === "string" && typeof record.archiveSha256 === "string"
         && versionPattern.test(record.version) && hashPattern.test(record.hash) && /^[a-f0-9]{64}$/.test(record.archiveSha256)
         && regularFile(join(extractionDirectory, `${record.hash}.tar`))) return record;
     } catch { /* ACT: 缓存损坏可重新下载，不影响用户数据。 */ }
@@ -265,7 +265,7 @@ export default function createWindowsUpdater(resourcesDirectory: string, lifecyc
       if (archiveInfo.hash !== target.hash || archiveInfo.version !== target.version) throw new Error(t`更新包版本与清单不一致`);
       const digest = createHash("sha256");
       for await (const chunk of file(archivePath).stream()) digest.update(chunk);
-      const prepared: preparedUpdate = { hash: target.hash, version: target.version, archiveSha256: digest.digest("hex"), arch: process.arch };
+      const prepared: preparedUpdate = { hash: target.hash, version: target.version, archiveSha256: digest.digest("hex"), arch: process.arch, baseUrl: localInfo.baseUrl };
       const targetPath = join(extractionDirectory, `${target.hash}.tar`);
       if (existsSync(targetPath) && !regularFile(targetPath)) throw new Error(t`更新包路径不能是链接或目录`);
       renameSync(archivePath, targetPath);
@@ -289,8 +289,8 @@ export default function createWindowsUpdater(resourcesDirectory: string, lifecyc
     if (busy) throw new Error(t`已有更新任务正在执行`);
     ensureDirectory();
     const prepared = readPrepared();
-    if (!prepared || prepared.hash === localInfo.hash || Bun.semver.order(prepared.version, localInfo.version) < 0
-      || (manifest && (prepared.hash !== manifest.hash || prepared.version !== manifest.version))) throw new Error(t`请先下载当前版本的更新包`);
+    if (!prepared || !manifest || prepared.hash === localInfo.hash || Bun.semver.order(prepared.version, localInfo.version) < 0
+      || prepared.hash !== manifest.hash || prepared.version !== manifest.version) throw new Error(t`请先下载当前版本的更新包`);
     busy = true;
     state.error = "";
     const transactionId = randomUUID().replaceAll("-", "");

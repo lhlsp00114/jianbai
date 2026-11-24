@@ -29,13 +29,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import logoUrl from "@toonflow/assets/jianbaiLogo.svg";
-import { jianbaiDashboard, jianbaiMediaKey, jianbaiTextConnected, jianbaiTextModel } from "@/lib/jianbaiAccount";
+import { jianbaiDashboard, jianbaiMediaKey, jianbaiTextConnected, jianbaiTextModels } from "@/lib/jianbaiAccount";
 import jianbaiKeyForm from "./jianbaiKeyForm.vue";
 
 const props = defineProps<{ scope: "text" | "media"; provider?: { models: { id: string; label: string }[]; loadError?: string } }>();
 const visible = ref(false);
 const connected = computed(() => jianbaiTextConnected.value || !!jianbaiMediaKey.value);
-const models = computed(() => props.provider?.models ?? (props.scope === "text" ? [jianbaiTextModel] : []));
+const models = computed(() => props.provider?.models ?? (props.scope === "text" ? jianbaiTextModels : []));
 </script>
 
 <style lang="scss" scoped>

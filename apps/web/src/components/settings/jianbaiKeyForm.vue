@@ -7,8 +7,9 @@
     <p class="keyHint">请填写在见白网站中设置了对应渠道策略的密钥，通用于文本、图片和视频。</p>
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" />
     <el-button nativeType="submit" type="primary" :disabled="!apiKey.trim() || multiTenantEnabled" :loading="saving">
-      {{ connected ? "更新密钥" : "验证并连接" }}
+      {{ onboarding ? "验证并进入" : connected ? "更新密钥" : "验证并连接" }}
     </el-button>
+    <slot name="actions" :connecting="saving" />
   </el-form>
 </template>
 
@@ -17,7 +18,8 @@ import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { multiTenantEnabled } from "@/stores/settings";
 import { jianbaiRoutes, jianbaiRouteConfig, saveJianbaiRoute, type JianbaiRouteId } from "@/lib/jianbaiAccount";
-const props = defineProps<{ routeId?: JianbaiRouteId }>();
+const props = defineProps<{ routeId?: JianbaiRouteId; onboarding?: boolean }>();
+const emit = defineEmits<{ connected: [] }>();
 const selectedRoute = ref<JianbaiRouteId>(props.routeId ?? jianbaiRouteConfig.value.activeRoute);
 const connected = computed(() => !!jianbaiRouteConfig.value.routeKeys[selectedRoute.value]);
 const apiKey = ref("");
@@ -35,6 +37,7 @@ async function connect() {
     if (!saved) return;
     apiKey.value = "";
     ElMessage.success("线路密钥已保存");
+    emit("connected");
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "连接失败，请重试";
   } finally {

@@ -29,7 +29,8 @@
       </template>
     </el-dropdown>
     <div
-      v-if="!readOnly && (documentTarget || (topVisible && slotsVisible))"
+      v-if="!readOnly && (documentTarget || topVisible)"
+      v-show="documentTarget || slotsVisible"
       class="floatingSlot topSlot nodrag nopan nowheel"
       :style="{ width: typeof topWidth === 'number' ? `${topWidth}px` : topWidth }"
       @pointerdown.stop
@@ -67,7 +68,8 @@
       </slot>
     </div>
     <div
-      v-if="!readOnly && $slots.bottom && (documentTarget || (bottomVisible && slotsVisible))"
+      v-if="!readOnly && $slots.bottom && (documentTarget || bottomVisible)"
+      v-show="documentTarget || slotsVisible"
       class="floatingSlot bottomSlot nodrag nopan nowheel"
       :style="{ width: typeof bottomWidth === 'number' ? `${bottomWidth}px` : bottomWidth }"
       @pointerdown.stop

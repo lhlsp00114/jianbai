@@ -5,6 +5,7 @@ import { useNodePersistence, type NodePersistenceContext } from "@toonflow/nodes
 import type { NodeAudioRequest, NodeImageRequest, NodeMediaResult, NodeMediaTaskStatus, NodeVideoRequest, useNodeAi } from "@toonflow/nodes-scaffold/nodeAi";
 import type { NodeOutputs } from "@toonflow/nodes-scaffold/values";
 import { showNodeError } from "./showNodeError";
+import { findNodeModel } from "@toonflow/nodes-scaffold/nodeAi";
 import { ElMessage, ElMessageBox } from "element-plus";
 
 export type NodeGenerationTask = {
@@ -15,6 +16,7 @@ export type NodeGenerationTask = {
   mediaType: "image" | "video" | "audio";
   providerId: string;
   modelId: string;
+  startedAt?: number;
   state: "submitting" | NonNullable<NodeMediaTaskStatus["state"]>;
   resumable?: boolean;
   recoveryStage?: NodeMediaTaskStatus["recoveryStage"];
@@ -26,6 +28,7 @@ export type NodeGenerationTask = {
 
 type GenerationOptions = {
   ai: ReturnType<typeof useNodeAi>;
+  applyResults?: (results: NodeMediaResult[]) => void;
   recover?: (results: NodeMediaResult[], task: NodeGenerationTask, signal: AbortSignal) => Promise<NodeMediaResult[]>;
 };
 
@@ -47,6 +50,21 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
   const error = ref("");
   const cancelling = ref(false);
   const generating = computed(() => status.value === "running");
+  let startedAt = 0;
+  const elapsedSeconds = ref(0);
+  const elapsedLabel = computed(() => {
+    const seconds = elapsedSeconds.value;
+    const parts = [Math.floor(seconds / 60) % 60, seconds % 60];
+    if (seconds >= 3600) parts.unshift(Math.floor(seconds / 3600));
+    return `已运行 ${parts.map(value => String(value).padStart(2, "0")).join(":")}`;
+  });
+  watch(generating, (running, _previous, onCleanup) => {
+    if (!running) return;
+    const updateElapsed = () => { elapsedSeconds.value = Math.max(0, Math.floor((Date.now() - startedAt) / 1000)); };
+    updateElapsed();
+    const timer = setInterval(updateElapsed, 1000);
+    onCleanup(() => clearInterval(timer));
+  }, { flush: "sync" });
   const pendingRecovery = computed(() => !generating.value && needsRecovery());
   const recoveryVisible = computed(() => {
     const task = ownedTask.value;
@@ -127,17 +145,29 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
 
   async function generate<T extends "image" | "video" | "audio">(mediaType: T, input: NodeImageRequest | NodeVideoRequest | NodeAudioRequest, signal: AbortSignal, recoveryData?: unknown) {
     if (!options) throw new Error("节点未提供媒体生成能力");
+    const waitingSignal = AbortSignal.any([lifetime.signal, signal]);
+    waitingSignal.throwIfAborted();
+    if (mediaType === "image") {
+      const model = findNodeModel(await options.ai.getMediaModels(waitingSignal), input);
+      const count = input.images?.length ?? 0;
+      if (model?.maxReferenceImages !== undefined && count > model.maxReferenceImages) {
+        throw new Error(`${model.label} 最多支持 ${model.maxReferenceImages} 张参考图，当前 ${count} 张，请减少参考图后重试`);
+      }
+      if (model?.maxPromptLength && input.prompt.length > model.maxPromptLength) {
+        throw new Error(`${model.label} 提示词最多支持 ${model.maxPromptLength} 个字符，当前 ${input.prompt.length} 个（包含引用文本及预设），请缩短后重试`);
+      }
+    }
+    waitingSignal.throwIfAborted();
     if (needsRecovery()) throw new Error("当前节点仍有未确认的生成任务，请先复查或明确放弃此任务后再生成");
     const context = getPersistence?.();
     if (!context || context.directory !== input.directory) throw new Error("画布尚未就绪，无法保存生成任务");
     let task: NodeGenerationTask = {
       taskId: crypto.randomUUID(), directory: context.directory, canvasPath: context.canvasPath, nodeId: id,
-      mediaType, providerId: input.providerId, modelId: input.modelId, state: "submitting",
+      mediaType, providerId: input.providerId, modelId: input.modelId, state: "submitting", startedAt,
       ...(recoveryData === undefined ? {} : { recoveryData: JSON.parse(JSON.stringify(recoveryData)) }),
     };
     savedData.value.mediaTask = task;
     task = savedData.value.mediaTask;
-    const waitingSignal = AbortSignal.any([lifetime.signal, signal]);
     try { await context.save(waitingSignal); }
     catch (error) { if (task.state !== "cancelled") task.state = "failed"; throw error; }
     signal.throwIfAborted();
@@ -178,6 +208,8 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
     if (cancelling.value) throw new Error("任务正在取消，请稍后重试");
     if (generating.value) throw new Error("节点正在生成，请等待完成");
     const controller = executionController = new AbortController();
+    const previousStart = recoveryController ? ownedTask.value?.startedAt : undefined;
+    startedAt = typeof previousStart === "number" && Number.isFinite(previousStart) && previousStart > 0 ? previousStart : Date.now();
     status.value = "running";
     error.value = "";
     try {
@@ -225,6 +257,7 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
       }
       const result = results[0];
       if (!result || result.mediaType !== task.mediaType) throw new Error("生成任务未返回对应的媒体结果");
+      if (options.applyResults) { options.applyResults(results); return; }
       if (result.mediaType === "image") outputs.value.image = { dataType: "IMAGE", value: { url: result.path, mimeType: result.mimeType } };
       else if (result.mediaType === "video") outputs.value.video = { dataType: "VIDEO", value: { url: result.path, mimeType: result.mimeType } };
       else outputs.value.audio = { dataType: "AUDIO", value: { url: result.path, mimeType: result.mimeType } };
@@ -312,5 +345,5 @@ export function useNodeGeneration(outputs: Readonly<Ref<NodeOutputs>>, cancel: (
   }, { deep: true, flush: "sync" });
   onScopeDispose(() => lifetime.abort());
 
-  return { generating, pendingRecovery, recoveryVisible, recoveryLabel, recoverResult, cancelling, run, generate, resume, cancel: cancelGeneration };
+  return { generating, elapsedLabel, pendingRecovery, recoveryVisible, recoveryLabel, recoverResult, cancelling, run, generate, resume, cancel: cancelGeneration };
 }

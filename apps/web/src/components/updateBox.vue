@@ -13,7 +13,7 @@
     <template #header="{ titleId, close }">
       <div class="updateHeader">
         <div class="versionInfo">
-          <h2 :id="titleId" class="updateTitle">Toonflow <span class="versionNumber">v{{ version }}</span></h2>
+          <h2 :id="titleId" class="updateTitle">见白 <span class="versionNumber">v{{ version }}</span></h2>
           <div class="buildInfo"><span class="buildLabel">构建代码</span><code>{{ buildCode }}</code></div>
         </div>
         <button class="closeButton" type="button" aria-label="关闭更新说明" @click="close">
@@ -37,10 +37,10 @@
         </svg>
       </div>
 
-      <section class="releaseSection" aria-label="更新内容">
+      <section v-if="markdown.trim()" class="releaseSection" aria-label="更新内容">
         <h3 class="releaseTitle">更新内容</h3>
         <div class="releaseContent" tabindex="0" role="region" aria-label="Markdown 更新说明">
-          <messageMarkdown v-if="markdown.trim()" :content="markdown" />
+          <messageMarkdown :content="markdown" />
         </div>
       </section>
     </div>

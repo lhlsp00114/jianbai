@@ -66,21 +66,40 @@ export function resolveNodeMenu(saved: NodeMenuItem[], nodes: { type: string; la
     }
   }
   updateLabels(items);
+  function moveAfter(items: NodeMenuItem[], targetType: string, nodeType: string): boolean {
+    const targetIndex = items.findIndex(item => item.type === targetType);
+    const nodeIndex = items.findIndex(item => item.type === nodeType);
+    if (targetIndex >= 0 && nodeIndex >= 0) {
+      const [node] = items.splice(nodeIndex, 1);
+      const nextTargetIndex = items.findIndex(item => item.type === targetType);
+      items.splice(nextTargetIndex + 1, 0, node!);
+      return true;
+    }
+    return items.some(item => item.children && moveAfter(item.children, targetType, nodeType));
+  }
+  moveAfter(items, "remote-audioNode", "remote-imageLayerNode");
   const order: Record<string, number> = {
     "remote-textNode": 0, "remote-imageGenerationNode": 1, "remote-videoGenerationNode": 2,
-    "remote-scriptGeneratorNode": 3, "remote-imageNode": 4, "remote-videoNode": 5,
-    "remote-audioNode": 6, "remote-audioGenerationNode": 7, "remote-director3dNode": 8, "remote-frameAnalysisNode": 9,
+    "remote-audioGenerationNode": 3, "remote-scriptGeneratorNode": 4, "remote-imageNode": 5, "remote-videoNode": 6,
+    "remote-audioNode": 7, "remote-imageLayerNode": 8, "remote-director3dNode": 9,
+    "remote-frameAnalysisNode": 10,
   };
-  function insertScript(items: NodeMenuItem[], script: NodeMenuItem): boolean {
-    const index = items.findIndex(item => item.type === "remote-videoGenerationNode");
-    if (index >= 0) { items.splice(index + 1, 0, script); return true; }
-    return items.some(item => item.children && insertScript(item.children, script));
+  function insertAfter(items: NodeMenuItem[], targetType: string, node: NodeMenuItem): boolean {
+    const index = items.findIndex(item => item.type === targetType);
+    if (index >= 0) { items.splice(index + 1, 0, node); return true; }
+    return items.some(item => item.children && insertAfter(item.children, targetType, node));
   }
   for (const node of [...nodes].sort((left, right) => (order[left.type] ?? 10) - (order[right.type] ?? 10) || left.type.localeCompare(right.type))) {
     if (existing.has(node.type)) continue;
     existing.add(node.type);
-    if (node.type === "remote-scriptGeneratorNode" && insertScript(items, { id: "node:" + node.type, type: node.type, label: node.label, hidden: false })) continue;
-    items.push({ id: `node:${node.type}`, type: node.type, label: node.label, hidden: false });
+    const newItem = { id: `node:${node.type}`, type: node.type, label: node.label, hidden: false };
+    if (node.type === "remote-audioGenerationNode" && insertAfter(items, "remote-videoGenerationNode", newItem)) continue;
+    const audioTarget = existing.has("remote-audioNode") ? "remote-audioNode"
+      : existing.has("remote-audioGenerationNode") ? "remote-audioGenerationNode" : "remote-videoGenerationNode";
+    if (node.type === "remote-imageLayerNode" && insertAfter(items, audioTarget, newItem)) continue;
+    const scriptTarget = existing.has("remote-audioGenerationNode") ? "remote-audioGenerationNode" : "remote-videoGenerationNode";
+    if (node.type === "remote-scriptGeneratorNode" && insertAfter(items, scriptTarget, newItem)) continue;
+    items.push(newItem);
   }
   return items;
 }

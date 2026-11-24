@@ -2,21 +2,18 @@ import { basename } from "node:path";
 import { file } from "@toonflow/file/bun";
 import type { Request } from "express";
 import conf from "@/utils/conf";
+import { jianbaiReleasesUrl, jianbaiUpdateBaseUrl } from "@/types/desktop";
 import type { DesktopRuntime, desktopUpdateAttempt, updateSnapshot } from "@/types/desktop";
 import { msg, translateError, translateMessage } from "@/lib/i18n";
 import { messageError } from "@toonflow/i18n/errors";
 
-const updateBaseUrls = {
-  official: "https://api.toonflow.net/web/version/desktopUpdates",
-  github: "https://github.com/HBAI-Ltd/Toonflow-app/releases/latest/download",
-};
 const updateRuntimeId = crypto.randomUUID();
 let cancelledUpdateAttempt: string | undefined;
 
 function getInstallFailure(local: Awaited<ReturnType<DesktopRuntime["updater"]["getLocalInfo"]>>, applyError?: string): updateSnapshot["installFailure"] {
   if (local.channel === "dev") return;
   const attempt = conf.get("desktopUpdateAttempt");
-  if (!attempt) return;
+  if (attempt?.releaseRepository !== jianbaiReleasesUrl) return;
   if (typeof attempt !== "object" || ![attempt.attemptId, attempt.runtimeId, attempt.channel, attempt.targetVersion, attempt.targetHash]
     .every(value => typeof value === "string" && value.length > 0 && value.length <= 512)
     || (attempt.failure !== undefined && typeof attempt.failure !== "string")) {
@@ -61,7 +58,7 @@ function getInstallFailure(local: Awaited<ReturnType<DesktopRuntime["updater"]["
     currentVersion: local.version,
     currentHash: local.hash,
     message: translateMessage(message),
-    downloadUrl: "https://github.com/HBAI-Ltd/Toonflow-app/releases/latest",
+    downloadUrl: jianbaiReleasesUrl,
   };
 }
 
@@ -85,9 +82,8 @@ export function isValidUpdateUrl(value: unknown): value is string {
 
 function getUpdateBaseUrl(): string {
   const settings = conf.get("settings", {});
-  if (settings.desktopUpdateSource === "github") return updateBaseUrls.github;
   if (settings.desktopUpdateSource === "custom" && isValidUpdateUrl(settings.desktopUpdateCustomUrl)) return settings.desktopUpdateCustomUrl;
-  return updateBaseUrls.official;
+  return jianbaiUpdateBaseUrl;
 }
 
 async function withUpdateSource<T>(updater: DesktopRuntime["updater"], updateBaseUrl: string, run: () => Promise<T>) {
@@ -149,7 +145,7 @@ export async function getDesktopUpdate(req: Request): Promise<updateSnapshot> {
   const installFailure = getInstallFailure(local, applyError);
   if (applyError) state.applyingUpdate = false;
   // ACT: 安装失败跨重启保留，不被切换更新源或普通联网错误覆盖。
-  const error = installFailure?.message || (state.lastBaseUrl === updateBaseUrl ? state.updateError || (validUpdate ? update?.error || "" : "") : "") || update?.installError || "";
+  const error = installFailure?.message || (state.lastBaseUrl === updateBaseUrl ? state.updateError || (validUpdate ? update?.error || "" : "") : "");
   return {
     version, channel, hash,
     latestVersion: validUpdate ? update?.version || "" : "",
@@ -176,6 +172,9 @@ export async function checkDesktopUpdate(req: Request): Promise<void> {
   state.lastBaseUrl = updateBaseUrl;
   try {
     state.updateError = (await withUpdateSource(updater, updateBaseUrl, () => updater.checkForUpdate())).error || "";
+    if (updateBaseUrl === jianbaiUpdateBaseUrl && typeof state.updateError === "string" && /\bHTTP 404$/.test(state.updateError)) {
+      state.updateError = "见白发布页暂无适用于当前系统的更新包。";
+    }
     if (!state.updateError) {
       await assertUpdateVersion(updater, state);
       state.checkedBaseUrl = updateBaseUrl;
@@ -253,7 +252,7 @@ export async function applyDesktopUpdate(req: Request): Promise<void> {
     const local = await updater.getLocalInfo();
     const target = updater.updateInfo();
     if (!target?.version || !target.hash) throw new Error("更新包缺少目标版本或构建号，请重新下载。");
-    attempt = { attemptId: crypto.randomUUID(), runtimeId: updateRuntimeId, channel: local.channel, targetVersion: target.version, targetHash: target.hash };
+    attempt = { releaseRepository: jianbaiReleasesUrl, attemptId: crypto.randomUUID(), runtimeId: updateRuntimeId, channel: local.channel, targetVersion: target.version, targetHash: target.hash };
     // ACT: SDK 可能直接退出进程，必须在交接前写入 app 外的数据目录。
     conf.set("desktopUpdateAttempt", attempt);
     await withUpdateSource(updater, updateBaseUrl, () => updater.applyUpdate!());

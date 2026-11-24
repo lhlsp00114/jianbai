@@ -294,7 +294,7 @@ function handleKeydown(event: KeyboardEvent) {
 
       .providerModelSelect { flex: 0 1 210px; width: 210px; min-width: 0; }
       .modelSelect {
-        .el-select__wrapper {
+        .el-select__wrapper, .el-input__wrapper {
           min-height: 30px;
           padding: 0 8px;
           border-radius: 6px;
@@ -302,6 +302,9 @@ function handleKeydown(event: KeyboardEvent) {
           line-height: 20px;
           transition: background-color 0.15s, color 0.15s;
           cursor: pointer;
+          border: 0;
+          box-shadow: none;
+          background: transparent;
 
           &:hover:not(.is-disabled), &.is-focused:not(.is-disabled) {
             background: var(--el-fill-color-light);
@@ -316,7 +319,16 @@ function handleKeydown(event: KeyboardEvent) {
         .modelIcon { flex-shrink: 0; }
         .el-select__suffix { align-self: center; }
       }
-      .settingsButton { height: 30px; padding: 0 8px; border-radius: 6px; font-size: 12px; }
+      .modeSelect .el-select__wrapper {
+        min-height: 30px;
+        padding: 0 8px;
+        border-radius: 6px;
+        box-shadow: none;
+        background: transparent;
+        font-size: 12px;
+        &:hover, &.is-focused { background: var(--el-fill-color-light); }
+      }
+      .settingsButton { height: 30px; padding: 0 8px; border-radius: 6px; font-size: 12px; background: transparent; }
       .promptPresetsButton {
         flex-shrink: 0;
         width: 30px;

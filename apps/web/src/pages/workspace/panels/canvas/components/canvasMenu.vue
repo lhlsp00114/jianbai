@@ -45,8 +45,8 @@
     <div class="balanceList" tabindex="0" aria-label="供应商余额">
       <el-card v-for="item in otherProviderBalances" :key="item.id" class="balanceCard" shadow="never" :bodyStyle="{ padding: '2px 4px' }">
         <el-button class="balanceTrigger" text :loading="item.loading" :title="item.error || `点击刷新 ${item.label} 余额`" :aria-label="`刷新 ${item.label} 余额`" @click="refreshProviderBalance(item.id)">
-          <span class="providerLabel">{{ item.label }}</span>
-          <span>{{ item.balance ? `${balanceFormat.format(Math.min(item.balance.balance, item.balance.keyBalance ?? Infinity))} ${item.balance.unit}` : '—' }}</span>
+          <span class="providerLabel">{{ item.id === "tokenGo" ? "见白" : item.label }}</span>
+          <span class="balanceValue"><span v-if="item.id === 'tokenGo'" class="currencySymbol">¥</span>{{ item.balance ? (item.id === "tokenGo" ? jianbaiBalanceFormat : balanceFormat).format(Math.min(item.balance.balance, item.balance.keyBalance ?? Infinity)) : '—' }}<template v-if="item.balance && item.id !== 'tokenGo'"> {{ item.balance.unit }}</template></span>
         </el-button>
       </el-card>
     </div>
@@ -98,6 +98,7 @@ const props = defineProps<{
 const workspaceStore = useWorkspaceStore();
 const otherProviderBalances = computed(() => providerBalances.value.filter(item => item.id !== "toonflow"));
 const balanceFormat = computed(() => new Intl.NumberFormat(locale.value, { maximumFractionDigits: 6 }));
+const jianbaiBalanceFormat = computed(() => new Intl.NumberFormat(locale.value, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
 const workspaceName = computed(() => workspaceStore.project?.name || translate("未命名工作区"));
 const projectNameDraft = ref("");
 watch([() => workspaceStore.project?.directory, workspaceName], () => {
@@ -868,12 +869,18 @@ defineExpose({ getCanvases, peekCanvases, initialized, addCanvas, switchCanvas, 
     .balanceCard {
       flex-shrink: 0;
       font-variant-numeric: tabular-nums;
-      .providerLabel { color: var(--el-text-color-secondary); font-size: 12px; }
       .balanceTrigger {
-        height: 28px;
-        padding: 0 3px;
+        height: 30px;
+        padding: 0 8px;
         font-size: 13px;
-        :deep(> span) { display: flex; align-items: center; gap: 4px; }
+        :deep(> span) { display: flex; align-items: center; gap: 10px; }
+        .providerLabel { color: var(--el-text-color-secondary); font-size: 12px; }
+        .balanceValue {
+          color: var(--el-text-color-primary);
+          font-size: 14px;
+          font-weight: 600;
+          .currencySymbol { margin-right: 6px; color: var(--el-text-color-secondary); font-size: 12px; font-weight: 400; }
+        }
       }
     }
   }

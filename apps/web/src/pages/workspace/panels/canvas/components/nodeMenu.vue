@@ -193,7 +193,11 @@ const selectedImages = computed(() => getSelectionTree(selectedNodes.value, flow
   });
 }));
 const filteredNodes = computed(() => {
-  const nodes = remoteNodes.map(node => ({
+  const isImageNode = (node: GraphNode) => node.type === "remote-imageNode" || node.type === "remote-imageGenerationNode";
+  const imageSources = pendingGroup.value.length
+    ? pendingGroup.value.every(isImageNode)
+    : pendingHandle.value?.type === "source" && isImageNode(pendingHandle.value.node);
+  const nodes = remoteNodes.filter(node => !imageSources || !["remote-audioGenerationNode", "remote-director3dNode"].includes(node.type)).map(node => ({
     ...node,
     icon: (flow.nodeTypes?.value?.[node.type] as { icon?: Component } | undefined)?.icon ?? IconBox,
   }));

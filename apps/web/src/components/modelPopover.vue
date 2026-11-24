@@ -43,11 +43,9 @@
         </el-form-item>
         <el-form-item v-if="reasoningLevels.length" label="思考强度">
           <div class="reasoningSettings">
-            <div class="reasoningGrid" role="radiogroup" aria-label="思考强度" :aria-describedby="`${reasoningId}Hint`" :style="{ gridTemplateColumns: `repeat(${reasoningColumns}, minmax(0, 1fr))` }">
-              <label v-for="option in reasoningOptions" :key="option.value" class="reasoningOption">
-                <input v-model="reasoningEffort" type="radio" :name="reasoningId" :value="option.value" :disabled="disabled" />
-                <span class="reasoningOptionLabel">{{ option.label }}</span>
-              </label>
+            <el-slider v-model="reasoningIndex" :min="0" :max="reasoningOptions.length - 1" :step="1" :showStops="reasoningOptions.length > 2" :showTooltip="false" :disabled="disabled" aria-label="思考强度" :aria-describedby="`${reasoningId}Hint`" />
+            <div class="reasoningLabels" :style="{ gridTemplateColumns: `repeat(${reasoningOptions.length}, minmax(0, 1fr))` }" aria-hidden="true">
+              <span v-for="option in reasoningOptions" :key="option.value" class="reasoningTickLabel">{{ option.label }}</span>
             </div>
             <div :id="`${reasoningId}Hint`" class="reasoningHint">默认由模型决定</div>
           </div>
@@ -60,6 +58,7 @@
 <script setup lang="ts">
 import { computed, inject, ref, useId, watch } from "vue";
 import { IconChevronDown, IconChevronUp, IconSparkles } from "@tabler/icons-vue";
+import { ElSlider } from "element-plus";
 import { modelIcon } from "@toonflow/model-icons";
 import { useNodeModelSelection } from "@toonflow/nodes-scaffold/nodeAi";
 import modelLabel from "@toonflow/node-shared/modelLabel";
@@ -86,7 +85,10 @@ const modelGroups = computed(() => {
 });
 const reasoningLevels = computed(() => selectedModelChoice.value?.reasoningLevels ?? []);
 const reasoningOptions = computed(() => [{ label: "默认", value: "" }, ...reasoningLevels.value.map(value => ({ label: reasoningLabels[value], value }))]);
-const reasoningColumns = computed(() => Math.min(4, reasoningOptions.value.length > 4 ? Math.ceil(reasoningOptions.value.length / 2) : reasoningOptions.value.length));
+const reasoningIndex = computed({
+  get: () => Math.max(0, reasoningOptions.value.findIndex(item => item.value === reasoningEffort.value)),
+  set: index => { reasoningEffort.value = reasoningOptions.value[index]?.value ?? ""; },
+});
 const reasoningLabel = computed(() => reasoningOptions.value.find(item => item.value === reasoningEffort.value)?.label ?? "默认");
 const modelButtonTitle = computed(() => {
   const model = selectedModelChoice.value;
@@ -176,56 +178,20 @@ watch(visible, value => { if (value) void refreshModelChoices().catch(() => {});
       .reasoningSettings {
         width: 100%;
 
-        .reasoningGrid {
+        .el-slider {
+          height: 26px;
+          margin: 0 8px;
+          --el-slider-height: 4px;
+          --el-slider-button-size: 14px;
+        }
+
+        .reasoningLabels {
           display: grid;
-          gap: 6px;
-
-          .reasoningOption {
-            position: relative;
-            min-width: 0;
-
-            input {
-              position: absolute;
-              width: 1px;
-              height: 1px;
-              overflow: hidden;
-              clip-path: inset(50%);
-
-              &:checked + .reasoningOptionLabel {
-                border-color: var(--el-color-primary-light-5);
-                background: var(--el-color-primary-light-9);
-                color: var(--el-color-primary);
-                font-weight: 600;
-              }
-              &:focus-visible + .reasoningOptionLabel {
-                outline: 2px solid var(--el-color-primary);
-                outline-offset: 2px;
-              }
-              &:disabled + .reasoningOptionLabel {
-                opacity: .5;
-                cursor: not-allowed;
-              }
-            }
-            .reasoningOptionLabel {
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              min-height: 32px;
-              padding: 4px 8px;
-              border: 1px solid var(--el-border-color-lighter);
-              border-radius: var(--el-border-radius-base);
-              background: var(--el-fill-color-light);
-              color: var(--el-text-color-regular);
-              font-size: 12px;
-              line-height: 20px;
-              cursor: pointer;
-              transition: background-color .15s, border-color .15s, color .15s;
-            }
-            &:hover input:not(:disabled) + .reasoningOptionLabel {
-              border-color: var(--el-color-primary-light-5);
-              color: var(--el-color-primary);
-            }
-          }
+          margin: 0 8px;
+          color: var(--el-text-color-secondary);
+          font-size: 12px;
+          line-height: 18px;
+          .reasoningTickLabel { min-width: 0; text-align: center; white-space: nowrap; }
         }
         .reasoningHint {
           margin-top: 8px;

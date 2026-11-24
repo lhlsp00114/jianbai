@@ -93,8 +93,8 @@ jobs:
             if (names.length !== 1) throw new Error(`${label} 安装包数量应为 1，实际为 ${names.length}`);
             return names[0];
           };
-          const windows = findInstaller("Windows x64", name => name === `toonflow-${version}-Setup.exe`);
-          const windowsArm = findInstaller("Windows ARM64", name => name === `toonflow-${version}-win-arm64-Setup.exe`);
+          const windows = findInstaller("Windows x64", name => name === `jianbai-${version}-Setup.exe`);
+          const windowsArm = findInstaller("Windows ARM64", name => name === `jianbai-${version}-win-arm64-Setup.exe`);
           const macArm = findInstaller("macOS ARM64", name => name === `toonflow-${version}-macos-arm64.pkg`);
           const macIntel = findInstaller("macOS x64", name => name === `toonflow-${version}-macos-x64.pkg`);
           const linux = findInstaller("Linux x64", name => name === `toonflow-${version}-linux-x64.deb`);
@@ -191,7 +191,7 @@ jobs:
           const plans = await Promise.all(targets.map(async target => {
             const prefix = `stable-${target.platform}-${target.arch}-`;
             const installers = names.filter(name => target.platform === "win"
-              ? name === (target.arch === "x64" ? `toonflow-${version}-Setup.exe` : `toonflow-${version}-win-arm64-Setup.exe`)
+              ? name === (target.arch === "x64" ? `jianbai-${version}-Setup.exe` : `jianbai-${version}-win-arm64-Setup.exe`)
               : target.platform === "linux" ? name === `toonflow-${version}-linux-${target.arch}.deb`
               : name === `toonflow-${version}-macos-${target.arch}.pkg`);
             if (installers.length !== 1) throw new Error(`${prefix}安装包数量应为 1，实际为 ${installers.length}`);

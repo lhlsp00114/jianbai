@@ -41,6 +41,7 @@ const props = defineProps<{
   selectAsset: () => Promise<ReferenceMention | undefined>;
   disabled?: boolean;
   presetPrompts?: boolean;
+  uploadError?: () => string | undefined;
 }>();
 const { id, node } = useNode();
 const openOfficialPrompts = inject<(targetId: string) => void>("openOfficialPrompts");
@@ -63,6 +64,8 @@ let returnExpanded = false;
 
 function chooseUpload(command: string) {
   if (props.disabled || busy.value) return;
+  const error = command === "local" ? props.uploadError?.() : undefined;
+  if (error) return void showNodeError(error, "无法添加参考素材");
   if (command === "local") fileInput.value?.click();
   else if (command === "library") void selectLibrary();
 }
@@ -79,6 +82,8 @@ async function uploadReference(event: Event) {
   const file = input.files?.[0];
   input.value = "";
   if (!file || props.disabled || busy.value) return;
+  const error = props.uploadError?.();
+  if (error) return void showNodeError(error, "无法添加参考素材");
   const mimeType = getMediaMimeType(file);
   if (!mimeType.startsWith("image/") || !file.size || file.size > 100 * 1024 * 1024) {
     return void showNodeError("请选择不超过 100 MB 的非空图片文件", "添加参考失败");
@@ -107,6 +112,8 @@ async function uploadReference(event: Event) {
       if (position.x < x + width && position.x + (other.dimensions.width || 320) > x
         && position.y < y + height && position.y + (other.dimensions.height || 300) > y) y = position.y + (other.dimensions.height || 300) + 40;
     }
+    const uploadError = props.uploadError?.();
+    if (uploadError) throw new Error(uploadError);
     const url = await uploadNodeFile(workspace, sourceId, file);
     if (disposed || getCanvas?.()?.id !== canvasId || flow.findNode(id) !== node) return;
     await batchHistory(async () => {

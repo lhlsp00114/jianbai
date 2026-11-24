@@ -131,14 +131,15 @@ const loading = ref(false);
 const loadError = ref("");
 const previewReadError = ref("");
 const previewReady = ref(false);
-const historyFiles = ref<NodeMediaValue[]>([]);
+const historyFiles = ref<(NodeMediaValue & { modifiedAt?: number })[]>([]);
 const currentFile = computed(() => props.current && { ...props.current, url: props.current.url.replaceAll("\\", "/") });
 const items = computed(() => {
   const results = new Map(historyFiles.value.map(file => [file.url, file]));
   // 副本只补当前结果，不继承原节点目录的全部历史。
   const current = currentFile.value;
-  if (current) results.set(current.url, current);
-  return [...results.values()].sort((left, right) => left.url.localeCompare(right.url, "zh-CN", { numeric: true }));
+  if (current) results.set(current.url, { ...current, modifiedAt: results.get(current.url)?.modifiedAt });
+  return [...results.values()].sort((left, right) => (right.modifiedAt ?? 0) - (left.modifiedAt ?? 0)
+    || left.url.localeCompare(right.url, "zh-CN", { numeric: true }));
 });
 const historyDisabled = computed(() => props.disabled || loading.value || !!loadError.value || items.value.length < 2);
 const mediaLabel = computed(() => props.mediaType === "video" ? "视频" : "图片");
@@ -186,7 +187,7 @@ watch([shouldReadHistory, () => props.inline ? currentUrl.value : undefined], as
   loadError.value = "";
   loading.value = true;
   try {
-    const { entries } = await files.getWorkspaceFiles().list(`assets/${id}`).catch((error: { response?: { data?: { data?: { code?: string } } } }) => {
+    const { entries } = await files.getWorkspaceFiles().list(`assets/${id}`, undefined, { includeModifiedAt: true }).catch((error: { response?: { data?: { data?: { code?: string } } } }) => {
       if (error.response?.data?.data?.code !== "ENOENT") throw error;
       return { entries: [] };
     });
@@ -194,7 +195,7 @@ watch([shouldReadHistory, () => props.inline ? currentUrl.value : undefined], as
     historyFiles.value = entries.flatMap(entry => {
       const mimeType = getMediaMimeType({ name: entry.name, type: "" });
       return entry.type === "file" && mimeType?.startsWith(`${props.mediaType}/`)
-        ? [{ url: entry.path.replaceAll("\\", "/"), mimeType }] : [];
+        ? [{ url: entry.path.replaceAll("\\", "/"), mimeType, modifiedAt: entry.modifiedAt }] : [];
     });
     if (!props.inline) {
       selected.value = currentFile.value ?? items.value[0];

@@ -21,6 +21,11 @@ interface ProviderModel<TRules extends readonly ProviderFormRule[] = readonly Pr
   audio?: "optional" | boolean;
   imageSizes?: string[];
   imageRatios?: string[];
+  maxReferenceImages?: number;
+  maxPromptLength?: number;
+  promptOptional?: boolean;
+  audioOptions?: { nativeParameters: boolean; referenceLimits: Record<string, number> };
+  videoVariants?: { quality?: string; operation: string; mode: VideoMode; imageRatios: string[]; durationResolutionMap: { duration: number[]; resolution: string[] }[] }[];
   durationResolutionMap?: { duration: number[]; resolution: string[] }[];
   voices?: { title: string; voice: string }[];
   /** 模型专属的 form-create JSON 规则，节点表单值作为 request.other 传入。 */
@@ -57,12 +62,16 @@ interface MediaRequest {
 }
 
 /** 抽象层的媒体来源；供应商负责转换为平台需要的 URL、文件或字节。 */
-type MediaInput =
+type MediaInput = (
   | { type: "url"; url: string; mimeType?: string; name?: string }
   | { type: "base64"; data: string; mimeType: string; name?: string }
-  | { type: "binary"; data: Uint8Array; mimeType: string; name?: string };
+  | { type: "binary"; data: Uint8Array; mimeType: string; name?: string }
+) & { metadata?: ProviderPriceReference };
 
-type MediaAsset = MediaInput & { mediaType: "image" | "video" | "audio" };
+type ImageLayerLayout = { name?: string; box?: [number, number, number, number]; zIndex?: number; transparent?: boolean };
+
+type MediaAsset = (MediaInput & { mediaType: "image" | "video" | "audio"; text?: string; imageLayer?: ImageLayerLayout })
+  | { type: "text"; mediaType: "audio"; text: string; mimeType?: "text/plain" };
 
 type MediaImageInfo = { width: number; height: number; format: string };
 type MediaImageResizeOptions = { width?: number; height?: number; format?: "jpeg" | "png" | "webp"; quality?: number };
@@ -152,6 +161,7 @@ interface ImageRequest extends MediaRequest {
 }
 
 interface VideoRequest extends MediaRequest {
+  referenceOrder?: ({ type: "image" | "video" | "audio"; index: number } | { type: "firstFrame" | "lastFrame" | "text" })[];
   prompt: string;
   /** 当前生成模式；参考模式数组声明各类参考媒体数量上限。 */
   mode?: VideoMode;

@@ -15,6 +15,7 @@
     "./imageAgentMenu": "./src/components/imageAgentMenu.vue",
     "./imageSmartEdit": "./src/components/imageSmartEdit.vue",
     "./imageGridSplit": "./src/components/imageGridSplit.vue",
+    "./imageLayerSplit": "./src/components/imageLayerSplit.vue",
     "./imageOutpaint": "./src/imageOutpaint.ts",
     "./outpaint": "./src/components/imageOutpaint.vue"
   },

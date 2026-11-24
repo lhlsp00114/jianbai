@@ -54,7 +54,7 @@
       v-model="flowData"
       @connect="addEdges"
       @edgeClick="showEdgeDisconnect"
-      @paneClick="edgeDisconnect = undefined; assetsVisible = false; nodePanelVisible = false"
+      @paneClick="edgeDisconnect = undefined; assetsVisible = false; nodePanelVisible = false; nodeSearchVisible = false"
       @moveStart="edgeDisconnect = undefined"
       :default-edge-options="defaultEdgeOptions">
       <template #edge-simplebezier="edgeProps">
@@ -78,7 +78,7 @@
       <canvasViewportHint v-if="active && !settingsVisible && project?.directory && canvasReady" :key="canvasId" />
       <canvasMenu ref="canvasMenuRef" v-model:canvasId="canvasId" :menuTarget="menuTarget" :menuHidden="menuHidden" :directory="project?.directory" :initialCanvasId="initialCanvasId" :createDefaultCanvas="createDefaultCanvas" :activateCanvas="activateCanvas" :flushSave="flushCanvases ?? flushCanvasSave">
         <assetLibrary v-if="currentUser?.role !== 'user'" ref="assetLibraryRef" v-model="assetsVisible" :directory="project?.directory" />
-        <nodeSearch ref="nodeSearchRef" :directory="project?.directory" :disabled="!active || settingsVisible || !canvasId || !project?.directory" />
+        <nodeSearch ref="nodeSearchRef" v-model="nodeSearchVisible" :directory="project?.directory" :disabled="!active || settingsVisible || !canvasId || !project?.directory" />
       </canvasMenu>
       <canvasControls
         v-if="canvasId"
@@ -121,6 +121,7 @@
     <workspaceSideToolbar
       v-if="active && canvasId"
       :nodePanelVisible="nodePanelVisible"
+      :nodeSearchVisible="nodeSearchVisible"
       :uploadDisabled="!project?.directory || !canvasReady || settingsVisible"
       :libraryVisible="libraryVisible"
       :assetsVisible="assetsVisible"
@@ -143,7 +144,7 @@
         @fitView="fitViewFromPanel" />
     </section>
     <generationHistory v-model="historyVisible" :directory="project?.directory" :nodeIds="canvasNodeIds" :nodes="generationHistoryNodes" @send="sendHistoryToCanvas" />
-    <creationLibrary v-model="libraryVisible" :officialPromptsOnOpen="!!libraryTarget" :sendToCanvas="sendLibraryToCanvas" />
+    <creationLibrary ref="creationLibraryRef" v-model="libraryVisible" :officialPromptsOnOpen="!!libraryTarget" :sendToCanvas="sendLibraryToCanvas" />
     <el-dialog v-if="currentUser?.role !== 'user'" :modelValue="!!(assetSelection || assetPick)" class="referenceAssetDialog" title="全局素材库" width="min(1200px, 88vw)" alignCenter appendToBody destroyOnClose @update:modelValue="finishAssetSelection(); finishAssetPick()">
       <assetLibrary :modelValue="!!(assetSelection || assetPick)" expanded :canSelect="canSelectAsset" :selecting="assetSelecting" @select="selectAsset" />
     </el-dialog>
@@ -235,7 +236,6 @@ import { readOutpaintPromptInstruction } from "@toonflow/node-image/imageOutpain
 import { filterNodeMenu, resolveNodeMenu } from "@toonflow/server/nodeMenu";
 import { getShortcutBindings, shortcutLabel, shortcutMatches, shortcutPressed } from "@/lib/canvasShortcuts";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
-import anonymousData from "@/lib/anonymousData";
 import { waitForControlValue } from "@/lib/mcpControl";
 import { createClipboardMediaFile, dropCanvasFiles, getCanvasFileType, getClipboardMediaFiles, importCanvasFiles, isCanvasFileDrag } from "./canvasDrop";
 import "@vue-flow/core/dist/style.css";
@@ -309,6 +309,8 @@ const showEdges = ref(true);
 const assetsVisible = ref(false);
 const historyVisible = ref(false);
 const libraryVisible = ref(false);
+const nodeSearchVisible = ref(false);
+const creationLibraryRef = ref<InstanceType<typeof creationLibrary>>();
 const libraryTarget = shallowRef<{ node: GraphNode; canvasId: string; directory: string }>();
 watch(libraryVisible, visible => { if (!visible) libraryTarget.value = undefined; }, { flush: "sync" });
 const nodePanelVisible = ref(false);
@@ -333,9 +335,6 @@ const canvasSaveError = ref("");
 const documentObservers = new Set<() => void>();
 onScopeDispose(() => { for (const release of documentObservers) release(); });
 provide("nodeDocument", nodeDocument);
-onScopeDispose(anonymousData.observeCanvas(() => props.active && canvasId.value
-  ? { nodes: flow.nodes.value, edgeCount: flow.edges.value.length }
-  : undefined));
 let dragCopy: ReturnType<InstanceType<typeof selectionToolbar>["startDragCopy"]>;
 let snapGuideFrame: number | undefined;
 let snapGuideRequest = 0;
@@ -993,8 +992,11 @@ function toggleWorkspaceTool(tool: "nodes" | "upload" | "search" | "library" | "
   if (!props.active || props.settingsVisible) return;
   if (tool === "nodes") nodePanelVisible.value = !nodePanelVisible.value;
   else if (tool === "upload") void uploadFromPanel();
-  else if (tool === "search") nodeSearchRef.value?.open();
-  else if (tool === "library") libraryVisible.value = !libraryVisible.value;
+  else if (tool === "search") nodeSearchRef.value?.toggle();
+  else if (tool === "library") {
+    if (libraryVisible.value) void creationLibraryRef.value?.requestClose();
+    else libraryVisible.value = true;
+  }
   else if (tool === "assets" && currentUser.value?.role !== "user") assetsVisible.value = !assetsVisible.value;
   else if (tool === "history") historyVisible.value = !historyVisible.value;
 }
@@ -1187,6 +1189,7 @@ watch(
       workspaceController = new AbortController();
     }
     nodePanelVisible.value = false;
+    nodeSearchVisible.value = false;
     edgeDisconnect.value = undefined;
     dragCopy = undefined;
     pointerPosition = undefined;

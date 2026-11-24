@@ -1,18 +1,19 @@
 <template>
-  <el-popover v-model:visible="settingsVisible" trigger="click" placement="top-start" width="min(380px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '16px' }">
+  <el-popover v-if="!model?.audioOptions?.nativeParameters || visibleRules?.length" v-model:visible="settingsVisible" trigger="click" placement="top-start" width="min(460px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '20px', borderRadius: '14px' }">
     <template #reference>
       <el-button class="settingsButton" text size="small" :disabled="disabled" :aria-expanded="settingsVisible" aria-label="音频生成设置">
         <icon-adjustments-horizontal :size="15" aria-hidden="true" />
-        <span>{{ languageLabel }} · {{ sampleRate / 1000 }}k · {{ format }}</span>
+        <span>{{ model?.audioOptions?.nativeParameters ? '更多参数' : `${languageLabel} · ${sampleRate / 1000}k · ${format}` }}</span>
         <component :is="settingsVisible ? IconChevronDown : IconChevronUp" :size="14" aria-hidden="true" />
       </el-button>
     </template>
-    <div class="generationSettings nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop @wheel.stop>
+    <div ref="settingsSurface" :id="settingsSurfaceId" class="settingsSurface nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop @wheel.stop>
+    <div v-if="settingsSurface" class="generationSettings">
       <div class="settingsHeader">
         <icon-adjustments-horizontal :size="17" aria-hidden="true" />
-        <span>音频参数</span>
+        <span>{{ model?.audioOptions?.nativeParameters ? taskLabel : '音频参数' }}</span>
       </div>
-      <div class="settingsFields">
+      <div v-if="!model?.audioOptions?.nativeParameters" class="settingsFields">
         <div class="settingField">
           <span class="fieldLabel">语种</span>
           <el-segmented v-model="language" :options="languageOptions" :disabled="disabled" block aria-label="音频语种" />
@@ -26,26 +27,42 @@
           <el-segmented v-model="format" :options="formats" :disabled="disabled" block aria-label="音频输出格式" />
         </div>
       </div>
-      <div class="settingsSummary">{{ languageLabel }} · {{ sampleRate / 1000 }} kHz · {{ formatLabels[format] ?? format }}</div>
-      <modelForm v-model="other" :rules="model?.rules" :disabled="disabled" />
+      <modelForm v-model="visibleValues" :rules="settingsRules" :disabled="disabled" />
+    </div>
     </div>
   </el-popover>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { ElButton, ElPopover, ElSegmented } from "element-plus";
 import { IconAdjustmentsHorizontal, IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
 import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
 import modelForm from "@toonflow/node-shared/modelForm";
-import { languageOptions, sampleRateOptions, formatOptions } from "../audioSettings";
+import { languageOptions, sampleRateOptions, formatOptions, getAudioRules, audioTaskPresentation } from "../audioSettings";
 
-defineProps<{ model?: NodeMediaModel; disabled?: boolean }>();
+const props = defineProps<{ model?: NodeMediaModel; disabled?: boolean; excludedFields?: string[] }>();
 const settingsVisible = ref(false);
+const settingsSurface = ref<HTMLElement>();
+const settingsSurfaceId = `audioSettings${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 const language = defineModel<string>("language", { required: true });
 const sampleRate = defineModel<number>("sampleRate", { required: true });
 const format = defineModel<string>("format", { required: true });
 const other = defineModel<Record<string, unknown>>("other", { required: true });
+const visibleRules = computed<NodeMediaModel["rules"]>(previous => {
+  const rules = getAudioRules(props.model, other.value).filter(rule => !props.excludedFields?.includes(String(rule.field)));
+  return previous?.length === rules.length && rules.every((rule, index) => rule === previous[index]) ? previous : rules;
+});
+const visibleValues = computed({
+  get: () => Object.fromEntries((visibleRules.value ?? []).map(rule => [String(rule.field), other.value[String(rule.field)]])),
+  // 表单只回传当前可见字段，保留切换操作后暂时隐藏的输入。
+  set: (values: Record<string, unknown>) => {
+    if (Object.entries(values).some(([key, value]) => !Object.is(other.value[key], value))) other.value = { ...other.value, ...values };
+  },
+});
+const taskLabel = computed(() => `${audioTaskPresentation(props.model, other.value).action}参数`);
+const settingsRules = computed(() => visibleRules.value?.map(rule => rule.type === "select" ? { ...rule,
+  props: { ...rule.props, teleported: true, appendTo: `#${settingsSurfaceId}`, placement: "top-start", fallbackPlacements: ["top-start", "top-end"] } } : rule));
 const formatLabels: Record<string, string> = { wav: "WAV", mp3: "MP3", pcm: "PCM", ogg_opus: "Ogg Opus" };
 const sampleRates = sampleRateOptions.map(value => ({ label: `${value / 1000}k`, value }));
 const formats = formatOptions.map(value => ({ label: value === "ogg_opus" ? "Opus" : formatLabels[value], value }));
@@ -60,6 +77,18 @@ const languageLabel = computed(() => languageOptions.find(item => item.value ===
 
 .generationSettings {
   text-align: left;
+  max-height: min(560px, 65vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  :deep(.modelForm) {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    .el-row { column-gap: 16px; }
+    .el-col { flex: 0 0 calc(50% - 8px); max-width: calc(50% - 8px); }
+    .el-col:has(.el-textarea), .el-col:has(.el-input):not(:has(.el-select)):not(:has(.el-input-number)) { flex-basis: 100%; max-width: 100%; }
+  }
 
   .settingsHeader {
     display: flex;

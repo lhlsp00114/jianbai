@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./generationSettings.scss": "./src/generationSettings.scss",
+    "./videoModelOptions": "./src/videoModelOptions.ts",
     "./directorIcon": "./src/components/directorIcon.vue",
     "./textNodeIcon": "./src/components/textNodeIcon.vue",
     "./videoIcon": "./src/components/videoIcon.vue",

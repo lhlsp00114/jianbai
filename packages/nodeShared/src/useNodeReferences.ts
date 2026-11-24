@@ -5,6 +5,10 @@ import { isTypeCompatible, validateConnection, type NodeData } from "@toonflow/n
 import { useNodeEvent } from "@toonflow/nodes-scaffold/nodeEvent";
 import { isNodeOutput, type NodeInputValue, type NodeMediaValue } from "@toonflow/nodes-scaffold/values";
 import type { MentionItem } from "x-sender";
+import type { NodeMediaModel } from "@toonflow/nodes-scaffold/nodeAi";
+import type { Connection, ValidConnectionFunc } from "@vue-flow/core";
+import { showNodeError } from "./showNodeError";
+import { videoReferenceLimits } from "./videoModelOptions";
 
 export type ReferenceMention = MentionItem & { value: string; label?: string; dataType?: string; previewable?: boolean };
 export type MaterialMention = {
@@ -22,10 +26,51 @@ render(h(IconMusic, { color: "#409eff" }), audioIconElement);
 const audioAvatar = `data:image/svg+xml,${encodeURIComponent(audioIconElement.innerHTML)}`;
 render(null, audioIconElement);
 
-export function useNodeReferences(handleId = "in") {
+export function useNodeReferences(handleId = "in", getModel?: () => NodeMediaModel | undefined, getMode?: () => string | string[] | undefined) {
   const { id, node } = useNode<NodeData & { referenceOrder?: Record<string, string[]> }>();
   const flow = useVueFlow();
   const { findNode, removeEdges } = flow;
+  function mediaLimitError(type: "IMAGE" | "VIDEO" | "AUDIO", count: number) {
+    const limit = getMode ? videoReferenceLimits(getMode())[type] : type === "IMAGE" ? getModel?.()?.maxReferenceImages : undefined;
+    const label = { IMAGE: "图片", VIDEO: "视频", AUDIO: "音频" }[type];
+    if (limit === 0) return `当前模型和模式不支持${label}参考，请切换模式后添加。`;
+    if (limit !== undefined && count >= limit) return `当前模型和模式最多支持 ${limit} 个${label}素材，请移除已有素材或切换模式。`;
+  }
+  function referenceLimitError(connection: Connection, context: Parameters<ValidConnectionFunc>[1]) {
+    // 视频连线保留全部素材，由节点按当前模式置暗并排除超额项，避免整组连线被数量限制拒绝。
+    if (getMode) return;
+    if (connection.target !== id || connection.targetHandle !== handleId) return;
+    const hasType = (source: string, sourceHandle: string | null | undefined, mediaType: string) => {
+      const data = context.nodes.find(item => item.id === source)?.data as NodeData | undefined;
+      const output = sourceHandle ? data?.outputs?.[sourceHandle] : undefined;
+      if (isNodeOutput(output)) return output.dataType === mediaType;
+      const type = data?.handles?.find(item => item.id === sourceHandle && item.type === "source")?.dataType;
+      return Array.isArray(type) ? type.includes(mediaType) : type?.split(",").map(item => item.trim()).includes(mediaType);
+    };
+    const incoming = context.edges.filter(edge => edge.target === id && edge.targetHandle === handleId);
+    if (incoming.some(edge => edge.source === connection.source && edge.sourceHandle === connection.sourceHandle)) return;
+    for (const type of ["IMAGE", "VIDEO", "AUDIO"] as const) {
+      if (!hasType(connection.source, connection.sourceHandle, type)) continue;
+      const error = mediaLimitError(type, incoming.filter(edge => hasType(edge.source, edge.sourceHandle, type)).length);
+      if (error) return error;
+    }
+  }
+  if (getModel && !getMode) {
+    useNodeEvent().on("canConnect", (connection, context) => !referenceLimitError(connection, context));
+    flow.onConnectEnd(() => {
+      const start = flow.connectionStartHandle.value;
+      const end = flow.connectionEndHandle.value;
+      if (!start || !end) return;
+      const source = start.type === "source" ? start : end;
+      const target = start.type === "target" ? start : end;
+      if (target.nodeId !== id || target.id !== handleId) return;
+      const sourceNode = findNode(source.nodeId);
+      if (!sourceNode) return;
+      const message = referenceLimitError({ source: source.nodeId, sourceHandle: source.id, target: id, targetHandle: handleId },
+        { sourceNode, targetNode: node, nodes: flow.getNodes.value, edges: flow.getEdges.value });
+      if (message) showNodeError(message, "参考素材不符合要求");
+    });
+  }
   const selectNodeAsset = inject<((targetId: string, targetHandleId: string) => Promise<{ source: string; sourceHandle: string } | undefined>) | undefined>("selectNodeAsset", undefined);
   let disposed = false;
   onScopeDispose(() => { disposed = true; });
@@ -78,6 +123,7 @@ export function useNodeReferences(handleId = "in") {
           disabled: !valid || (output.dataType === "STRING" && !output.value.trim()) || !flow.nodesConnectable.value
             || !targetHandle || !isTypeCompatible(output.dataType, targetHandle.dataType)
             || sourceNode.connectable === false || node.connectable === false
+            || !!referenceLimitError(connection, { sourceNode, targetNode: node, nodes: flow.getNodes.value, edges: flow.getEdges.value })
             || !validateConnection(connection, { sourceNode, targetNode: node, nodes: flow.getNodes.value, edges: flow.getEdges.value }),
           media: valid && (output.dataType === "IMAGE" || output.dataType === "VIDEO" || output.dataType === "AUDIO") ? output.value : undefined,
         }];
@@ -120,7 +166,8 @@ export function useNodeReferences(handleId = "in") {
     ));
   }
 
-  return { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference };
+  const referenceUploadError = () => mediaLimitError("IMAGE", refList.value.filter(item => item.dataType === "IMAGE").length);
+  return { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference, referenceUploadError };
 }
 
 export function referenceKey(item: { source: string; sourceHandle: string }) {

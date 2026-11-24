@@ -1,6 +1,6 @@
 <template>
   <div v-click-outside:[clickOutsideExclude]="closeMenu" class="mentionMenu" @keydown.capture="handleKeydown">
-    <el-button class="mentionButton" text circle :disabled="disabled" :aria-expanded="visible" :aria-controls="listId" aria-label="提及节点输出或素材" title="提及节点输出或素材" @mousedown.prevent @click="visible ? closeMenu() : openMenu()"><icon-at :size="16" /></el-button>
+    <span class="mentionButton" aria-hidden="true"></span>
     <teleport to="body">
       <div v-if="visible" ref="popupElement" class="mentionMenu mentionOverlay" :style="popupStyle" @keydown.capture="handleKeydown">
         <el-card class="mentionPopup" shadow="always" :bodyStyle="{ padding: '0' }" :style="{ maxHeight: `${popupHeight}px` }">
@@ -44,7 +44,7 @@ import { translate } from "@toonflow/i18n/vue";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch, type CSSProperties } from "vue";
 import { ClickOutside as vClickOutside, type ScrollbarInstance } from "element-plus";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { IconAt, IconBox, IconCheck, IconChevronLeft, IconChevronRight, IconFileText, IconFolder, IconVector, IconVideo, IconMusic, IconPhoto, IconSearch, IconX } from "@tabler/icons-vue";
+import { IconBox, IconCheck, IconChevronLeft, IconChevronRight, IconFileText, IconFolder, IconVector, IconVideo, IconMusic, IconPhoto, IconSearch, IconX } from "@tabler/icons-vue";
 import type { AgentMention } from "@toonflow/server/agent/types";
 import { mentionAssetType } from "@toonflow/server/agent/mentionSources";
 import { useMentionSources, type MentionAsset, type MentionNode, type MentionOutput } from "./mentionSources";
@@ -390,7 +390,7 @@ defineExpose({ handleKeydown, openMenu, closeMenu });
 
   &.mentionOverlay { position: fixed; z-index: 3001; font-size: 13px; }
 
-  .mentionButton { width: 24px; height: 24px; padding: 0; }
+  .mentionButton { width: 24px; height: 24px; }
 
   .mentionPopup {
     min-width: 0;

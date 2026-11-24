@@ -88,6 +88,11 @@ export interface MediaModel {
   mode?: unknown;
   imageSizes?: string[];
   imageRatios?: string[];
+  maxReferenceImages?: number;
+  maxPromptLength?: number;
+  promptOptional?: boolean;
+  audioOptions?: { nativeParameters: boolean; referenceLimits: Record<string, number> };
+  videoVariants?: { quality?: string; operation: string; mode: string | string[]; imageRatios: string[]; durationResolutionMap: { duration: number[]; resolution: string[] }[] }[];
   durationResolutionMap?: { duration: number[]; resolution: string[] }[];
   audio?: boolean | "optional";
   voices?: { title: string; voice: string }[];
@@ -135,6 +140,10 @@ export interface GeneratedMedia {
   path: string;
   mimeType: string;
   mediaType: "image" | "video" | "audio";
+  /** 音频任务附带的转写文本、歌词或音色标识；纯文本结果使用 text/plain。 */
+  text?: string;
+  /** 图层在原画布中的归一化边界 [left, top, right, bottom]，范围 0–1。 */
+  imageLayer?: { name?: string; box?: [number, number, number, number]; zIndex?: number; transparent?: boolean };
 }
 
 export interface MediaContext {

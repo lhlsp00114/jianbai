@@ -1,6 +1,5 @@
 <template>
   <div class="home" :class="{ sidebarCollapsed }" :inert="creating || opening || workspaceStore.projectLoadingVisible">
-    <homeAdvertisementCarousel class="topPromotion" :advertisements="advertisements.banners" placement="banner" :mode="advertisements.bannerMode" :interval="advertisements.bannerInterval" @activate="activateAdvertisement" />
     <aside id="homeSidebar" class="homeSidebar" aria-label="首页侧栏">
       <div class="sidebarHeader">
         <div class="sidebarBrand">
@@ -25,7 +24,6 @@
         </button>
       </nav>
       <div class="sidebarFooter">
-        <homeAdvertisementCarousel class="sidebarPromotion" :advertisements="advertisements.sidebar" @activate="activateAdvertisement" />
         <button v-if="!publicWeb" class="sidebarItem deviceButton" :class="{ connected: deviceHubEnabled || mobileConnection.online === true }" type="button" :aria-label="mobileConnectionLabel" :title="mobileConnectionLabel" @click="mobileConnectVisible = true">
           <span class="sidebarIcon">
             <component :is="deviceHubEnabled || mobileConnection.mode === 'remote' ? IconDeviceDesktop : IconQrcode" :size="18" aria-hidden="true" />
@@ -46,7 +44,26 @@
         </a>
       </div>
     </aside>
-    <main v-if="activeSection === 'tools'" class="pageScroll" aria-label="工具" />
+    <main v-show="activeSection === 'tools'" class="pageScroll toolPage" aria-label="工具">
+      <section v-show="!oriPatchVisible" class="toolCatalog" aria-labelledby="toolCatalogTitle">
+        <h1 id="toolCatalogTitle">工具</h1>
+        <button class="toolCard" type="button" @click="openOriPatch">
+          <span class="toolIcon"><icon-photo :size="22" aria-hidden="true" /></span>
+          <span class="toolInfo">
+            <strong>改图细节还原</strong>
+            <span>保留 AI 修改区域，找回原图的清晰细节</span>
+          </span>
+          <icon-chevron-right class="toolArrow" :size="18" aria-hidden="true" />
+        </button>
+      </section>
+      <section v-if="oriPatchOpened" v-show="oriPatchVisible" class="toolWorkspace" aria-label="改图细节还原">
+        <header class="toolHeader">
+          <el-button text circle :icon="IconArrowLeft" aria-label="返回工具列表" title="返回工具列表" @click="oriPatchVisible = false" />
+          <strong>改图细节还原</strong>
+        </header>
+        <iframe class="toolFrame" src="/tools/oripatch/index.html" title="改图细节还原" />
+      </section>
+    </main>
     <photoCraft v-if="photoCraftOpened" v-model:dirty="photoCraftDirty" :class="{ backgroundEditor: activeSection !== 'photoCraft' }" :inert="activeSection !== 'photoCraft'" :aria-hidden="activeSection !== 'photoCraft'" />
     <el-scrollbar v-if="activeSection === 'trumanMap'" class="pageScroll">
       <div class="pageBody">
@@ -94,8 +111,8 @@
           <section class="projectList" data-home-section="projects" aria-labelledby="projectListTitle">
             <h2 id="projectListTitle" class="projectTabs">
               <button type="button" :class="{ active: projectFilter === 'all' }" :aria-pressed="projectFilter === 'all'" aria-controls="projectListContent" @click="scrollToSection('projects')">全部</button>
-              <button type="button" :class="{ active: projectFilter === 'infiniteCanvas' }" :aria-pressed="projectFilter === 'infiniteCanvas'" aria-controls="projectListContent" @click="scrollToSection('infiniteCanvas')">无限画布</button>
-              <button type="button" :class="{ active: projectFilter === 'infiniteComic' }" :aria-pressed="projectFilter === 'infiniteComic'" aria-controls="projectListContent" @click="scrollToSection('infiniteComic')">无限漫画</button>
+              <button v-if="activeSection !== 'infiniteComic'" type="button" :class="{ active: projectFilter === 'infiniteCanvas' }" :aria-pressed="projectFilter === 'infiniteCanvas'" aria-controls="projectListContent" @click="scrollToSection('infiniteCanvas')">无限画布</button>
+              <button v-if="activeSection !== 'infiniteCanvas'" type="button" :class="{ active: projectFilter === 'infiniteComic' }" :aria-pressed="projectFilter === 'infiniteComic'" aria-controls="projectListContent" @click="scrollToSection('infiniteComic')">无限漫画</button>
               <button type="button" :class="{ active: projectFilter === 'team' }" :aria-pressed="projectFilter === 'team'" aria-controls="projectListContent" @click="scrollToSection('team')">团队项目</button>
             </h2>
             <div id="projectListContent" class="projectItems">
@@ -125,7 +142,7 @@
       </div>
     </el-scrollbar>
     <assetLibraryDialog v-if="currentUser?.role !== 'user'" v-model="assetsVisible" />
-    <settings ref="settingsDialog" v-model="settingsVisible" />
+    <settings v-model="settingsVisible" />
     <mobileConnect v-if="!publicWeb" v-model="mobileConnectVisible" />
     <workspacePicker ref="relocationPicker" hideTrigger />
   </div>
@@ -141,15 +158,14 @@ import { ElMessage, ElMessageBox, type InputInstance, type ScrollbarInstance } f
 import { getReadableFileMimeType, readableFileAccept } from "@toonflow/server/documentFormats";
 import {
   IconQrcode, IconDeviceDesktop, IconHome, IconCompass,
-  IconArrowUp, IconPlus, IconLoader2,
+  IconArrowUp, IconArrowLeft, IconChevronRight, IconPlus, IconLoader2,
   IconFolder, IconEdit, IconFileZip, IconTools,
-  IconTrash, IconPaperclip, IconInfinity, IconLayoutBoard,
+  IconTrash, IconPaperclip, IconInfinity, IconLayoutBoard, IconPhoto,
 } from "@tabler/icons-vue";
 import modelPopover from "@/components/modelPopover.vue";
 import attachmentList from "@/components/agent/attachmentList.vue";
 import { createPastedTextFile, readTextAttachment } from "@/components/agent/textAttachments";
 import type { AgentAttachment } from "@/components/agent/types";
-import type { HomeAdvertisement, HomeAdvertisements } from "@toonflow/server/channel";
 import logoUrl from "@toonflow/assets/jianbaiLogo.svg";
 import { useWorkspaceStore, type Project } from "@/stores/workspace";
 import { currentUser, publicWeb } from "@/stores/multiTenant";
@@ -157,7 +173,6 @@ import { hasDesktopUpdate } from "@/stores/desktopUpdate";
 import { deviceHubEnabled, mobileConnection, mobileConnectionLabel } from "@/lib/mobile";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
 import saveFile from "@/lib/saveFile";
-import http from "@/lib/http";
 import { waitForControlValue } from "@/lib/mcpControl";
 import settings from "@/components/settings/index.vue";
 import assetLibraryDialog from "./assetLibraryDialog.vue";
@@ -165,13 +180,10 @@ import explore from "./pages/explore/index.vue";
 const trumanMapPage = defineAsyncComponent(() => import("./pages/trumanMap/index.vue"));
 import projectCard from "./pages/projects/projectCard.vue";
 import workspacePicker from "./workspacePicker.vue";
-import homeAdvertisementCarousel from "./homeAdvertisementCarousel.vue";
 import photoCraft from "./photoCraft.vue";
 import { comicFileName, createComicProject } from "@/pages/infiniteComic/comicProject";
 
 const settingsVisible = ref(false);
-const settingsDialog = ref<InstanceType<typeof settings>>();
-const advertisements = ref<HomeAdvertisements>({ banner: null, banners: [], bannerMode: "carousel", bannerInterval: 5, sidebar: [] });
 const assetsVisible = ref(false);
 const mobileConnectVisible = ref(false);
 const sidebarCollapsed = ref(false);
@@ -179,6 +191,8 @@ const pageScroll = ref<ScrollbarInstance>();
 const activeSection = ref("home");
 const photoCraftOpened = ref(false);
 const photoCraftDirty = ref(false);
+const oriPatchVisible = ref(false);
+const oriPatchOpened = ref(false);
 const homeSections = [
   { id: "home", label: "首页", icon: IconHome },
   { id: "infiniteCanvas", label: "无限画布", icon: IconInfinity },
@@ -240,11 +254,15 @@ const placeholderPhrases = [
 ];
 const promptPlaceholder = ref(translate(placeholderPhrases[0]!));
 
+function openOriPatch() {
+  oriPatchOpened.value = true;
+  oriPatchVisible.value = true;
+}
+
 onMounted(() => {
   watch(() => router.currentRoute.value.query.section, section => {
     if (typeof section === "string" && homeSections.some(item => item.id === section)) void scrollToSection(section);
   }, { immediate: true });
-  void loadAdvertisements();
   window.addEventListener("dragend", clearAttachmentDrag, true);
   window.addEventListener("drop", clearAttachmentDrag, true);
   window.addEventListener("blur", clearAttachmentDrag);
@@ -309,114 +327,6 @@ const sortedProjects = computed(() => projectList.value
   .filter(project => projectFilter.value === "all"
     || (project.projectKind ?? "infiniteCanvas") === projectFilter.value)
   .sort((left, right) => right.lastOpenedAt - left.lastOpenedAt));
-
-async function loadAdvertisements() {
-  // ACT: 默认读取后台配置；开发环境显式指定预览模式时才使用临时预览。
-  const preview = router.currentRoute.value.query.advertisementPreview;
-  if (import.meta.env.DEV && typeof preview === "string" && ["text", "image", "web", "carousel", "stack"].includes(preview)) {
-    const now = Date.now();
-    const previewSlides: { title: string; subtitle: string; color: string; actionType: HomeAdvertisement["actionType"]; actionTarget: string }[] = [
-      { title: "探索创作灵感", subtitle: "从一个想法，开始你的下一个作品", color: "#273442", actionType: preview === "web" ? "web" : "path", actionTarget: preview === "web" ? "https://github.com/lhlsp00114/jianbai" : "/home?section=explore" },
-      { title: "搭建你的工作流", subtitle: "前往插件市场，发现更多创作工具", color: "#2c303b", actionType: "settings", actionTarget: "pluginMarket" },
-      { title: "一起创造更多", subtitle: "在 GitHub 了解 Toonflow 的新进展", color: "#243734", actionType: "web", actionTarget: "https://github.com/lhlsp00114/jianbai" },
-    ];
-    const sidebar = previewSlides.map((slide, index): HomeAdvertisement => ({
-      title: slide.title,
-      content: "",
-      imageUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
-        <defs><linearGradient id="background" x2="1" y2="1"><stop stop-color="${slide.color}"/><stop offset="1" stop-color="#13202f"/></linearGradient></defs>
-        <rect width="640" height="360" fill="url(#background)"/>
-        <circle cx="562" cy="60" r="150" fill="#409eff" opacity=".15"/>
-        <path d="M330 235H400V160H485" fill="none" stroke="#6db5ff" stroke-width="4"/>
-        <rect x="280" y="205" width="100" height="64" rx="12" fill="#337ecc"/>
-        <rect x="450" y="125" width="110" height="70" rx="12" fill="#409eff"/>
-        <circle cx="330" cy="237" r="12" fill="#fff" opacity=".85"/>
-        <path d="m495 146 25 14-25 14z" fill="#fff"/>
-        <g fill="#fff" font-family="Arial, Microsoft YaHei, sans-serif">
-          <text x="40" y="58" font-size="17" letter-spacing="3" opacity=".7">见白 · PREVIEW</text>
-          <text x="40" y="136" font-size="38" font-weight="bold">${slide.title}</text>
-          <text x="40" y="177" font-size="19" opacity=".7">${slide.subtitle}</text>
-          <text x="40" y="303" font-size="16" opacity=".6">侧栏轮播预览 · ${index + 1} / 3</text>
-        </g>
-      </svg>`)}`,
-      buttonText: "",
-      actionType: slide.actionType,
-      actionTarget: slide.actionTarget,
-      endsAt: null,
-      updatedAt: now,
-    }));
-    const bannerImage = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="40" viewBox="0 0 1000 40">
-        <rect width="1000" height="40" rx="4" fill="#23262b"/>
-        <g fill="#d8dce3" font-family="Arial, Microsoft YaHei, sans-serif">
-          <text x="12" y="25" font-size="14" font-weight="500">创作灵感，从这里开始</text>
-          <text x="178" y="25" font-size="12" opacity=".65">探索更多工具，开始你的下一个作品</text>
-        </g>
-      </svg>`)}`;
-    const banner: HomeAdvertisement = {
-      title: "创作灵感，从这里开始",
-      content: "探索 **节点与技能**，开始你的下一个作品。\n[创作灵感](/home?section=explore) · [插件市场](settings:pluginMarket) · [项目主页](https://github.com/lhlsp00114/jianbai)",
-      imageUrl: preview === "image" ? bannerImage : "",
-      buttonText: "发现工具",
-      actionType: "settings",
-      actionTarget: "pluginMarket",
-      endsAt: now + 2 * 86400000 + 3 * 3600000,
-      updatedAt: now,
-      appearance: { mode: preview === "image" ? "image" : "text", backgroundColor: "", backgroundEndColor: "", textColor: "", buttonColor: "", buttonTextColor: "" },
-    };
-    const banners = preview === "carousel" || preview === "stack"
-      ? previewSlides.map((slide, index): HomeAdvertisement => ({ ...banner, title: slide.title, content: index === 0 ? banner.content : slide.subtitle, buttonText: "立即查看", actionType: slide.actionType, actionTarget: slide.actionTarget }))
-      : [banner];
-    advertisements.value = {
-      banner: banners[0] ?? null,
-      banners,
-      bannerMode: preview === "stack" ? "stack" : "carousel",
-      bannerInterval: 5,
-      sidebar,
-    };
-    return;
-  }
-  try {
-    const result = await http<HomeAdvertisements>({ method: "GET", url: "/api/channel/community/getAdvertisements", signal: pageLifetime.signal });
-    if (!pageLifetime.signal.aborted) {
-      const isAccountPromotion = (item: HomeAdvertisement) => item.actionType === "settings" && item.actionTarget === "account";
-      const banners = result.banners.filter(item => !isAccountPromotion(item));
-      advertisements.value = { ...result, banner: banners[0] ?? null, banners, sidebar: result.sidebar.filter(item => !isAccountPromotion(item)) };
-    }
-  } catch (error) {
-    if (!pageLifetime.signal.aborted) console.warn("加载首页广告失败", error);
-  }
-}
-
-async function activateAdvertisement(advertisement: HomeAdvertisement) {
-  if (advertisement.actionType === "settings") {
-    if (!settingsDialog.value?.openPanel(advertisement.actionTarget)) ElMessage.warning("当前设备不支持该设置项");
-    return;
-  }
-  if (advertisement.actionType !== "path") return;
-  const target = advertisement.actionTarget;
-  if (!target.startsWith("/") || target.startsWith("//") || /[\\\u0000-\u0020]/.test(target)) return;
-  const resolved = router.resolve(target);
-  if (!resolved.matched.length) {
-    ElMessage.warning("当前版本不支持该页面");
-    return;
-  }
-  if (resolved.matched.some(route => ["/workspace", "/canvas"].includes(route.path)) && !workspaceStore.project?.directory) {
-    ElMessage.info("请先打开一个项目");
-    return;
-  }
-  try {
-    await router.push(target);
-    if (resolved.matched.some(route => route.path === "/home")) {
-      await nextTick();
-      const section = typeof resolved.query.section === "string" ? resolved.query.section : resolved.hash.slice(1);
-      scrollToSection(homeSections.some(item => item.id === section) ? section : "home");
-    }
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "无法打开页面");
-  }
-}
 
 async function scrollToSection(section: string) {
   activeSection.value = section;
@@ -667,7 +577,7 @@ async function createProject(fromPrompt = true) {
   position: relative;
   display: grid;
   grid-template-columns: var(--sidebarWidth) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
   color: var(--el-text-color-primary);
@@ -676,13 +586,10 @@ async function createProject(fromPrompt = true) {
 
   @media (prefers-reduced-motion: reduce) { transition: none; }
 
-  .topPromotion { grid-column: 1 / -1; grid-row: 1; z-index: 1; }
-
   &.sidebarCollapsed {
     --sidebarWidth: 72px;
 
     .homeSidebar {
-      .sidebarPromotion { display: none; }
       .sidebarHeader {
         .sidebarBrand {
           gap: 0;
@@ -712,15 +619,14 @@ async function createProject(fromPrompt = true) {
   .homeSidebar {
     position: relative;
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 1;
     min-height: 0;
     display: flex;
     flex: 0 0 var(--sidebarWidth);
     flex-direction: column;
     width: var(--sidebarWidth);
     padding: 20px 12px 16px;
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: hidden;
     border-inline-end: 1px solid var(--el-border-color-lighter);
     background: inherit;
     transition: flex-basis var(--sidebarMotion) ease, width var(--sidebarMotion) ease;
@@ -867,6 +773,13 @@ async function createProject(fromPrompt = true) {
 
     .sidebarNav, .sidebarFooter { display: flex; flex-direction: column; gap: 4px; }
     .sidebarNav {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+
       .sidebarDivider { margin: 12px 8px; border: 0; border-top: 1px solid var(--el-border-color-lighter); }
     }
     .sidebarFooter { margin-top: auto; padding-top: 24px; }
@@ -879,13 +792,59 @@ async function createProject(fromPrompt = true) {
 
   .pageScroll {
     grid-column: 2;
-    grid-row: 2;
+    grid-row: 1;
     position: relative;
     flex: 1;
     min-width: 0;
     height: 100%;
 
     :deep(.el-scrollbar__view) { min-height: 100%; }
+
+    &.toolPage {
+      overflow: hidden;
+
+      .toolCatalog {
+        height: 100%;
+        box-sizing: border-box;
+        padding: 32px clamp(20px, 4vw, 56px);
+
+        h1 { margin: 0 0 24px; font-size: 22px; font-weight: 600; }
+
+        .toolCard {
+          display: flex;
+          align-items: center;
+          width: min(100%, 420px);
+          min-height: 88px;
+          gap: 14px;
+          padding: 16px;
+          border: 1px solid var(--el-border-color-lighter);
+          border-radius: 8px;
+          background: var(--el-bg-color-overlay);
+          color: var(--el-text-color-primary);
+          text-align: left;
+          cursor: pointer;
+
+          &:hover { border-color: var(--el-border-color); background: var(--el-fill-color-light); }
+          &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
+
+          .toolIcon { display: grid; flex: 0 0 40px; height: 40px; place-items: center; border-radius: 8px; background: var(--el-fill-color); color: var(--el-text-color-regular); }
+          .toolInfo { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 5px; }
+          .toolInfo strong { font-size: 14px; font-weight: 550; }
+          .toolInfo span { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.5; }
+          .toolArrow { flex: 0 0 auto; color: var(--el-text-color-secondary); }
+        }
+      }
+
+      .toolWorkspace {
+        display: grid;
+        grid-template-rows: 48px minmax(0, 1fr);
+        height: 100%;
+
+        .toolHeader { display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--el-border-color-lighter); }
+        .toolHeader strong { font-size: 14px; font-weight: 550; }
+        .toolFrame { width: 100%; height: 100%; border: 0; background: #111215; }
+      }
+    }
 
     .pageBody {
       position: relative;
@@ -1226,7 +1185,6 @@ async function createProject(fromPrompt = true) {
     --sidebarWidth: 72px;
 
     .homeSidebar {
-      .sidebarPromotion { display: none; }
       .sidebarHeader {
         .sidebarBrand {
           gap: 0;

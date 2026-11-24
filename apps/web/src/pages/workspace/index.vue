@@ -79,7 +79,6 @@ import { generalSettings } from "@/stores/settings";
 import { shortcutLabel, canvasShortcutFields } from "@/lib/canvasShortcuts";
 import type { CanvasTextHistory } from "@toonflow/node-shared/canvasTextHistory";
 import { registerWorkspaceControl, waitForControlValue } from "@/lib/mcpControl";
-import anonymousData from "@/lib/anonymousData";
 import { useProviderBalances } from "@/lib/providerBilling";
 import canvasPanel from "./panels/canvas/canvasHost.vue";
 import type { DocumentNodeOptions } from "./panels/canvas/canvasFiles";
@@ -127,7 +126,6 @@ function preventSideButtonNavigation(event: MouseEvent) {
   if (event.button === 3 || event.button === 4) event.preventDefault();
 }
 onMounted(() => {
-  anonymousData.track(activePanel.value === "canvas" ? "workspace.canvas" : "workspace.document");
   void openInitialWorkspaceTool();
   document.addEventListener("pointerdown", clearTextHistory, true);
   document.addEventListener("focusin", clearTextHistory, true);
@@ -312,11 +310,9 @@ async function switchPanel(value: string | number | boolean) {
   if (value !== "canvas" && value !== "document") return false;
   try {
     if (activePanel.value === "document") await documentPanelRef.value?.flushSave();
-    const changed = activePanel.value !== value;
     if (value === "canvas" && !canvasPanelRef.value?.canvasId) createDefaultCanvas.value = true;
     activePanel.value = value;
     await nextTick();
-    if (changed) anonymousData.track(value === "canvas" ? "workspace.canvas" : "workspace.document");
     return true;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "文本保存失败");

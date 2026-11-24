@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readdirSync } from "@toonflow/file";
+import { existsSync, readdirSync, writeAtomic } from "@toonflow/file";
 import { file } from "@toonflow/file/bun";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -19,8 +19,19 @@ const dependencies = await file(resolve(import.meta.dir, "../../../.hutch/depend
 const toolchain = dependencies.objects.find((item: { type: string; toolchain?: string; platform: string }) =>
   item.type === "toolchain" && item.toolchain === "bun" && item.platform === `windows-${process.arch}`);
 const source = join(process.env.HUTCH_HOME ?? join(homedir(), ".hutch"), toolchain.relativeRoot, "bun.exe");
-if (new Bun.CryptoHasher("sha256").update(await file(source).arrayBuffer()).digest("hex") !== runtime.executableSha256) {
+const executable = new Uint8Array(await file(source).arrayBuffer());
+if (new Bun.CryptoHasher("sha256").update(executable).digest("hex") !== runtime.executableSha256) {
   throw new Error(`SDK 托管的 Bun 与下载校验清单不一致，已停止构建：${source}`);
 }
-copyFileSync(source, targets[0]!);
+// ACT: SDK 刚嵌入图标时，Windows 可能暂时阻止替换可执行文件。
+for (let attempt = 0; ; attempt++) {
+  try {
+    await writeAtomic(targets[0]!, executable);
+    break;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (attempt === 5 || (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES")) throw error;
+    await Bun.sleep(500 * (attempt + 1));
+  }
+}
 console.log(`已恢复官方 Bun 运行时：${targets[0]}`);

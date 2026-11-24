@@ -15,8 +15,8 @@
       :labelTextReference="insertImages && item.dataType === 'STRING'"
       :insertable="insertImages && item.dataType === 'IMAGE' && !!item.value"
       :index="index + 1"
-      :class="{ inactiveReference: inactiveMedia && isMedia(item) }"
-      :title="inactiveMedia && isMedia(item) ? '文生视频模式：此素材不会上传，连线保留' : undefined"
+      :class="{ inactiveReference: (inactiveMedia && isMedia(item)) || inactiveIndices?.includes(index) }"
+      :title="(inactiveMedia && isMedia(item)) || inactiveIndices?.includes(index) ? '当前模式不使用此素材，不会上传，连线保留' : undefined"
       tabindex="0"
       :aria-keyshortcuts="insertImages && item.dataType === 'IMAGE' && item.value ? 'Alt+ArrowLeft Alt+ArrowRight Shift+Enter' : 'Alt+ArrowLeft Alt+ArrowRight'"
       @keydown.alt.left.stop.prevent="moveReference(index, index - 1)"
@@ -32,7 +32,7 @@ import { VueDraggable } from "vue-draggable-plus";
 import type { NodeInputValue } from "@toonflow/nodes-scaffold/values";
 import referenceCard from "./referenceCard.vue";
 
-defineProps<{ inactiveMedia?: boolean; insertImages?: boolean }>();
+defineProps<{ inactiveMedia?: boolean; inactiveIndices?: number[]; insertImages?: boolean }>();
 const items = defineModel<NodeInputValue[]>({ required: true });
 const emit = defineEmits<{ remove: [item: NodeInputValue]; preview: [item: NodeInputValue, url: string]; insert: [item: NodeInputValue] }>();
 

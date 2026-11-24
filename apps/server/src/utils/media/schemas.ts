@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+export const imageLayerSchema = z.strictObject({
+  name: z.string().max(1000).optional(),
+  box: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1)])
+    .refine(box => box[2] > box[0] && box[3] > box[1]).optional(),
+  zIndex: z.number().finite().optional(),
+  transparent: z.boolean().optional(),
+});
+
 const relativePath = z.string().min(1).max(2048).refine(
   path => !/^[\\/]|[:\u0000-\u001f]/.test(path) && path.split(/[\\/]/).every(part => part && part !== "." && part !== ".."),
   "路径必须是工作区内的相对路径，不能包含空路径段或 ..",
@@ -21,10 +29,12 @@ const referenceMode = z.templateLiteral([z.enum(["image", "video", "audio"]), "R
 
 export const imageGenerationSchema = z.strictObject({
   ...sharedFields,
+  ratio: z.union([z.literal("auto"), sharedFields.ratio]).optional(),
   size: z.string().trim().min(1).max(64).optional(),
 });
 export const videoGenerationSchema = z.strictObject({
   ...sharedFields,
+  ratio: z.union([z.literal("adaptive"), sharedFields.ratio]).optional(),
   referenceOrder: z.array(z.union([
     z.strictObject({ type: z.enum(["image", "video", "audio"]), index: z.number().int().min(0).max(63) }),
     z.strictObject({ type: z.enum(["firstFrame", "lastFrame", "text"]) }),
@@ -44,7 +54,7 @@ export const videoGenerationSchema = z.strictObject({
 export const audioGenerationSchema = z.strictObject({
   providerId: sharedFields.providerId,
   modelId: sharedFields.modelId,
-  prompt: sharedFields.prompt,
+  prompt: z.string().trim().max(100000),
   other: sharedFields.other,
   outputDirectory: sharedFields.outputDirectory,
   images: sharedFields.images,

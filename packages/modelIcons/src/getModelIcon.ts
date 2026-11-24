@@ -25,7 +25,9 @@ const fallbackIcon = {
 // 模型家族名与品牌图标不同的映射；同名品牌自动使用整个图标包中的资源。
 const aliases: Record<string, string[]> = {
   openai: ["gt", "gpt", "chatgpt", "codex", "whisper", "tts", "o1", "o3", "o4", "全能图片g"],
-  claude: ["anthropic"],
+  grok: ["gk"],
+  nanobanana: ["gm-nb-2-1-image", "gm-3-1-flash-image", "gm-3-pro-image", "gm-3-1-flash-lite-image"],
+  claude: ["cl", "anthropic"],
   qwen: ["qwq", "qvq", "qwenimage", "cosyvoice", "funasr", "sensevoice", "通义千问"],
   meta: ["llama", "meta-llama"],
   mistral: ["mixtral", "magistral", "codestral", "ministral", "pixtral", "devstral", "voxtral"],
@@ -46,9 +48,9 @@ const aliases: Record<string, string[]> = {
   lightricks: ["ltx", "ltxvideo"],
   elevenlabs: ["eleven", "scribe"],
   fishaudio: ["fish-audio", "fish-speech", "fishspeech"],
-  minimax: ["speech", "music", "abab"],
+  minimax: ["speech", "voice-design", "voice-clone", "abab"],
   stepfun: ["step", "step-audio", "stepaudio"],
-  suno: ["chirp"],
+  suno: ["chirp", "music"],
   stability: ["stable-diffusion", "stable-audio", "stable-video", "sdxl", "sd3", "svd"],
   dalle: ["dall-e"],
   flux: ["black-forest-labs"],

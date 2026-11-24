@@ -18,20 +18,20 @@
         <template v-if="accountTab === 'overview' || accountTab === 'wallet'">
           <el-alert v-if="balanceError" :title="balanceError" type="error" :closable="false" showIcon />
           <div class="summaryGrid">
-            <section class="summaryCard" aria-label="可用余额">
-              <div class="summaryLabel"><span>可用余额 · 积分</span><icon-wallet :size="20" /></div>
-              <strong :title="balance ? String(balance.balance) : ''">{{ balance ? formatNumber.format(balance.balance) : "—" }}</strong>
+            <section class="summaryCard" aria-label="当前余额">
+              <div class="summaryLabel"><span>当前余额 · 积分</span><icon-wallet :size="20" /></div>
+              <strong :title="balance ? String(balance.balance) : ''">{{ balance ? formatSummary.format(balance.balance) : "—" }}</strong>
               <el-button class="rechargeButton" tag="a" :href="jianbaiDashboard" target="_blank" rel="noopener noreferrer" type="primary" :icon="IconCreditCard">前往网站充值</el-button>
             </section>
-            <section class="summaryCard" aria-label="已载入消费">
-              <div class="summaryLabel"><span>已载入消费 · 积分</span><icon-chart-bar :size="20" /></div>
-              <strong>{{ usageLoaded ? formatNumber.format(spent) : "—" }}</strong>
-              <span class="cardHint">按已载入流水的扣款统计</span>
+            <section class="summaryCard" aria-label="已加载扣款">
+              <div class="summaryLabel"><span>已加载扣款 · 积分</span><icon-chart-bar :size="20" /></div>
+              <strong>{{ usageLoaded ? formatSummary.format(spent) : "—" }}</strong>
+              <span v-if="usageLoaded" class="cardHint">已加载的 {{ entries.length }} 条流水中扣除的积分</span>
             </section>
-            <section class="summaryCard" aria-label="已载入入账">
-              <div class="summaryLabel"><span>已载入入账 · 积分</span><icon-arrow-down-left :size="20" /></div>
-              <strong>{{ usageLoaded ? formatNumber.format(creditsIn) : "—" }}</strong>
-              <span class="cardHint">按已载入流水的正向变动统计</span>
+            <section class="summaryCard" aria-label="已加载入账">
+              <div class="summaryLabel"><span>已加载入账 · 积分</span><icon-arrow-down-left :size="20" /></div>
+              <strong>{{ usageLoaded ? formatSummary.format(creditsIn) : "—" }}</strong>
+              <span v-if="usageLoaded" class="cardHint">已加载的 {{ entries.length }} 条流水中增加的积分</span>
             </section>
           </div>
           <section v-if="accountTab === 'overview'" class="detailCard">
@@ -220,6 +220,7 @@ const usageError = ref("");
 const nextCursor = ref<string | null>(null);
 const loading = ref(false);
 const formatNumber = new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 });
+const formatSummary = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "medium" });
 let controller: AbortController | undefined;
 

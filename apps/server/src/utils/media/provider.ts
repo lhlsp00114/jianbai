@@ -40,6 +40,17 @@ export const mediaModelsSchema = z.array(z.object({
   rules: providerRulesSchema.optional(),
   imageSizes: z.array(z.string()).optional(),
   imageRatios: z.array(z.string()).optional(),
+  maxReferenceImages: z.number().int().nonnegative().optional(),
+  maxPromptLength: z.number().int().positive().optional(),
+  promptOptional: z.boolean().optional(),
+  audioOptions: z.object({ nativeParameters: z.boolean(), referenceLimits: z.record(z.string(), z.number().int().nonnegative().max(64)) }).optional(),
+  videoVariants: z.array(z.object({
+    quality: z.string().optional(),
+    operation: z.enum(["reference", "edit", "extend", "avatar"]),
+    mode: z.union([z.string(), z.array(z.string())]),
+    imageRatios: z.array(z.string()),
+    durationResolutionMap: z.array(z.object({ duration: z.array(z.number().positive()), resolution: z.array(z.string()) })),
+  })).optional(),
   durationResolutionMap: z.array(z.object({
     duration: z.array(z.number()),
     resolution: z.array(z.string()),

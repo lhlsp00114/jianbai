@@ -5,7 +5,7 @@ import type { ProviderTaskData } from "@toonflow/providers";
 import type { GeneratedMedia, MediaGenerationRequest } from "@toonflow/tools-scaffold/runtime";
 import type { AuthIdentity } from "@toonflow/multi-tenant-auth";
 import type { ModelOutcome } from "@toonflow/multi-tenant-gateway/types";
-import { audioGenerationSchema, imageGenerationSchema, videoGenerationSchema } from "@/utils/media/schemas";
+import { audioGenerationSchema, imageGenerationSchema, imageLayerSchema, videoGenerationSchema } from "@/utils/media/schemas";
 import { z } from "zod";
 import { error, errorFromCause, success } from "@/lib/responseFormat";
 import conf from "@/utils/conf";
@@ -20,12 +20,13 @@ const mediaTypeSchema = z.enum(["image", "video", "audio"]);
 const relativePathSchema = z.string().min(1).max(4096).refine(value => !/^[\\/]|[:\u0000-\u001f]/.test(value)
   && value.split(/[\\/]/).every(part => part && part !== "." && part !== ".."));
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
-const mediaSchema = z.strictObject({ path: relativePathSchema, mimeType: z.string().min(1).max(256), mediaType: mediaTypeSchema });
+const mediaSchema = z.strictObject({ path: relativePathSchema, mimeType: z.string().min(1).max(256), mediaType: mediaTypeSchema, text: z.string().max(1000000).optional(), imageLayer: imageLayerSchema.optional() });
 const checkpointSchema = z.strictObject({
   providerData: z.record(z.string(), z.json()).optional(),
   assets: z.array(z.strictObject({
     type: z.literal("url"), mediaType: mediaTypeSchema, url: z.string().regex(/^https?:\/\//i),
-    mimeType: z.string().optional(), name: z.string().optional(),
+    mimeType: z.string().optional(), name: z.string().optional(), text: z.string().max(1000000).optional(),
+    imageLayer: imageLayerSchema.optional(),
   })).optional(),
   assetCount: z.number().int().positive().optional(),
   files: z.array(mediaSchema.extend({ index: z.number().int().nonnegative(), hash: hashSchema })).optional(),

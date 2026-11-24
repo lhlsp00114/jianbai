@@ -56,7 +56,6 @@ Agent 内部的模型调用已经经过多租户模型网关。**未统一的主
 | 请求 | 当前情况 | 是否属于模型旁路 |
 | --- | --- | --- |
 | 语音识别／转写 | 浏览器 SpeechRecognition；代码未强制本地识别 | 属于未纳入平台模型服务的识别能力，与“音频生成”不同 |
-| 匿名统计 | 浏览器直发 `api.toonflow.net/web/telemetry/report`；受隐私开关控制，普通账号 bootstrap 不注册统计 | 不是模型请求；超管／独立创作可能发送 |
 | 社区图片／视频展示 | 浏览器读取 coverUrl／videoUrl | 是资源展示，不是模型执行 |
 | 原社区／插件预签名上传 | 获取上传授权后浏览器 PUT 到 uploadUrl | 是对象上传；相关多租户发布功能尚未完成，不能视为普通租户已开放 |
 
@@ -85,6 +84,5 @@ Agent 内部的模型调用已经经过多租户模型网关。**未统一的主
 | 外部 MCP、全局连接与临时会话 | [mcp/servers.ts](../apps/server/src/utils/mcp/servers.ts)、[mcp/control.ts](../apps/server/src/utils/mcp/control.ts)、[singleAgent/index.ts](../apps/server/src/utils/singleAgent/index.ts) |
 | 搜索／抓取 | [webSearch](../packages/tools/webSearch/src/index.ts)、[webFetch](../packages/tools/webFetch/src/index.ts) |
 | 社区仍用旧 channel；来源仍草稿 | [channelRequest.ts](../apps/server/src/lib/channelRequest.ts)、[channel/index.ts](../apps/server/src/utils/channel/index.ts)、[sourceMapping/index.ts](../packages/multiTenant/sourceMapping/index.ts) |
-| 浏览器识别、统计启用条件 | [asr/index.ts](../packages/asr/src/index.ts)、[anonymousData.ts](../apps/web/src/lib/anonymousData.ts)、[creation bootstrap](../apps/web/src/bootstrap/creation.ts) |
 
 完整 HTTP 地址仍可查 [API 路由清单](apiRouterRoutes.md)；该清单的“接口存在”不等于本表中的“已完成多租户适配”。

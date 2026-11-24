@@ -1,15 +1,17 @@
 <template>
-  <el-popover ref="settingsPopover" v-model:visible="settingsVisible" trigger="click" placement="top-start" :appendTo="settingsTarget" width="min(340px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '14px' }">
+  <el-popover ref="settingsPopover" v-model:visible="settingsVisible" trigger="click" placement="top-start" :appendTo="settingsTarget" width="min(420px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '20px', borderRadius: '14px' }">
     <template #reference>
       <el-button ref="settingsTrigger" class="settingsButton" text size="small" :disabled="disabled" :aria-expanded="settingsVisible" aria-label="图片生成设置">
         <span class="ratioShape" :style="ratioStyle(ratio)" aria-hidden="true" />
-        <span>{{ ratio }} · {{ size }} · 1张</span>
+        <span v-if="fixedOutputSize">{{ other?.outputFormat === 'gif' ? 'GIF 动图' : 'SVG' }} · 1张</span>
+        <span v-else>{{ ratio === "auto" ? "自适应" : ratio }} · {{ size }} · 1张</span>
         <component :is="settingsVisible ? IconChevronDown : IconChevronUp" :size="14" aria-hidden="true" />
       </el-button>
     </template>
-    <div class="generationSettings nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop @wheel.stop>
+    <div ref="settingsSurface" :id="settingsSurfaceId" class="settingsSurface nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop @wheel.stop>
+    <div class="generationSettings">
       <div class="sectionLabel">分辨率</div>
-      <el-radio-group v-model="size" class="sizeOptions" :disabled="disabled" aria-label="图片分辨率">
+      <el-radio-group v-model="size" class="sizeOptions" :disabled="disabled || fixedOutputSize" aria-label="图片分辨率">
         <el-radio-button v-for="item in sizes" :key="item" :value="item">{{ item }}</el-radio-button>
       </el-radio-group>
       <div class="sectionLabel">比例</div>
@@ -18,31 +20,75 @@
           v-for="item in ratios"
           :key="item"
           class="ratioButton"
-          :disabled="disabled"
-          :aria-label="`比例 ${item}`"
+          :disabled="disabled || fixedOutputSize"
+          :aria-label="`比例 ${item === 'auto' ? '自适应' : item}`"
           :aria-pressed="ratio === item"
           @click="ratio = item">
           <span class="ratioContent">
             <span class="ratioShape" :style="ratioStyle(item)" aria-hidden="true" />
-            <span>{{ item }}</span>
+            <span>{{ item === "auto" ? "自适应" : item }}</span>
           </span>
         </el-button>
       </div>
-      <modelForm v-if="other" v-model="other" :rules="model?.rules" :disabled="disabled" />
+      <modelForm v-if="other && settingsSurface" class="modelOptions" :class="{ gifOptions: other.outputFormat === 'gif' }" v-model="other" :rules="settingsRules" :disabled="disabled" />
+    </div>
     </div>
   </el-popover>
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref, watch, type Ref } from "vue";
+import { computed, inject, ref, useId, watch, type Ref } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
 import { ElButton, ElPopover, ElRadioGroup, ElRadioButton } from "element-plus";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
 import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
 import modelForm from "./modelForm.vue";
 
-defineProps<{ sizes: string[]; ratios: string[]; model?: NodeMediaModel; disabled?: boolean }>();
+const props = defineProps<{ sizes: string[]; ratios: string[]; model?: NodeMediaModel; disabled?: boolean }>();
+const settingsSurfaceId = `imageSettings${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+// 下拉菜单传送到面板内部，必须等目标元素挂载后再创建表单。
+const settingsSurface = ref<HTMLElement>();
+const imageOptionTitles: Record<string, string> = {
+  outputFormat: "输出格式", background: "背景", quality: "图片质量",
+  frameCount: "动图帧数", frameDurationMs: "每帧时长（毫秒）",
+};
+const imageOptionLabels: Record<string, Record<string, string>> = {
+  outputFormat: { png: "PNG", jpeg: "JPEG", webp: "WebP", gif: "GIF 动图", svg: "SVG 矢量图" },
+  background: { opaque: "实色底", transparent: "透明底", auto: "自适应" },
+  quality: { auto: "自适应", low: "低", medium: "中", high: "高", xhigh: "超高", max: "极致" },
+};
+const imageOptionOrder = ["outputFormat", "background", "quality", "frameCount", "frameDurationMs"];
+const settingsRules = computed(() => {
+  const rules = props.model?.rules ?? [];
+  return rules.map(rule => ({ ...rule,
+    ...(rule.field === "outputFormat" && Array.isArray(rule.options) && rule.options.some(option => option.value === "svg") ? {
+      control: [...(Array.isArray(rule.control) ? rule.control : []), {
+        handle: (value: unknown) => value === "png" || value === "jpeg",
+        rule: ["quality"],
+      }],
+    } : {}),
+    title: imageOptionTitles[rule.field ?? ""] ?? rule.title,
+    ...(imageOptionLabels[rule.field ?? ""] && Array.isArray(rule.options) ? {
+      options: rule.options.map(option => ({ ...option,
+        label: imageOptionLabels[rule.field ?? ""]?.[String(option.value)] ?? option.label,
+      })).sort((left, right) => {
+        const order = Object.keys(imageOptionLabels[rule.field ?? ""] ?? {});
+        const leftIndex = order.indexOf(String(left.value));
+        const rightIndex = order.indexOf(String(right.value));
+        return (leftIndex < 0 ? order.length : leftIndex) - (rightIndex < 0 ? order.length : rightIndex);
+      }),
+    } : {}),
+    ...(["select", "el-select"].includes(String(rule.type))
+      ? { props: { ...rule.props, teleported: true, appendTo: `#${settingsSurfaceId}`,
+        placement: "top-start", fallbackPlacements: ["top-start", "top-end"] } } : {}),
+    ...(["frameCount", "frameDurationMs"].includes(rule.field ?? "")
+      ? { props: { ...rule.props, controlsPosition: "", stepStrictly: true } } : {}),
+  })).sort((left, right) =>
+    (imageOptionOrder.includes(left.field ?? "") ? imageOptionOrder.indexOf(left.field ?? "") : imageOptionOrder.length)
+    - (imageOptionOrder.includes(right.field ?? "") ? imageOptionOrder.indexOf(right.field ?? "") : imageOptionOrder.length));
+});
 const settingsVisible = ref(false);
+watch(() => props.disabled, disabled => { if (disabled) settingsVisible.value = false; });
 const expandedPrompt = inject<Ref<boolean> | undefined>("expandedGenerationPrompt", undefined);
 watch(() => expandedPrompt?.value, () => { settingsVisible.value = false; });
 const settingsPopover = ref<InstanceType<typeof ElPopover>>();
@@ -61,91 +107,29 @@ watch(() => settingsVisible.value ? [viewport.value.x, viewport.value.y, viewpor
 const size = defineModel<string>("size", { required: true });
 const ratio = defineModel<string>("ratio", { required: true });
 const other = defineModel<Record<string, unknown>>("other");
+const fixedOutputSize = computed(() => {
+  const format = props.model?.rules?.find(rule => rule.field === "outputFormat");
+  return ["gif", "svg"].includes(String(other.value?.outputFormat))
+    && Array.isArray(format?.options) && format.options.some(option => option.value === other.value?.outputFormat);
+});
+watch(() => [other.value?.background, other.value?.outputFormat], ([background, outputFormat], previous) => {
+  if (other.value?.background !== "transparent" || other.value.outputFormat === "png") return;
+  const backgroundRule = props.model?.rules?.find(rule => rule.field === "background");
+  if (!Array.isArray(backgroundRule?.options) || !backgroundRule.options.some(option => option.value === "transparent")) return;
+  const format = props.model?.rules?.find(rule => rule.field === "outputFormat");
+  if (Array.isArray(format?.options) && format.options.some(option => option.value === "png")) {
+    const changedFormat = previous?.[0] === background && previous?.[1] !== outputFormat;
+    other.value = changedFormat && outputFormat === "jpeg" && backgroundRule.options.some(option => option.value === "opaque")
+      ? { ...other.value, background: "opaque" }
+      : { ...other.value, outputFormat: "png" };
+  }
+}, { flush: "sync" });
 
 function ratioStyle(value: string) {
+  if (value === "auto") return { width: "16px", height: "16px", borderStyle: "dashed" };
   const [width = 1, height = 1] = value.split(":").map(Number);
   return { width: `${16 * Math.min(width / height, 1)}px`, height: `${16 * Math.min(height / width, 1)}px` };
 }
 </script>
 
-<style scoped lang="scss">
-.ratioShape {
-  display: inline-block;
-  flex-shrink: 0;
-  border: 1px solid currentColor;
-  border-radius: 2px;
-  box-sizing: border-box;
-}
-
-.settingsButton {
-  flex-shrink: 0;
-  :deep(> span) { gap: 6px; }
-}
-
-.generationSettings {
-  text-align: left;
-  .sectionLabel {
-    margin-bottom: 8px;
-    color: var(--el-text-color-secondary);
-    font-size: 12px;
-    font-weight: 500;
-  }
-
-  .sizeOptions {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 14px;
-    .el-radio-button {
-      flex: 1;
-      --el-radio-button-checked-bg-color: var(--el-color-primary-light-9);
-      --el-radio-button-checked-text-color: var(--el-color-primary);
-      --el-radio-button-checked-border-color: var(--el-color-primary);
-
-      :deep(.el-radio-button__inner) {
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid var(--el-border-color);
-        border-radius: var(--el-border-radius-base);
-        box-shadow: none;
-
-        &:hover { color: var(--el-text-color-primary); }
-      }
-
-      &.is-active :deep(.el-radio-button__inner) {
-        border-color: var(--el-color-primary);
-      }
-    }
-  }
-
-  .ratioOptions {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
-
-    .ratioButton {
-      height: 60px;
-      margin: 0;
-      padding: 8px 4px;
-      color: var(--el-text-color-secondary);
-      --el-button-bg-color: var(--el-fill-color-light);
-      --el-button-hover-bg-color: var(--el-fill-color);
-      --el-button-hover-text-color: var(--el-text-color-primary);
-      --el-button-hover-border-color: var(--el-border-color-darker);
-
-      &[aria-pressed="true"] {
-        color: var(--el-text-color-primary);
-        border-color: var(--el-text-color-regular);
-        background: var(--el-fill-color);
-      }
-
-      .ratioContent {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-      }
-    }
-  }
-}
-</style>
+<style scoped lang="scss" src="../generationSettings.scss"></style>

@@ -171,10 +171,7 @@ export default function createLinuxDebUpdater(resourcesDirectory: string, dataDi
             await rm(nextPath, { force: true });
           }
         }
-        if (!patched) {
-          const official = local.baseUrl.replace(/\/$/, "") === "https://api.toonflow.net/web/version/desktopUpdates";
-          await download(deb, official ? `${prefix}-${target.hash}.deb` : deb.file, nextPath);
-        }
+        if (!patched) await download(deb, deb.file, nextPath);
         await rename(nextPath, finalPath);
         console.log(`DEB 更新包已准备：${local.version} → ${target.version}，${patched ? "Patch" : "全量"}`);
       }

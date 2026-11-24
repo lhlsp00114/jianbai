@@ -1,50 +1,30 @@
 <template>
-  <main class="hello" :class="{ configuring: !multiTenantEnabled && view !== 'welcome' }">
+  <main class="hello">
     <div class="pageLanguage"><languageSelect popover /></div>
     <section class="welcomePanel" aria-labelledby="welcomeTitle">
-      <div v-if="!multiTenantEnabled && view !== 'welcome'" class="providerContent">
-        <header class="providerHeader">
-          <el-button text :icon="IconArrowLeft" :disabled="saving" @click="view = 'welcome'">返回</el-button>
-          <h1 id="welcomeTitle">配置第三方模型</h1>
-        </header>
-        <div class="providerBody">
-          <languageModel />
-        </div>
-        <el-button
-          type="primary"
-          :loading="saving"
-          :disabled="!customProviders.some((provider) => provider.models.length)"
-          @click="completeSetup">
-          开始使用
-        </el-button>
-      </div>
-      <div v-else class="welcomeContent">
-        <h1 id="welcomeTitle">快速开始</h1>
-        <p class="description">连接见白 AI，即可使用官方模型开始创作。</p>
-        <template v-if="!multiTenantEnabled">
-          <jianbaiKeyForm v-if="!jianbaiMediaKey && !jianbaiTextConnected" />
-          <el-button v-else class="startButton" type="primary" :loading="saving" @click="completeSetup">开始使用</el-button>
-          <el-link :href="jianbaiDashboard" target="_blank" rel="noopener noreferrer">获取 API 密钥</el-link>
+      <div class="welcomeContent">
+        <h1 id="welcomeTitle">连接见白账号</h1>
+        <template v-if="!jianbaiMediaKey">
+          <p class="description">在见白官网注册或登录，创建 API 密钥后，返回软件完成绑定。</p>
+          <el-button class="accountLink" tag="a" :href="jianbaiDashboard" target="_blank" rel="noopener noreferrer" :icon="IconExternalLink">
+            前往见白注册或登录
+          </el-button>
+          <jianbaiKeyForm onboarding @connected="completeSetup">
+            <template #actions="{ connecting }">
+              <el-button class="skipButton" text :disabled="connecting" :loading="saving" @click="completeSetup">稍后配置</el-button>
+            </template>
+          </jianbaiKeyForm>
         </template>
-        <div class="secondaryActions">
-          <template v-if="!multiTenantEnabled">
-            <el-button class="secondaryButton" round :disabled="saving" @click="view = 'custom'">
-              <icon-key class="buttonIcon" />
-              配置第三方模型
-            </el-button>
-            <span class="separator">或</span>
-          </template>
-          <el-button class="secondaryButton" round :loading="saving" @click="completeSetup">稍后配置</el-button>
-        </div>
+        <el-button v-else class="startButton" type="primary" :loading="saving" @click="completeSetup">进入工作区</el-button>
       </div>
 
       <footer class="pageFooter">
-        <el-button class="deviceLink" size="small" :icon="IconDevices" @click="mobileConnectVisible = true">{{ mobileConnectionLabel }}</el-button>
-        <p>© {{ new Date().getFullYear() }} Toonflow · 保留所有权利。</p>
+        <el-button v-if="jianbaiMediaKey" class="deviceLink" size="small" :icon="IconDevices" @click="mobileConnectVisible = true">{{ mobileConnectionLabel }}</el-button>
+        <p>© {{ new Date().getFullYear() }} 见白 · 保留所有权利。</p>
       </footer>
     </section>
     <div class="artPanel" aria-hidden="true">
-      <bg class="artBg" />
+      <canvasIntro />
       <div class="artBrand">
         <span class="artLogo" v-html="logoSvg" />
         <span class="artName">见白</span>
@@ -58,21 +38,17 @@
 import { defineAsyncComponent, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { IconArrowLeft, IconDevices } from "@tabler/icons-vue";
-import { customProviders, multiTenantEnabled } from "@/stores/settings";
-import { jianbaiDashboard, jianbaiMediaKey, jianbaiTextConnected } from "@/lib/jianbaiAccount";
+import { IconDevices, IconExternalLink } from "@tabler/icons-vue";
+import { jianbaiDashboard, jianbaiMediaKey } from "@/lib/jianbaiAccount";
 import jianbaiKeyForm from "@/components/settings/jianbaiKeyForm.vue";
 import { useHelloStore } from "@/stores/hello";
-import anonymousData from "@/lib/anonymousData";
 import logoSvg from "@toonflow/assets/jianbaiLogo.svg?raw";
-import bg from "./bg.vue";
+import canvasIntro from "./canvasIntro.vue";
 import languageSelect from "@/components/languageSelect.vue";
 import { mobileConnectionLabel } from "@/lib/mobile";
 
-const languageModel = defineAsyncComponent(() => import("@/components/settings/panels/languageModel/index.vue"));
 const mobileConnect = defineAsyncComponent(() => import("@/components/mobileConnect.vue"));
 const mobileConnectVisible = ref(false);
-const view = ref<"welcome" | "custom">("welcome");
 const saving = ref(false);
 const router = useRouter();
 const hello = useHelloStore();
@@ -81,8 +57,7 @@ async function completeSetup() {
   if (saving.value) return;
   saving.value = true;
   try {
-    await hello.complete();
-    anonymousData.track(view.value === "custom" || jianbaiMediaKey.value || jianbaiTextConnected.value ? "onboarding.complete" : "onboarding.skip");
+    if (!hello.completed) await hello.complete();
     await router.replace("/home");
   } catch {
     ElMessage.error("保存引导状态失败，请重试");
@@ -118,31 +93,6 @@ async function completeSetup() {
     min-height: 544px;
     padding: 48px clamp(24px, 4.4vw, 64px);
 
-    .providerContent {
-      grid-row: 1;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      gap: 24px;
-      min-width: 0;
-      min-height: 0;
-      overflow: hidden;
-
-      .providerHeader {
-        h1 {
-          margin: 16px 0 0;
-          font-size: 28px;
-          font-weight: 650;
-        }
-      }
-
-      .providerBody {
-        min-height: 0;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        padding: 2px;
-      }
-    }
-
     .welcomeContent {
       grid-row: 1;
       align-self: center;
@@ -167,20 +117,9 @@ async function completeSetup() {
         text-align: center;
       }
 
-      .accountContent {
-        padding: 0;
-
-        :deep(.authHeader) {
-          display: block;
-
-          .authLogo, .authInfo {
-            display: none;
-          }
-
-          .authTabs {
-            width: 100%;
-          }
-        }
+      .accountLink {
+        display: flex;
+        margin-bottom: 24px;
       }
 
       .startButton {
@@ -188,34 +127,7 @@ async function completeSetup() {
         min-height: 42px;
       }
 
-      .buttonIcon {
-        width: 18px;
-        height: 18px;
-        margin-inline-end: 8px;
-      }
-
-      .secondaryActions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        margin-top: 20px;
-
-        .separator {
-          color: var(--el-text-color-secondary);
-          font-size: 13px;
-        }
-
-        .secondaryButton {
-          height: auto;
-          min-height: 36px;
-          margin: 0;
-          padding: 8px 16px;
-          white-space: normal;
-          font-size: 13px;
-        }
-      }
+      .skipButton { color: var(--el-text-color-secondary); }
     }
 
     .pageFooter {
@@ -241,22 +153,6 @@ async function completeSetup() {
     }
   }
 
-  &.configuring {
-    height: 100dvh;
-    min-height: 0;
-    overflow: hidden;
-
-    .welcomePanel {
-      grid-template-rows: minmax(0, 1fr) auto;
-      gap: 24px;
-      min-height: 0;
-
-      .pageFooter {
-        grid-row: 2;
-      }
-    }
-  }
-
   .artPanel {
     position: relative;
     min-width: 0;
@@ -266,12 +162,7 @@ async function completeSetup() {
     padding: 28px;
     border-radius: calc(var(--ui-radius) * 1.125);
     overflow: hidden;
-    background: radial-gradient(ellipse at 76% 82%, #f3dcb1 0%, transparent 46%), radial-gradient(ellipse at 25% 52%, #667ab5 0%, transparent 52%),
-      radial-gradient(ellipse at 90% 18%, #369889 0%, transparent 48%), linear-gradient(145deg, #123f38, #467f72 48%, #a8c9ad);
-
-    .artBg {
-      z-index: 0;
-    }
+    background: #181b20;
 
     .artBrand {
       position: relative;

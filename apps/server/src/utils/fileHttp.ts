@@ -3,6 +3,9 @@ import { resolve } from "node:path";
 import { withFileAccess } from "@toonflow/file";
 
 export async function sendFile(res: Response, path: string, options: Parameters<Response["sendFile"]>[1] = {}, callback?: (error?: Error) => void) {
+  if (path.toLowerCase().endsWith(".svg")) {
+    res.set({ "Content-Security-Policy": "sandbox", "X-Content-Type-Options": "nosniff" });
+  }
   const controller = new AbortController();
   const cancel = () => controller.abort();
   const req = res.req;

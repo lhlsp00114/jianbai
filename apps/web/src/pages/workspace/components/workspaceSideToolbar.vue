@@ -21,8 +21,8 @@
         <icon-upload :size="22" aria-hidden="true" />
       </el-button>
     </el-tooltip>
-    <el-tooltip :showArrow="false" content="节点列表" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
-      <el-button class="sideToolButton" text aria-label="节点列表" @click="emit('openTool', 'search')">
+    <el-tooltip :showArrow="false" :content="nodeSearchVisible ? '关闭节点列表' : '节点列表'" placement="right" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+      <el-button class="sideToolButton" :class="{ active: nodeSearchVisible }" text :aria-pressed="nodeSearchVisible" aria-label="节点列表" @click="emit('openTool', 'search')">
         <icon-list :size="22" aria-hidden="true" />
       </el-button>
     </el-tooltip>
@@ -57,6 +57,7 @@ import agentOrbButton from "./agentOrbButton.vue";
 
 withDefaults(defineProps<{
   nodePanelVisible?: boolean;
+  nodeSearchVisible?: boolean;
   uploadDisabled?: boolean;
   libraryVisible?: boolean;
   assetsVisible?: boolean;

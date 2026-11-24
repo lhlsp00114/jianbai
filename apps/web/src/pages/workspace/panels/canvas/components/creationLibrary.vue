@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" class="creationLibraryDialog" title="创作广场" width="min(1200px, calc(100vw - 32px))" alignCenter appendToBody :closeOnClickModal="false" :beforeClose="close" @closed="resetDraft">
+  <el-dialog v-model="visible" class="creationLibraryDialog" modalClass="creationLibraryMask" title="创作广场" width="min(1200px, calc(100vw - 32px))" alignCenter appendToBody :modal="false" modalPenetrable :closeOnClickModal="false" :beforeClose="close" @closed="resetDraft">
     <template #header="{ titleId, titleClass }">
       <div class="libraryHeader">
         <h2 :id="titleId" :class="titleClass">创作广场</h2>
@@ -328,7 +328,7 @@ function libraryPatch(current: Record<string, unknown>, entries: Entry[]) {
   }
   const patch = { stores: { ...(current.stores as Record<string, unknown> | undefined), creationLibrary: entries } };
   if (currentUser.value?.role === "user") {
-    const scopedSettings = Object.fromEntries(["ui", "general", "privacy", "stores", "helloCompleted"]
+    const scopedSettings = Object.fromEntries(["ui", "general", "stores", "helloCompleted"]
       .filter(key => Object.hasOwn(current, key)).map(key => [key, current[key]]));
     if (new Blob([JSON.stringify({ ...scopedSettings, ...patch })]).size > 1024 * 1024) {
       throw new Error(translate("账号设置空间不足，请缩小封面或导出部分收藏后再保存；当前修改已保留"));
@@ -391,6 +391,10 @@ async function saveBeforeLeaving() {
 
 async function close(done: () => void) {
   if (await saveBeforeLeaving()) done();
+}
+
+async function requestClose() {
+  if (await saveBeforeLeaving()) visible.value = false;
 }
 
 async function backToGrid() {
@@ -700,6 +704,7 @@ watch([dirty, saving, coverLoading, importing], ([unsaved, pending, processing, 
   if (unsaved || pending || processing || reading) window.addEventListener("beforeunload", beforeUnload);
 });
 onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
+defineExpose({ requestClose });
 </script>
 
 <style scoped lang="scss">
@@ -723,6 +728,15 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
   height: min(780px, 92dvh);
   max-height: calc(100dvh - 32px);
   overflow: hidden;
+}
+
+:global(.creationLibraryMask::before) {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background: var(--el-overlay-color-lighter);
+  content: "";
+  pointer-events: none;
 }
 
 :global(.creationLibraryDialog > .el-dialog__body) {

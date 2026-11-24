@@ -2,9 +2,9 @@
   <nodeSkeleton
     ref="skeleton"
     v-bind="nodeProps"
-    :class="{ outpaintNode: outpaintVisible }"
+    :class="{ outpaintNode: outpaintVisible, layerSplitActive: layerSplit?.active }"
     v-model:bottomVisible="node.selected"
-    :topVisible="node.selected && !outpaintVisible && editor?.mode !== 'smartEdit'"
+    :topVisible="node.selected && !outpaintVisible && editor?.mode !== 'smartEdit' && !layerSplit?.active"
     topWidth="max-content"
     contentPadding="2px"
     :resizeAspectRatio="(previewUrl || inpaintGuideUrl) && imageNaturalHeight ? imageNaturalWidth / imageNaturalHeight : undefined"
@@ -19,26 +19,27 @@
     <template #contextActions><eagleMenuItem :file="outputFile" /></template>
     <template v-if="editor?.mode && editor.mode !== 'smartEdit'" #top><div ref="paintToolbar" /></template>
     <template #topActions>
-      <el-button :icon="IconSparkles" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || panorama?.busy || !previewUrl" text title="智能改图" aria-label="智能改图" @click.stop="startEditor('smartEdit')">智能改图</el-button>
-      <el-button class="panoramaButton" :icon="IconPanoramaHorizontal" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || panorama?.busy || !previewUrl" text title="全景图" aria-label="全景图" @click.stop="panorama?.open($event)">全景图<icon-chevron-down class="menuChevron" :size="14" /></el-button>
-      <el-button :icon="IconArrowsMaximize" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting || outpaintPrompt?.creating" text title="扩图" aria-label="扩图" @click.stop="openOutpaint">扩图</el-button>
-      <el-button :icon="IconSun" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="打光" aria-label="打光" @click.stop="openLighting">打光</el-button>
-      <el-button :icon="IconCameraRotate" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="多角度" aria-label="多角度" @click.stop="openMultiAngle">多角度</el-button>
-      <el-button :icon="IconLayoutGrid" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl" :loading="gridSplit?.splitting" text title="宫格切分" aria-label="宫格切分" @click.stop="gridSplit?.open($event)">宫格切分</el-button>
-      <imageEditMenu :loading="creatingRotation" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" @rotate="createRotation(outputFile)" @crop="startEditor('crop')" @color="startEditor('color')" />
+      <el-button :icon="IconSparkles" :disabled="generating || deleting || uploading || layerSplit?.splitting || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || panorama?.busy || !previewUrl" text title="智能改图" aria-label="智能改图" @click.stop="startEditor('smartEdit')">智能改图</el-button>
+      <el-button class="panoramaButton" :icon="IconPanoramaHorizontal" :disabled="generating || deleting || uploading || layerSplit?.splitting || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting || panorama?.busy || !previewUrl" text title="全景图" aria-label="全景图" @click.stop="panorama?.open($event)">全景图<icon-chevron-down class="menuChevron" :size="14" /></el-button>
+      <el-button :icon="IconArrowsMaximize" :disabled="generating || deleting || uploading || layerSplit?.splitting || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting || outpaintPrompt?.creating" text title="扩图" aria-label="扩图" @click.stop="openOutpaint">扩图</el-button>
+      <el-button :icon="IconSun" :disabled="generating || deleting || uploading || layerSplit?.splitting || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="打光" aria-label="打光" @click.stop="openLighting">打光</el-button>
+      <el-button :icon="IconCameraRotate" :disabled="generating || deleting || uploading || layerSplit?.splitting || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="多角度" aria-label="多角度" @click.stop="openMultiAngle">多角度</el-button>
+      <el-button :icon="IconLayoutGrid" :disabled="generating || deleting || uploading || layerSplit?.splitting || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl" :loading="gridSplit?.splitting" text title="宫格切分" aria-label="宫格切分" @click.stop="gridSplit?.open($event)">宫格切分</el-button>
+      <el-button text :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || gridSplit?.splitting || !previewUrl" title="图层分离" aria-label="图层分离" @click.stop="layerSplit?.open()">图层分离</el-button>
+      <imageEditMenu :loading="creatingRotation" :disabled="generating || deleting || uploading || layerSplit?.splitting || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" @rotate="createRotation(outputFile)" @crop="startEditor('crop')" @color="startEditor('color')" />
       <imageAgentMenu :disabled="!outputFile" />
     </template>
     <template #topRightActions>
-      <el-button :icon="IconPencil" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="标记" aria-label="标记" @click.stop="startEditor('mark')" />
+      <el-button :icon="IconPencil" :disabled="generating || deleting || uploading || layerSplit?.splitting || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="标记" aria-label="标记" @click.stop="startEditor('mark')" />
     </template>
-    <div v-loading="generating || uploading" class="imageContent" :class="{ empty: !outputFile && !data.inpaint?.guide, outpainting: outpaintVisible, nopan: !outpaintVisible }" :aria-busy="generating || uploading" @click.self="editor?.exitSmartEdit()">
-      <input ref="fileInput" type="file" accept="image/*" hidden aria-label="选择替换图片" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy" @change="replaceOutput" />
-      <div v-if="previewUrl" class="editorPreview" :style="{ visibility: outpaintVisible ? 'hidden' : undefined }">
+    <div v-loading="generating ? { text: elapsedLabel } : uploading" class="imageContent" :class="{ empty: !outputFile && !data.inpaint?.guide, outpainting: outpaintVisible, nopan: !outpaintVisible }" :aria-busy="generating || uploading" @click.self="editor?.exitSmartEdit()">
+      <input ref="fileInput" type="file" accept="image/*" hidden aria-label="选择替换图片" :disabled="generating || deleting || uploading || layerSplit?.splitting || lighting?.generating || multiAngle?.generating || panorama?.busy" @change="replaceOutput" />
+      <div v-if="previewUrl" ref="editorPreview" class="editorPreview" :style="{ visibility: outpaintVisible ? 'hidden' : undefined }">
         <imageEditor
           ref="editor"
           :src="previewUrl"
           :toolbarTarget="editor?.mode === 'smartEdit' ? smartEditToolbar : paintToolbar"
-          :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy"
+          :disabled="generating || deleting || uploading || layerSplit?.splitting || lighting?.generating || multiAngle?.generating || panorama?.busy"
           alt="生成图片"
           :focusOnDoubleClick="!skeleton?.documentTarget"
           @focus="skeleton?.focusNode()"
@@ -79,7 +80,7 @@
           <taskRecovery compact :visible="generationState.recoveryVisible.value" :label="generationState.recoveryLabel.value" :action="generationState.recoverResult" :disabled="cancelling || deleting || uploading" />
         </template>
         <el-card class="promptCard" shadow="never" :bodyStyle="{ padding: '14px 16px 12px' }">
-          <referenceActions presetPrompts :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" :disabled="generating || deleting || uploading || editor?.busy" />
+          <referenceActions presetPrompts :uploadError="referenceUploadError" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" :disabled="generating || deleting || uploading || editor?.busy" />
           <el-button v-if="inpaintGuideUrl" class="inpaintInfo" text :icon="data.inpaint?.mode === 'outpaint' ? IconArrowsMaximize : IconBrush" @click="inpaintPreviewVisible = true">{{ data.inpaint?.mode === 'outpaint' ? '查看扩图范围' : '查看重绘标注' }}</el-button>
           <referenceItem
             v-if="refList.length"
@@ -108,25 +109,25 @@
               :disabled="generating || deleting || !selectedModel" />
             <promptPresets :presets="imagePromptPresets" :columns="imagePromptPresetColumns" :selected="data.prompt" :disabled="generating || deleting || uploading" @select="insertPromptPreset($event).catch(error => showNodeError(error, '插入提示词预设失败'))" />
             <div class="generationActions">
-              <mediaPrice v-if="priceInput" :input="{ ...priceInput, mediaType: 'image' }" :supported="selectedModel?.supportsPrice === true" />
-              <el-button v-if="pendingRecovery" class="sendButton" :icon="IconPlayerStop" :loading="cancelling" :disabled="deleting || uploading" title="放弃任务" aria-label="放弃任务" @click="generationState.cancel().catch(error => showNodeError(error, '停止生成失败'))" />
               <el-button
                 class="sendButton"
-                :icon="generating ? IconPlayerStop : IconArrowUp"
-                :disabled="cancelling || deleting || uploading || (!generating && (editor?.busy || (!pendingRecovery && (!generationPrompt || !selectedModel))))"
-                :title="generating ? '停止生成' : pendingRecovery ? '复查任务' : '生成图片'"
-                :aria-label="generating ? '停止生成' : pendingRecovery ? '复查任务' : '生成图片'"
-                @click="generating ? generationState.cancel().catch(error => showNodeError(error, '停止生成失败')) : startGeneration().catch((error) => showNodeError(error, '图片生成失败'))" />
+                :icon="generating || pendingRecovery ? IconPlayerStop : IconArrowUp"
+                :loading="cancelling"
+                :disabled="cancelling || deleting || uploading || (!generating && !pendingRecovery && (editor?.busy || !generationPrompt || !selectedModel))"
+                :title="generating || pendingRecovery ? '停止本地等待，不会撤销已提交的供应商任务或保证退费' : '生成图片'"
+                :aria-label="generating || pendingRecovery ? '停止本地等待' : '生成图片'"
+                @click="generating || pendingRecovery ? generationState.cancel().catch(error => showNodeError(error, '停止等待失败')) : startGeneration().catch((error) => showNodeError(error, '图片生成失败'))" />
             </div>
           </div>
         </el-card>
       </generationPromptPanel>
     </template>
   </nodeSkeleton>
+  <imageLayerSplit ref="layerSplit" :src="imagePreviewUrl" :source="outputFile" :target="editorPreview" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || gridSplit?.splitting" />
   <imageLighting v-if="lightingVisible" ref="lighting" :src="imagePreviewUrl" :source="outputFile" :target="lightingTarget" :disabled="generating || deleting || uploading || gridSplit?.splitting" @close="lightingVisible = false" />
   <imageMultiAngle v-if="multiAngleVisible" ref="multiAngle" :src="imagePreviewUrl" :source="outputFile" :target="multiAngleTarget" :disabled="generating || deleting || uploading || gridSplit?.splitting" @close="multiAngleVisible = false" />
   <imagePanorama ref="panorama" :src="imagePreviewUrl" :source="outputFile" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting" @open="openPanorama" />
-  <imageGridSplit ref="gridSplit" :src="imagePreviewUrl" :disabled="generating || deleting || uploading || lighting?.generating || multiAngle?.generating || panorama?.busy" :active="node.selected" />
+  <imageGridSplit ref="gridSplit" :src="imagePreviewUrl" :disabled="generating || deleting || uploading || layerSplit?.splitting || lighting?.generating || multiAngle?.generating || panorama?.busy" :active="node.selected" />
   <imageViewer v-if="inpaintPreviewVisible && inpaintGuideUrl" :urlList="[inpaintGuideUrl]" :downloadUrl="inpaintGuideUrl" downloadName="inpaint-guide.png" @close="inpaintPreviewVisible = false" />
   <imageViewer
     v-if="previewVisible && previewUrl"
@@ -153,6 +154,7 @@ import eagleMenuItem from "@toonflow/node-shared/eagleMenuItem";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
 import { useNodeGeneration } from "@toonflow/node-shared/useNodeGeneration";
 import { referenceKey, useNodeReferences } from "@toonflow/node-shared/useNodeReferences";
+import { getPromptText } from "@toonflow/node-shared/promptText";
 import { getModelFormValues, useImageModelForm } from "@toonflow/node-shared/useModelForm";
 import promptInput from "@toonflow/node-shared/promptInput";
 import promptPresets from "@toonflow/node-shared/promptPresets";
@@ -164,8 +166,8 @@ import { getCameraPrompt, isCameraSettings } from "@toonflow/node-shared/cameraP
 import referenceItem from "@toonflow/node-shared/referenceItem";
 import referenceActions from "@toonflow/node-shared/referenceActions";
 import mediaHistory from "@toonflow/node-shared/mediaHistory";
-import mediaPrice from "@toonflow/node-shared/mediaPrice";
 import imageGridSplit from "@toonflow/node-image/imageGridSplit";
+import imageLayerSplit from "@toonflow/node-image/imageLayerSplit";
 import imageEditor from "@toonflow/node-image/imageEditor";
 import imageSmartEdit from "@toonflow/node-image/imageSmartEdit";
 import { useImageRotation } from "@toonflow/node-image/useImageRotation";
@@ -236,7 +238,7 @@ if (previousVariationPreset) {
   data.value.promptModel = [[{ type: "Write", text: data.value.prompt }]];
 }
 
-const { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference } = useNodeReferences();
+const { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference, referenceUploadError } = useNodeReferences("in", () => selectedModel.value);
 const models = shallowRef<NodeMediaModel[]>([]);
 const { readLastNodeModel, rememberNodeModel } = useNodeModelPreferences();
 const modelsLoading = ref(false);
@@ -245,6 +247,8 @@ const uploading = ref(false);
 const fileInput = ref<HTMLInputElement>();
 const { createRotation, creatingRotation } = useImageRotation();
 const gridSplit = ref<InstanceType<typeof imageGridSplit>>();
+const layerSplit = ref<InstanceType<typeof imageLayerSplit>>();
+const editorPreview = ref<HTMLElement>();
 const editor = ref<InstanceType<typeof imageEditor>>();
 const outpaintPrompt = ref<InstanceType<typeof imageOutpaint>>();
 const outpaintTarget = ref<HTMLElement>();
@@ -277,7 +281,7 @@ const generationState = useNodeGeneration(outputs, () => generationController?.a
     return generateInpaint(recovery.input, recovery.inpaint, signal, results.filter(result => result.mediaType === "image"));
   },
 });
-const { generating, pendingRecovery, cancelling } = generationState;
+const { generating, elapsedLabel, pendingRecovery, cancelling } = generationState;
 let generation: Promise<void> | undefined;
 let modelsRequest: Promise<void> | undefined;
 watch(generating, value => { if (!value && !disposed && !deleting.value && !models.value.length) void loadModels().catch(error => showNodeError(error, "模型读取失败")); });
@@ -294,8 +298,8 @@ async function insertPromptPreset(id: string) {
   if (!await generationPromptInput.value.insertPreset(id)) return;
   if ("ratio" in preset) data.value.ratio = preset.ratio;
 }
-const generationPrompt = computed(() => {
-  const prompt = data.value.prompt.trim().replace(/\{\{preset ([a-zA-Z0-9]+)\}\}/g, (value, id: string) => {
+function getGenerationPrompt(text: string) {
+  const prompt = text.trim().replace(/\{\{preset ([a-zA-Z0-9]+)\}\}/g, (value, id: string) => {
     const variation = variationPresets.find(preset => preset.id === id);
     if (variation) return data.value[variation.field] || value;
     const preset = imagePromptPresets.find(item => item.id === id);
@@ -312,15 +316,16 @@ const generationPrompt = computed(() => {
   ]
     .filter(Boolean)
     .join("\n\n");
-});
-const generationInput = computed<Omit<NodeImageRequest, "directory"> | undefined>(() => {
+}
+const generationPrompt = computed(() => getGenerationPrompt(data.value.prompt));
+function getGenerationInput(prompt: string): Omit<NodeImageRequest, "directory"> | undefined {
   const choice = selectedModel.value;
   if (!choice) return;
   const inpaint = data.value.inpaint;
   const references = refList.value.filter(item => !inpaint || item.dataType !== "IMAGE" || item.value?.url !== inpaint.source);
   const input = {
     ...getNodeModelIdentity(choice),
-    prompt: generationPrompt.value,
+    prompt: getGenerationPrompt(prompt),
     size: data.value.size,
     ratio: data.value.ratio,
     other: Object.keys(data.value.other).length ? { ...data.value.other } : undefined,
@@ -334,13 +339,7 @@ const generationInput = computed<Omit<NodeImageRequest, "directory"> | undefined
     if (mapping.length) input.prompt += `\n当前节点参考编号对应关系：${mapping.join("；")}。`;
   }
   return input;
-});
-const priceInput = computed(() => {
-  const input = generationInput.value;
-  const inpaint = data.value.inpaint;
-  if (!input || inpaint && !Array.isArray(inpaint.images)) return;
-  return inpaint ? buildInpaintRequest(input, inpaint, inpaint.mode === "outpaint" ? readOutpaintInstruction() : undefined) : input;
-});
+}
 const outputFile = computed(() => outputs.value.image?.dataType === "IMAGE" ? outputs.value.image.value : undefined);
 watch([outputFile, () => data.value.inpaint?.guide], ([file, guide], [previousFile, previousGuide]) => {
   outpaintVisible.value = false;
@@ -417,7 +416,7 @@ async function replaceOutput(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = "";
-  if (!file || generating.value || deleting.value || uploading.value || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy || disposed) return;
+  if (!file || generating.value || deleting.value || uploading.value || layerSplit.value?.splitting || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy || disposed) return;
   const mimeType = getMediaMimeType(file);
   if (!mimeType.startsWith("image/")) return void showNodeError("请选择图片文件", "图片替换失败");
   if (!file.size || file.size > 100 * 1024 * 1024) return void showNodeError("图片不能为空且不能超过 100 MB", "图片替换失败");
@@ -460,6 +459,7 @@ function loadModels() {
 async function startGeneration() {
   if (cancelling.value) throw new Error("任务正在取消，请稍后重试");
   if (generating.value) throw new Error("图片正在生成，请等待完成");
+  if (layerSplit.value?.splitting) throw new Error("图层分离进行中，请等待完成");
   if (panorama.value?.visible) throw new Error("请先关闭全景图，再启动图片生成");
   if (uploading.value) throw new Error("图片正在替换，请等待完成");
   if (deleting.value) throw new Error("节点正在删除");
@@ -484,8 +484,15 @@ async function startGeneration() {
   if (panoramaPreset && data.value.ratio !== panoramaPreset.ratio) {
     throw new Error(`${panoramaPreset.label}需要 ${panoramaPreset.ratio} 比例，请在规格中调整后再生成`);
   }
-  const input = generationInput.value;
-  if (!generationPrompt.value) throw new Error("请输入生成提示词");
+  // 提交时重新解析素材 ID，避免刚重排参考就生成时沿用编辑器中的旧编号。
+  const mentions = referenceMentions.value;
+  const prompt = data.value.promptModel.length ? getPromptText(data.value.promptModel, referenceId => {
+    const value = mentions.find(reference => reference.id === referenceId)?.value;
+    if (value === undefined) throw new Error("提示词引用的素材已失效，请重新选择引用");
+    return value;
+  }) : data.value.prompt;
+  const input = getGenerationInput(prompt);
+  if (!getGenerationPrompt(prompt)) throw new Error("请输入生成提示词");
   const variations = variationPresets.filter(preset => data.value.prompt.includes(preset.value));
   const missingVariation = variations.find(preset => !data.value[preset.field]);
   if (missingVariation) throw new Error(`${missingVariation.label}提示词缺失，请从原图重新打开工具`);
@@ -493,6 +500,11 @@ async function startGeneration() {
   const references = refList.value.filter(item => !data.value.inpaint || item.dataType !== "IMAGE" || item.value?.url !== data.value.inpaint.source);
   if (references.some(item => item.value === undefined)) throw new Error("引用节点暂无内容，请先补充引用内容");
   if (!input) throw new Error("请先选择图片模型");
+  for (const match of input.prompt.matchAll(/\{\{ref (\d+)\}\}/g)) {
+    const reference = refList.value[Number(match[1]) - 1];
+    if (!reference) throw new Error(`参考 ${match[1]} 不存在，请重新选择引用`);
+    if (reference.dataType === "STRING" && !reference.value?.trim()) throw new Error(`参考 ${match[1]} 的文本为空，请补充内容或移除提示词中的引用`);
+  }
   const workspace = files.getWorkspaceFiles();
   const controller = new AbortController();
   const inpaintData = data.value.inpaint;
@@ -519,11 +531,11 @@ async function startGeneration() {
 }
 
 nodeEvent.on("save", (reason) => {
-  if (reason === "reload" && (editor.value?.mode === "smartEdit" || generating.value || uploading.value || deleting.value || editor.value?.busy || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy)) throw new Error("图片处理中，请完成后再刷新节点");
+  if (reason === "reload" && (editor.value?.mode === "smartEdit" || generating.value || uploading.value || deleting.value || editor.value?.busy || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy || layerSplit.value?.splitting)) throw new Error("图片处理中，请完成后再刷新节点");
 });
 nodeEvent.on("delete", async () => {
   if (editor.value?.mode === "smartEdit") throw new Error("请先退出智能改图，再删除图片生成节点");
-  if (uploading.value || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy || (editor.value?.busy && !generating.value)) throw new Error("图片处理中，请稍后删除节点");
+  if (uploading.value || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy || layerSplit.value?.splitting || (editor.value?.busy && !generating.value)) throw new Error("图片处理中，请稍后删除节点");
   deleting.value = true;
   try {
     await generationState.cancel(false);
@@ -675,9 +687,19 @@ nodeTools.register({
   &[aria-expanded="true"] .menuChevron { transform: rotate(180deg); }
 }
 
+:global(.nodeSkeleton.layerSplitActive) {
+  pointer-events: none;
+}
+
+:global(.nodeSkeleton.layerSplitActive > .titleBar),
+:global(.nodeSkeleton.layerSplitActive > .topSlot),
+:global(.nodeSkeleton.layerSplitActive > .bottomSlot),
+:global(.nodeSkeleton.layerSplitActive > .cardContainer > .nodeHandle),
+:global(.nodeSkeleton.layerSplitActive > .cardContainer > .resizeCorner) { visibility: hidden !important; }
+
 .imageContent {
   &.outpainting { overflow: visible; }
-  .editorPreview { width: 100%; height: 100%; }
+  .editorPreview { position: relative; width: 100%; height: 100%; }
   .nodeSkeleton.resized & {
     height: 100%;
     min-height: 0;
@@ -719,6 +741,12 @@ nodeTools.register({
 
   :deep(.el-loading-mask) {
     pointer-events: none;
+    .el-loading-text {
+      margin: 8px 0 0;
+      color: var(--el-text-color-secondary);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
   }
 
 }

@@ -27,10 +27,9 @@ if not exist "data\workspaces\myProject" mkdir "data\workspaces\myProject"
 echo Building bundled plugins...
 "%bunExe%" run dev:plugins
 if errorlevel 1 (
-  echo.
-  echo Plugin build failed.
-  pause
-  exit /b 1
+  if not exist "build\tools\pluginDeveloper.tool.js" goto pluginBuildFailed
+  if not exist "data\tools\pluginDeveloper.tool.js" goto pluginBuildFailed
+  echo Plugin build failed, using the existing plugin developer tool. The remaining plugin outputs will still be used.
 )
 
 echo Starting Node Watch (auto-rebuild on change)...
@@ -51,3 +50,9 @@ if errorlevel 1 (
 )
 
 exit /b 0
+
+:pluginBuildFailed
+echo.
+echo Plugin build failed and the existing plugin developer tool is unavailable.
+pause
+exit /b 1

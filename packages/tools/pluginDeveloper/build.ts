@@ -63,7 +63,8 @@ try {
   });
   const name = `${metadata.name}.tool.js`;
   const tool = await readFile(join(stage, name));
-  if (tool.length >= 10_000_000) throw new Error(`工具文件 ${tool.length} 字节，必须小于 10 MB（含 ZIP 编码和文档）`);
+  // ACT: 内置 SDK 随安装包分发，使用宿主工具文件的 20 MiB 限制。
+  if (tool.length > 20 * 1024 * 1024) throw new Error(`工具文件 ${tool.length} 字节，不能超过 20 MiB（含 ZIP 编码和文档）`);
   await writeAtomic(join(output, name), tool, { mode: 0o644 });
   if (process.env.NODE_ENV === "dev") {
     const dataDirectory = resolve(root, "../../../data/tools");
