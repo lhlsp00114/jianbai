@@ -63,6 +63,7 @@ import { ElButton, ElPopover, ElSelect, ElOption, ElSwitch } from "element-plus"
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
 import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
 import modelForm from "@toonflow/node-shared/modelForm";
+import { videoReferenceLimits, videoResolutions } from "@toonflow/node-shared/videoModelOptions";
 
 const props = defineProps<{ model?: NodeMediaModel; disabled?: boolean; ratios: string[] }>();
 const settingsSurfaceId = `videoSettings${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
@@ -101,14 +102,19 @@ const modeLabels: Record<string, string> = {
 };
 const modes = computed(() => (props.model?.mode ?? []).map(item => ({
   value: JSON.stringify(item),
-  label: Array.isArray(item) ? "全能参考" : modeLabels[item] ?? item,
+  label: Array.isArray(item) ? arrayModeLabel(item) : modeLabels[item] ?? item,
 })));
 const mappings = computed(() => props.model?.durationResolutionMap ?? []);
 const durations = computed(() => [...new Set(mappings.value.flatMap(item => item.duration))].sort((a, b) => a - b));
-const resolutions = computed(() => resolutionsFor(duration.value));
+const resolutions = computed(() => videoResolutions(props.model, duration.value, ratio.value));
 
-function resolutionsFor(value: number | undefined) {
-  return [...new Set(mappings.value.filter(item => value !== undefined && item.duration.includes(value)).flatMap(item => item.resolution))];
+function arrayModeLabel(value: string[]) {
+  const limits = videoReferenceLimits(value);
+  if (props.model?.mode?.length && props.model.mode.filter(Array.isArray).length > 1) {
+    if (limits.IMAGE && !limits.VIDEO && !limits.AUDIO) return "多图参考";
+    if (limits.VIDEO && !limits.IMAGE && !limits.AUDIO) return "视频参考";
+  }
+  return "全能参考";
 }
 
 function ratioStyle(value: string) {

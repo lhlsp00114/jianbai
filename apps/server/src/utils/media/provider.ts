@@ -49,7 +49,7 @@ export const mediaModelsSchema = z.array(z.object({
     operation: z.enum(["reference", "edit", "extend", "avatar"]),
     mode: z.union([z.string(), z.array(z.string())]),
     imageRatios: z.array(z.string()),
-    durationResolutionMap: z.array(z.object({ duration: z.array(z.number().positive()), resolution: z.array(z.string()) })),
+    durationResolutionMap: z.array(z.object({ duration: z.array(z.number().positive()), resolution: z.array(z.string()), imageRatios: z.array(z.string()).optional() })),
   })).optional(),
   durationResolutionMap: z.array(z.object({
     duration: z.array(z.number()),

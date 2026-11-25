@@ -31,7 +31,11 @@
         <referenceItem v-if="refList.length" v-model="refList" :inactiveIndices="inactiveReferenceIndices" @preview="setReferencePreview" @remove="removeReference" />
         <el-button v-if="selectedModel && referenceLimit > 0" class="referenceButton" text size="small" :disabled="busy" @click="selectAssetReference().catch(error => showNodeError(error, '添加音频参考失败'))">添加参考素材</el-button>
         <audioParameters v-model="data.other" :model="selectedModel" section="content" :disabled="busy" />
-        <promptInput v-if="taskPresentation.prompt" v-model="data.promptModel" v-model:text="data.prompt" :references="activeReferenceMentions" :materials="activeMaterialMentions" :selectMaterial="selectMaterialReference" :selectAsset="referenceLimit > 0 ? selectAssetReference : undefined" :placeholder="taskPresentation.placeholder" expandable />
+        <div v-if="taskPresentation.prompt" :class="{ musicStyle: compactMusicPrompt }" :role="compactMusicPrompt ? 'group' : undefined" :aria-label="compactMusicPrompt ? '风格' : undefined">
+          <div v-if="compactMusicPrompt" class="musicStyleLabel">风格</div>
+          <promptInput v-model="data.promptModel" v-model:text="data.prompt" :references="activeReferenceMentions" :materials="activeMaterialMentions" :selectMaterial="selectMaterialReference" :selectAsset="referenceLimit > 0 ? selectAssetReference : undefined" :placeholder="taskPresentation.placeholder" :compact="compactMusicPrompt" :expandable="!compactMusicPrompt" />
+        </div>
+        <audioParameters v-if="selectedModel?.modelId === 'music'" v-model="data.other" :model="selectedModel" section="lyrics" :disabled="busy" />
         <audioParameters v-model="data.other" :model="selectedModel" section="controls" :disabled="busy" />
         <div class="promptFooter">
           <modelSelect
@@ -150,6 +154,7 @@ const modelMemory = useNodeModelMemory("audio");
 useModelForm(data, selectedModel);
 const modelGroups = computed(() => groupNodeModels(models.value));
 const taskPresentation = computed(() => audioTaskPresentation(selectedModel.value, data.value.other));
+const compactMusicPrompt = computed(() => selectedModel.value?.modelId === "music" && selectedModel.value.audioOptions?.nativeParameters === true && data.value.other.operation !== "lyrics");
 watch(() => {
   const model = selectedModel.value;
   const native = model?.audioOptions?.nativeParameters;
@@ -463,6 +468,11 @@ nodeTools.register({
   &:not(.hasPrompt) :deep(.audioWriting) { border-bottom: 0; margin-bottom: 0; }
   .referenceButton { margin-bottom: 10px; }
   :deep(.promptInputWrap) { margin: 12px 0 16px; }
+  .musicStyle {
+    margin: 8px 0;
+    .musicStyleLabel { margin-bottom: 4px; color: var(--el-text-color-regular); font-size: 12px; }
+    :deep(.promptInputWrap) { margin: 0; }
+  }
   .promptFooter {
     display: flex;
     align-items: center;

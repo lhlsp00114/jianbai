@@ -1,5 +1,11 @@
 import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
 
+export function videoResolutions(model: NodeMediaModel | undefined, duration: number | undefined, ratio: string) {
+  return [...new Set((model?.durationResolutionMap ?? []).filter(item =>
+    (duration === undefined ? !item.duration.length : item.duration.includes(duration)) &&
+    (!item.imageRatios || item.imageRatios.includes(ratio))).flatMap(item => item.resolution))];
+}
+
 export function videoReferenceLimits(mode: string | string[] | undefined) {
   const limits = { IMAGE: 0, VIDEO: 0, AUDIO: 0 };
   if (mode === "singleImage") limits.IMAGE = 1;

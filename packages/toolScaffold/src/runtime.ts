@@ -92,8 +92,8 @@ export interface MediaModel {
   maxPromptLength?: number;
   promptOptional?: boolean;
   audioOptions?: { nativeParameters: boolean; referenceLimits: Record<string, number> };
-  videoVariants?: { quality?: string; operation: string; mode: string | string[]; imageRatios: string[]; durationResolutionMap: { duration: number[]; resolution: string[] }[] }[];
-  durationResolutionMap?: { duration: number[]; resolution: string[] }[];
+  videoVariants?: { quality?: string; operation: string; mode: string | string[]; imageRatios: string[]; durationResolutionMap: { duration: number[]; resolution: string[]; imageRatios?: string[] }[] }[];
+  durationResolutionMap?: { duration: number[]; resolution: string[]; imageRatios?: string[] }[];
   audio?: boolean | "optional";
   voices?: { title: string; voice: string }[];
 }

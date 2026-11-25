@@ -50,10 +50,23 @@
       <video v-else-if="mediaSrc && selected" class="pendingPreview" :src="mediaSrc" muted playsinline preload="auto" aria-hidden="true" @loadeddata="readPreview" @error="previewFailed" />
     </div>
   </el-dialog>
-  <el-image-viewer v-if="mediaType === 'image' && viewerVisible && mediaSrc" :urlList="[mediaSrc]" teleported @close="viewerVisible = false; selected = undefined" />
-  <el-dialog v-if="mediaType === 'video'" v-model="viewerVisible" title="视频预览" width="min(960px, calc(100vw - 32px))" appendToBody destroyOnClose @closed="selected = undefined">
-    <video v-if="viewerVisible && mediaSrc" class="historyVideoPreview nodrag nopan nowheel" :src="mediaSrc" controls playsinline preload="auto" aria-label="历史视频放大预览" @dblclick.stop @keydown.stop @error="previewFailed" />
-    <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" />
+  <el-dialog v-if="viewerVisible" v-model="viewerVisible" :title="`${mediaLabel}预览`" width="min(1080px, calc(100vw - 32px))" appendToBody destroyOnClose @closed="selected = undefined">
+    <div class="historyViewer nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop>
+      <div class="historyViewerStage" v-loading="!!selected && !previewReady && !previewError">
+        <img v-if="mediaType === 'image' && mediaSrc" :src="mediaSrc" alt="历史图片放大预览" @load="readPreview" @error="previewFailed" />
+        <video v-else-if="mediaType === 'video' && mediaSrc" :src="mediaSrc" controls playsinline preload="auto" aria-label="历史视频放大预览" @loadeddata="readPreview" @error="previewFailed" />
+        <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" />
+      </div>
+      <div class="historyViewerVersions" aria-label="节点历史版本">
+        <div class="historyViewerHeader"><span>节点历史</span><span>{{ items.length }} {{ mediaType === 'video' ? '段' : '张' }}</span></div>
+        <div class="historyViewerGrid">
+          <button v-for="(item, index) in items" :key="item.url" type="button" class="historyViewerItem" :class="{ current: item.url === selected?.url }" :aria-label="`查看历史${mediaLabel} ${index + 1}`" :aria-pressed="item.url === selected?.url" @click="switchViewer(item)">
+            <promptReferenceThumbnail class="historyViewerThumbnail" :dataType="mediaType === 'video' ? 'VIDEO' : 'IMAGE'" :media="item" />
+            <span v-if="item.url === selected?.url" class="historyViewerBadge">当前</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </el-dialog>
   <el-dialog v-if="!inline" v-model="visible" :title="`${mediaType === 'image' ? '图片' : '视频'}历史记录`" width="min(760px, calc(100vw - 32px))" appendToBody destroyOnClose>
     <div v-loading="loading" class="mediaHistory nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop>
@@ -94,7 +107,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
-import { ElAlert, ElButton, ElDialog, ElEmpty, ElLoading, ElPagination, ElPopover, ElImageViewer } from "element-plus";
+import { ElAlert, ElButton, ElDialog, ElEmpty, ElLoading, ElPagination, ElPopover } from "element-plus";
 import { IconHistory, IconMaximize, IconTransfer, IconUpload, IconPhoto } from "@tabler/icons-vue";
 import { useNodeFiles } from "@toonflow/nodes-scaffold/workspaceFiles";
 import { isNodeOutput, type NodeMediaValue } from "@toonflow/nodes-scaffold/values";
@@ -218,6 +231,24 @@ function chooseMedia(item: NodeMediaValue, preview = false) {
   else selected.value = item;
 }
 
+function openViewer() {
+  if (props.disabled || loading.value || !currentFile.value) return;
+  visible.value = false;
+  previewOnly.value = true;
+  previewReady.value = false;
+  previewReadError.value = "";
+  selected.value = currentFile.value;
+  viewerVisible.value = true;
+}
+
+function switchViewer(item: NodeMediaValue) {
+  if (loading.value || selected.value?.url === item.url) return;
+  previewOnly.value = true;
+  previewReady.value = false;
+  previewReadError.value = "";
+  selected.value = item;
+}
+
 function completeMediaAction() {
   if (props.disabled || loading.value || !selected.value || !previewReady.value || previewError.value) return;
   if (previewOnly.value) {
@@ -250,10 +281,73 @@ async function selectOutput() {
   canvasVisible.value = false;
   selected.value = undefined;
 }
+
+defineExpose({ openViewer });
 </script>
 
 <style scoped lang="scss">
 .historyVideoPreview { display: block; width: 100%; max-height: 75vh; background: #000; }
+
+.historyViewer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  min-height: min(620px, 70vh);
+
+  .historyViewerStage {
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #111;
+
+    img, video { display: block; max-width: 100%; max-height: min(620px, 70vh); object-fit: contain; }
+    video { width: 100%; }
+  }
+
+  .historyViewerVersions {
+    min-width: 0;
+    padding: 4px;
+    overflow: auto;
+  }
+
+  .historyViewerHeader {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    color: var(--el-text-color-primary);
+    font-weight: 600;
+
+    span + span { color: var(--el-text-color-secondary); font-size: 12px; font-weight: 400; }
+  }
+
+  .historyViewerGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+  .historyViewerItem {
+    position: relative;
+    aspect-ratio: 1;
+    min-width: 0;
+    padding: 0;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-light);
+    cursor: pointer;
+
+    &:hover, &.current { border-color: var(--el-color-primary); }
+    &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
+    .historyViewerThumbnail { width: 100%; height: 100%; border-radius: inherit; }
+    .historyViewerBadge { position: absolute; bottom: 4px; left: 4px; padding: 1px 5px; border-radius: 4px; background: rgb(20 22 27 / 84%); color: #fff; font-size: 11px; }
+  }
+}
+
+@media (max-width: 720px) {
+  .historyViewer { grid-template-columns: 1fr; min-height: 0; }
+  .historyViewerStage { min-height: 50vh; }
+  .historyViewerVersions { max-height: 180px; }
+  .historyViewerGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 
 .historyTrigger {
   position: absolute;

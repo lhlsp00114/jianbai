@@ -11,7 +11,7 @@
     fullscreenLabel="全屏播放"
     :downloadUrl="previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
-    @fullscreen="player?.enterFullscreen()"
+    @fullscreen="mediaHistoryRef?.openViewer()"
     :bottomWidth="660"
     :style="nodePreviewStyle">
     <template v-if="videoResolution" #titleMeta><span :title="`${videoResolution} 像素`" :aria-label="`视频分辨率：${videoResolution}`">{{ videoResolution }}</span></template>
@@ -45,7 +45,7 @@
       <div v-else class="videoEmpty" role="img" aria-label="暂无生成视频">
         <videoGenerationIcon :size="30" stroke="1.4" />
       </div>
-      <mediaHistory v-if="node.selected" mediaType="video" inline replaceable :current="outputFile" :disabled="generating || deleting || uploading || player?.capturing || actions?.processing" @open="skeleton?.focusNode()" @select="outputs.video = { dataType: 'VIDEO', value: $event }" @upload="fileInput?.click()" />
+      <mediaHistory ref="mediaHistoryRef" v-if="node.selected" mediaType="video" inline replaceable :current="outputFile" :disabled="generating || deleting || uploading || player?.capturing || actions?.processing" @open="skeleton?.focusNode()" @select="outputs.video = { dataType: 'VIDEO', value: $event }" @upload="fileInput?.click()" />
     </div>
     <template #bottom>
       <generationPromptPanel>
@@ -146,7 +146,7 @@ import referenceItem from "@toonflow/node-shared/referenceItem";
 import referenceActions from "@toonflow/node-shared/referenceActions";
 import mediaHistory from "@toonflow/node-shared/mediaHistory";
 import generationSettings from "./components/generationSettings.vue";
-import { videoModelOptions, videoReferenceLimits } from "@toonflow/node-shared/videoModelOptions";
+import { videoModelOptions, videoReferenceLimits, videoResolutions } from "@toonflow/node-shared/videoModelOptions";
 
 defineOptions({
   inheritAttrs: false,
@@ -189,6 +189,7 @@ const deleting = ref(false);
 const skeleton = ref<InstanceType<typeof nodeSkeleton>>();
 const player = ref<InstanceType<typeof videoPlayer>>();
 const actions = ref<InstanceType<typeof videoActions>>();
+const mediaHistoryRef = ref<InstanceType<typeof mediaHistory>>();
 const videoPreviewSize = ref<ReturnType<typeof getMediaPreviewSize>>();
 const videoResolution = ref("");
 let generationController: AbortController | undefined;
@@ -249,10 +250,9 @@ function getDurations(choice: NodeMediaModel) {
   return [...new Set((choice.durationResolutionMap ?? []).flatMap((item) => item.duration))].sort((a, b) => a - b);
 }
 
-function getResolutions(choice: NodeMediaModel, duration?: number) {
+function getResolutions(choice: NodeMediaModel, duration: number | undefined, ratio: string) {
   const resolutionRank = (value: string) => (Number.parseFloat(value) || Infinity) * (/k$/i.test(value) ? 1000 : 1);
-  return [...new Set((choice.durationResolutionMap ?? []).filter((item) => item.duration.includes(duration!)).flatMap((item) => item.resolution))]
-    .sort((left, right) => resolutionRank(left) - resolutionRank(right));
+  return videoResolutions(choice, duration, ratio).sort((left, right) => resolutionRank(left) - resolutionRank(right));
 }
 // ACT: 只在模型不支持原模式时选默认值；手动切换和连线变化不覆盖已选模式，素材在生成前校验。
 watch(selectedModel, choice => {
@@ -265,13 +265,13 @@ watch(selectedModel, choice => {
   data.value.mode = mode === undefined ? "" : JSON.stringify(mode);
 }, { flush: "sync" });
 // ACT: 参数在节点内归一化，未选中、未挂载底部设置时也可由 Agent 直接生成。
-watch([selectedModel, () => data.value.duration], ([choice]) => {
+watch([selectedModel, () => data.value.duration, () => data.value.ratio], ([choice]) => {
   if (!choice) return;
   const durations = getDurations(choice);
   if (!durations.includes(data.value.duration!)) data.value.duration = durations[0];
-  const resolutions = getResolutions(choice, data.value.duration);
-  if (!resolutions.includes(data.value.resolution)) data.value.resolution = resolutions[0] ?? "";
   if (!ratioOptions.value.includes(data.value.ratio)) data.value.ratio = ratioOptions.value.includes("9:16") ? "9:16" : ratioOptions.value[0] ?? "";
+  const resolutions = getResolutions(choice, data.value.duration, data.value.ratio);
+  if (!resolutions.includes(data.value.resolution)) data.value.resolution = resolutions[0] ?? "";
   if (choice.audio !== "optional") data.value.generateAudio = choice.audio === true;
 }, { flush: "sync" });
 const modelGroups = computed(() => groupNodeModels(models.value));
@@ -613,7 +613,8 @@ nodeTools.register({
     const durations = getDurations(choice);
     if (args.duration !== undefined && !durations.includes(args.duration)) throw new Error(`当前模型不支持时长 ${args.duration}，可选：${durations.join("、")}`);
     const duration = args.duration ?? (durations.includes(data.value.duration!) ? data.value.duration : durations[0]);
-    const resolutions = getResolutions(choice, duration);
+    const ratio = args.ratio ?? (ratios.includes(data.value.ratio) ? data.value.ratio : ratios.includes("9:16") ? "9:16" : ratios[0] ?? "");
+    const resolutions = getResolutions(choice, duration, ratio);
     if (args.resolution !== undefined && !resolutions.includes(args.resolution)) throw new Error(`当前时长不支持分辨率 ${args.resolution}，可选：${resolutions.join("、")}`);
     const resolution = args.resolution ?? (resolutions.includes(data.value.resolution) ? data.value.resolution : resolutions[0] ?? "");
     if (args.mode !== undefined && !choice.mode?.some((item) => JSON.stringify(item) === JSON.stringify(args.mode))) throw new Error("所选模式不受当前模型支持，请根据模型能力选择");
