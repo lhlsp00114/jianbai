@@ -1,5 +1,5 @@
 <template>
-  <div ref="card" class="referenceItem" :class="{ labeledReference: insertable || labelTextReference }" role="group" :title="title" :aria-label="insertable ? `插入提示词：${title}` : title" :aria-busy="preparingPreview" @click="insertable && emit('insert')" @keydown.enter.self.stop.prevent="activate" @keydown.space.self.stop.prevent="activate">
+  <div ref="card" class="referenceItem" :class="{ labeledReference: (insertable && item.dataType === 'IMAGE') || labelTextReference }" role="group" :title="title" :aria-label="insertable ? `插入提示词：${title}` : title" :aria-busy="preparingPreview" @click="insertable && emit('insert')" @keydown.enter.self.stop.prevent="activate" @keydown.space.self.stop.prevent="activate">
     <el-image
       v-if="item.dataType === 'IMAGE' && mediaSrc && !preparingPreview && !previewError"
       ref="imageRef"
@@ -35,9 +35,9 @@
       @mousedown.stop
       @dblclick.stop
       @click.stop="emit('remove')" />
-    <span class="indexBadge" aria-hidden="true">{{ labelTextReference ? `文本${index}` : insertable ? `图片${index}` : index }}</span>
+    <span class="indexBadge" aria-hidden="true">{{ displayName ?? (labelTextReference ? `文本${index}` : insertable && item.dataType === 'IMAGE' ? `图片${index}` : index) }}</span>
     <el-popover
-      v-if="canPreviewImage"
+      v-if="hoverPreviewSrc"
       ref="previewPopover"
       :virtualRef="card"
       virtualTriggering
@@ -55,10 +55,13 @@
       @before-enter="followPreviewAnchor"
       @before-leave="stopFollowingPreviewAnchor">
       <template #default="{ hide }">
-        <button type="button" class="referencePreview" @click.stop="viewerVisible = true; hide()">
-          <img :src="mediaSrc" :style="{ maxHeight: `${previewImageHeight}px` }" alt="" draggable="false" @load="updatePreviewPosition" />
+        <button v-if="item.dataType === 'IMAGE'" type="button" class="referencePreview" @click.stop="viewerVisible = true; hide()">
+          <img :src="hoverPreviewSrc" :style="{ maxHeight: `${previewImageHeight}px` }" alt="" draggable="false" @load="updatePreviewPosition" />
           <span>查看原图</span>
         </button>
+        <div v-else class="referencePreview">
+          <img :src="hoverPreviewSrc" :style="{ maxHeight: `${previewImageHeight}px` }" alt="视频封面" draggable="false" @load="updatePreviewPosition" />
+        </div>
       </template>
     </el-popover>
     <imageViewer v-if="viewerVisible && mediaSrc" :urlList="[mediaSrc]" @close="viewerVisible = false" />
@@ -81,7 +84,7 @@ import type { NodeInputValue } from "@toonflow/nodes-scaffold/values";
 import { useMediaPreview } from "../mediaPreview";
 import imageViewer from "./imageViewer.vue";
 
-const props = defineProps<{ item: NodeInputValue; index: number; insertable?: boolean; labelTextReference?: boolean }>();
+const props = defineProps<{ item: NodeInputValue; index: number; insertable?: boolean; labelTextReference?: boolean; displayName?: string }>();
 const emit = defineEmits<{ remove: []; preview: [url: string]; insert: [] }>();
 const { findNode } = useVueFlow();
 const card = ref<HTMLElement>();
@@ -102,7 +105,7 @@ const title = computed(() => {
     ? findNode<NodeData>(props.item.source)?.data.label?.trim() : "";
   const content = props.item.value === undefined ? "暂无内容" : props.item.dataType === "STRING" ? props.item.value : props.item.dataType === "FILE" ? props.item.value.url.split(/[\\/]/).pop() || "文件" : props.item.dataType === "VIDEO" ? "视频" : props.item.dataType === "AUDIO" ? "音频" : "图片";
   const status = previewError.value || (preparingPreview.value ? "正在生成兼容预览…" : "");
-  return `引用 ${props.index}：${sourceName ? `${sourceName}（${content}）` : content}${status ? `（${status}）` : ""}`;
+  return `${props.displayName ?? `引用 ${props.index}`}：${sourceName ? `${sourceName}（${content}）` : content}${status ? `（${status}）` : ""}`;
 });
 
 watch(media, () => {
@@ -116,7 +119,10 @@ const previewUrl = useFileUrl(media, error => {
 });
 const { src: mediaSrc, preparing: preparingPreview, error: mediaError, handleError, handleLoaded } = useMediaPreview(previewUrl, () => props.item.dataType === "VIDEO" ? "video" : "image");
 const previewError = computed(() => previewReadError.value || mediaError.value);
-const canPreviewImage = computed(() => props.insertable && !!mediaSrc.value && !preparingPreview.value && !previewError.value);
+const hoverPreviewSrc = computed(() => {
+  if (!props.insertable || preparingPreview.value || previewError.value) return "";
+  return props.item.dataType === "VIDEO" ? videoThumbnail.value : mediaSrc.value;
+});
 watch(mediaSrc, () => {
   duration.value = "";
   videoThumbnail.value = "";
@@ -126,7 +132,7 @@ watch(mediaSrc, () => {
 watch([mediaSrc, previewError, preparingPreview, videoThumbnail], ([url, error, preparing, thumbnail]) => {
   emit("preview", error || preparing ? "" : props.item.dataType === "VIDEO" ? thumbnail : url);
 }, { immediate: true });
-watch(canPreviewImage, available => {
+watch(hoverPreviewSrc, available => {
   if (!available) stopFollowingPreviewAnchor();
 });
 onBeforeUnmount(() => {
@@ -168,8 +174,8 @@ function stopFollowingPreviewAnchor() {
 }
 
 function activate(event: KeyboardEvent) {
-  if (props.insertable && event.key === "Enter" && event.shiftKey) {
-    viewerVisible.value = !!canPreviewImage.value;
+  if (props.insertable && props.item.dataType === "IMAGE" && event.key === "Enter" && event.shiftKey) {
+    viewerVisible.value = !!hoverPreviewSrc.value;
     return;
   }
   if (props.insertable) emit("insert");
@@ -178,9 +184,9 @@ function activate(event: KeyboardEvent) {
 
 function readVideoPreview(event: Event) {
   const video = event.currentTarget as HTMLVideoElement;
-  if (!handleLoaded(event)) { videoThumbnail.value = ""; return; }
+  if (!handleLoaded(event) || !video.videoWidth || !video.videoHeight) { videoThumbnail.value = ""; return; }
   const canvas = document.createElement("canvas");
-  const scale = 96 / Math.max(video.videoWidth, video.videoHeight);
+  const scale = Math.min(1, 230 / video.videoWidth, 300 / video.videoHeight);
   canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
   canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
   const context = canvas.getContext("2d");
@@ -321,7 +327,8 @@ function readDuration(event: Event) {
   background: #1e1e20;
   color: #fff;
   font: inherit;
-  cursor: zoom-in;
+
+  &:is(button) { cursor: zoom-in; }
 
   img {
     display: block;

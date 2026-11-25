@@ -6,9 +6,9 @@
     </label>
     <div class="menuBody" @scroll="updatePosition">
       <section v-if="!search.trim() || matchingReferences.length" class="referenceSection" aria-label="参考引用">
-        <button v-for="item in matchingReferences" :key="item.id" type="button" class="menuItem" :class="{ active: activeKey === `reference:${item.id}` }" :data-key="`reference:${item.id}`" :title="item.label || item.name" :disabled="busy" @mousedown.prevent @mouseenter="activeGroup = undefined; activeKey = `reference:${item.id}`" @focus="activeGroup = undefined; activeKey = `reference:${item.id}`" @click="emit('select', item.id)">
+        <button v-for="item in matchingReferences" :key="item.id" type="button" class="menuItem" :class="{ active: activeKey === `reference:${item.id}` }" :data-key="`reference:${item.id}`" :title="item.label || item.name" :disabled="busy || item.disabled" @mousedown.prevent @mouseenter="activeGroup = undefined; activeKey = `reference:${item.id}`" @focus="activeGroup = undefined; activeKey = `reference:${item.id}`" @click="emit('select', item.id)">
           <promptReferenceThumbnail :dataType="item.dataType" :avatar="item.avatar" />
-          <span class="itemName">{{ item.label || item.name }}</span>
+          <span class="itemName">{{ item.displayName || item.label || item.name }}</span>
         </button>
       </section>
       <section v-if="!search.trim()" class="materialSection" aria-label="素材引用">
@@ -74,7 +74,7 @@ const categories = [
 ] as const;
 const groups = computed(() => categories.map(group => ({ ...group, items: props.materials.filter(item => item.dataType === group.type) })));
 const matches = (name: string) => name.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase());
-const matchingReferences = computed(() => props.references.filter(item => matches(item.label || item.name)));
+const matchingReferences = computed(() => props.references.filter(item => matches(item.label || item.name) || (item.displayName && matches(item.displayName))));
 const matchingGroups = computed(() => groups.value.map(group => ({ ...group, items: group.items.filter(item => matches(item.name)) })).filter(group => group.items.length));
 const activeCategory = computed(() => groups.value.find(group => group.type === activeGroup.value));
 

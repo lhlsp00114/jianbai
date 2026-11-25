@@ -10,7 +10,7 @@ import type { Connection, ValidConnectionFunc } from "@vue-flow/core";
 import { showNodeError } from "./showNodeError";
 import { videoReferenceLimits } from "./videoModelOptions";
 
-export type ReferenceMention = MentionItem & { value: string; label?: string; dataType?: string; previewable?: boolean };
+export type ReferenceMention = MentionItem & { value: string; label?: string; displayName?: string; dataType?: string; previewable?: boolean; disabled?: boolean };
 export type MaterialMention = {
   id: string;
   name: string;
@@ -85,11 +85,23 @@ export function useNodeReferences(handleId = "in", getModel?: () => NodeMediaMod
       node.data.referenceOrder = { ...node.data.referenceOrder, [handleId]: values.map(referenceKey) };
     },
   });
+  const referenceDisplayNames = computed(() => {
+    const names = new Map<string, string>();
+    if (!getMode) return names;
+    const counts = { IMAGE: 0, VIDEO: 0 };
+    for (const item of refList.value) {
+      if (item.dataType !== "IMAGE" && item.dataType !== "VIDEO") continue;
+      const prefix = item.dataType === "IMAGE" ? "图片" : "视频";
+      names.set(referenceKey(item), `${prefix}${++counts[item.dataType]}`);
+    }
+    return names;
+  });
   const referenceMentions = computed<ReferenceMention[]>(() => refList.value.flatMap((item, index) =>
     typeof item.dataType === "string" && ["IMAGE", "VIDEO", "AUDIO", "STRING", "FILE"].includes(item.dataType)
       ? [{
           id: referenceKey(item),
           label: findNode<NodeData>(item.source)?.data.label?.trim() || item.source,
+          displayName: referenceDisplayNames.value.get(referenceKey(item)),
           dataType: item.dataType,
           name: item.dataType === "AUDIO"
             ? `参考 ${index + 1}：${findNode<NodeData>(item.source)?.data.label?.trim() || item.value?.url.split(/[\\/]/).pop() || "音频"}`
@@ -167,7 +179,7 @@ export function useNodeReferences(handleId = "in", getModel?: () => NodeMediaMod
   }
 
   const referenceUploadError = () => mediaLimitError("IMAGE", refList.value.filter(item => item.dataType === "IMAGE").length);
-  return { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference, referenceUploadError };
+  return { refList, referenceDisplayNames, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference, referenceUploadError };
 }
 
 export function referenceKey(item: { source: string; sourceHandle: string }) {

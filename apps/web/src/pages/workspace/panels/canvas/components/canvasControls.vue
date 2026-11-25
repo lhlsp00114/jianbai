@@ -101,10 +101,10 @@
               <div class="helpMenu">
                 <el-button class="helpAction" text :icon="IconKeyboard" @click="workspaceActions?.showShortcuts">快捷键</el-button>
                 <el-button class="helpAction" text :icon="appearanceDark ? IconMoon : IconSun" @click="toggleAppearance">{{ appearanceDark ? '切换为浅色模式' : '切换为深色模式' }}</el-button>
-                <el-button class="helpAction" tag="a" text :icon="IconBook" href="https://qcn7xdsqgc4z.feishu.cn/docx/RXFqdgR2Xo0dXZxGfd0cZCGgnwf" target="_blank" rel="noopener noreferrer" @click="helpVisible = false">使用教程</el-button>
-                <el-button class="helpAction" tag="a" text :icon="IconBug" href="https://docs.qq.com/smartsheet/form/EmvmQBrmlPmr%2Fss_vsqk2v%2FvhiGzE?tab=ss_vsqk2v" target="_blank" rel="noopener noreferrer" title="Toonflow 需求/BUG反馈表" @click="helpVisible = false">汇报 BUG</el-button>
-                <el-button class="helpAction" text :icon="IconBrandWechat" @click="workspaceActions?.showContact('community')">加入交流群</el-button>
-                <el-button class="helpAction" text :icon="IconBriefcase" @click="workspaceActions?.showContact('business')">商务合作</el-button>
+                <el-button class="helpAction" text :icon="IconBook" disabled>使用教程</el-button>
+                <el-button class="helpAction" text :icon="IconBug" disabled>汇报 BUG</el-button>
+                <el-button class="helpAction" text :icon="IconBrandWechat" disabled>加入交流群</el-button>
+                <el-button class="helpAction" text :icon="IconBriefcase" disabled>商务合作</el-button>
               </div>
             </el-popover>
           </span>
@@ -139,7 +139,6 @@ const workspaceActions = inject<{
   redo: () => void;
   helpVisible: Ref<boolean>;
   showShortcuts: () => void;
-  showContact: (type: "community" | "business") => void;
   shortcutLabel: (id: "undo" | "redo") => string;
 }>("workspaceBottomActions");
 const helpVisible = workspaceActions?.helpVisible ?? ref(false);

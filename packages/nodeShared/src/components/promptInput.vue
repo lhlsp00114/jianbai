@@ -47,6 +47,7 @@ const props = defineProps<{
   selectAsset?: () => Promise<Reference | undefined>;
   expandable?: boolean;
   highlightImageMentions?: boolean;
+  highlightVideoMentions?: boolean;
   placeholder?: string;
 }>();
 const model = defineModel<AnyTagProps[][]>({ required: true });
@@ -85,7 +86,7 @@ async function insertReferenceAtCursor(id: string) {
     await instance.nextTick();
     if (resetTask) await resetTask;
     const reference = props.references.find(item => item.id === id);
-    if (sender !== instance || !reference || instance.chatEditor.isComposition) return;
+    if (sender !== instance || !reference || reference.disabled || instance.chatEditor.isComposition) return;
     closeMentionMenu();
     instance.bus.emit(xSender.EventSet.EVENT_COMMON_DIALOG_CLOSE);
     instance.focus("mark");
@@ -162,7 +163,7 @@ async function chooseReference(select: () => Reference | undefined | Promise<Ref
     current.focus(cursor.offset);
     if (!reference) return;
     const resolved = props.references.find(item => item.id === reference.id);
-    if (!resolved) return;
+    if (!resolved || resolved.disabled) return;
     await instance.backspace(cursor.start - cursor.offset);
     if (sender === instance) await instance.setHtml(referenceHtml(resolved));
   } catch (error) {
@@ -248,9 +249,10 @@ function referenceHtml(reference: Reference) {
     tag.append(image);
   }
   const imageNumber = reference.dataType === "IMAGE" ? /^\{\{ref (\d+)\}\}$/.exec(reference.value)?.[1] : undefined;
-  const highlighted = !!imageNumber && props.highlightImageMentions;
-  if (highlighted) tag.classList.add("highlightedImageMention");
-  tag.append(document.createTextNode(imageNumber ? `${highlighted ? "@" : ""}图片${imageNumber}` : reference.label || reference.name));
+  const highlighted = (imageNumber && props.highlightImageMentions) || (reference.dataType === "VIDEO" && props.highlightVideoMentions);
+  if (highlighted) tag.classList.add("highlightedMediaMention");
+  const displayName = reference.displayName ?? (imageNumber ? `图片${imageNumber}` : reference.label || reference.name);
+  tag.append(document.createTextNode(`${highlighted ? "@" : ""}${displayName}`));
   return tag.outerHTML;
 }
 
@@ -646,7 +648,7 @@ function handleMentionKey(event: KeyboardEvent) {
     white-space: nowrap;
     vertical-align: middle;
 
-    &.highlightedImageMention {
+    &.highlightedMediaMention {
       color: light-dark(#426c17, #c1f77d);
     }
 

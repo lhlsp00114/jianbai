@@ -10,7 +10,7 @@
           <template v-else-if="builtinCategory">
             <button v-for="item in instructionTabs" :key="item.value" type="button" :aria-pressed="instructionType === item.value" @click="switchInstruction(item.value)">{{ item.label }}</button>
           </template>
-          <template v-else>
+          <template v-else-if="!modelCategory">
             <button type="button" :aria-pressed="libraryView === 'mine'" @click="selectView('mine')">{{ category === 'skill' ? '我的 Skill' : '我的提示词' }}</button>
             <button type="button" :aria-pressed="libraryView === 'official'" @click="selectView('official')">{{ category === 'skill' ? '官方 Skill' : '官方提示词' }}</button>
             <button type="button" :aria-pressed="libraryView === 'recent'" @click="selectView('recent')">最近使用</button>
@@ -21,6 +21,7 @@
     <div class="creationLibrary" @keydown.stop @pointerdown.stop @wheel.stop>
       <div class="libraryNavigation">
         <nav class="libraryCategories" aria-label="创作广场分类">
+          <button type="button" :aria-pressed="modelCategory" @click="selectCategory('models')"><icon-cpu :size="16" aria-hidden="true" />内置模型</button>
           <button type="button" :aria-pressed="builtinCategory" @click="selectCategory('builtin')"><icon-adjustments :size="16" aria-hidden="true" />内置提示词</button>
           <hr class="categoryDivider" />
           <button type="button" :aria-pressed="category === 'prompt'" @click="selectCategory('prompt')"><icon-message :size="16" aria-hidden="true" />提示词</button>
@@ -31,6 +32,31 @@
           <button type="button" :aria-pressed="category === 'composition'" @click="selectCategory('composition')"><icon-layout-grid :size="16" aria-hidden="true" />构图</button>
         </nav>
       </div>
+      <section v-if="modelCategory" class="libraryBody builtinModelPanel" aria-label="内置模型使用情况">
+        <div class="modelPanelHeader">
+          <div>
+            <h3>内置模型</h3>
+            <span>配置提示词翻译与优化所使用的语言模型</span>
+          </div>
+          <label class="modelGlobalControl">
+            <span>统一应用到全部</span>
+            <el-select :modelValue="globalBuiltinModelValue" :disabled="!modelChoices.length" placeholder="选择模型以统一设置" aria-label="统一设置全部内置功能模型" @update:modelValue="setAllBuiltinModels">
+              <el-option v-for="model in modelChoices" :key="model.value" :label="`${model.providerLabel} · ${model.label}`" :value="model.value" />
+            </el-select>
+          </label>
+        </div>
+        <div class="modelUsageGrid">
+          <section v-for="group in builtinModelGroups" :key="group.id" class="modelUsageGroup">
+            <h4>{{ group.name }}</h4>
+            <div v-for="usage in group.usages" :key="usage.id" class="modelUsageRow">
+              <span class="modelUsageName">{{ usage.name }}</span>
+              <el-select class="modelUsageSelect" :modelValue="getBuiltinModelValue(usage.id)" :disabled="!modelChoices.length" placeholder="未配置语言模型" :aria-label="`${usage.name}使用的模型`" @update:modelValue="setBuiltinModel(usage.id, $event)">
+                <el-option v-for="model in modelChoices" :key="model.value" :label="`${model.providerLabel} · ${model.label}`" :value="model.value" />
+              </el-select>
+            </div>
+          </section>
+        </div>
+      </section>
       <builtinNodeInstructions v-if="visible && builtinCategory" :key="instructionType" ref="builtinEditor" :section="instructionType" :search="search">
         <template #default="{ cards, selectInstruction }">
           <div class="libraryToolbar">
@@ -79,8 +105,8 @@
           <div v-if="search.trim() && !presetEntries.length" class="searchEmpty" role="status">当前分类没有匹配项</div>
         </div>
       </div>
-      <el-alert v-if="!builtinCategory && !presetCategory && (library.error || operationError)" :title="library.error || operationError" type="error" :closable="false" showIcon />
-      <div v-if="!builtinCategory && !presetCategory && !draft && !officialPreview" class="libraryToolbar">
+      <el-alert v-if="!modelCategory && !builtinCategory && !presetCategory && (library.error || operationError)" :title="library.error || operationError" type="error" :closable="false" showIcon />
+      <div v-if="!modelCategory && !builtinCategory && !presetCategory && !draft && !officialPreview" class="libraryToolbar">
         <el-input v-model="search" clearable :prefixIcon="IconSearch" :placeholder="category === 'skill' ? '搜索 Skill' : '搜索提示词'" aria-label="搜索名称或内容" />
         <div class="libraryActions">
           <el-button v-if="libraryView === 'mine'" text :icon="IconPlus" :disabled="busy || !!library.error" @click="createEntry">新建</el-button>
@@ -92,8 +118,8 @@
         </div>
         <input ref="fileInput" type="file" accept=".md,.markdown,.txt" hidden aria-label="导入 Skill 或提示词文本" @change="importEntry" />
       </div>
-      <div v-if="category === 'skill' && libraryView === 'official'" class="officialEmpty" role="status">暂无官方 Skill</div>
-      <div v-else-if="!builtinCategory && !presetCategory" class="libraryBody">
+      <div v-if="!modelCategory && category === 'skill' && libraryView === 'official'" class="officialEmpty" role="status">暂无官方 Skill</div>
+      <div v-else-if="!modelCategory && !builtinCategory && !presetCategory" class="libraryBody">
         <div v-if="!draft && !officialPreview" class="entryList" :style="{ '--cardWidth': `${208 - gridDensity * 28}px` }" role="region" aria-label="创作条目">
           <div v-for="{ entry, title, excerpt } in filteredEntries" :key="entry.id" class="entryCard">
             <button class="entryItem" :class="{ dragging: draggedId === entry.id, dropBefore: dropTarget?.id === entry.id && !dropTarget.after, dropAfter: dropTarget?.id === entry.id && dropTarget.after }" type="button" :disabled="busy" :draggable="!busy && libraryView === 'mine'" :title="entry.title" @click="selectEntry(entry)" @dragstart.stop="startSort($event, entry)" @dragover.stop="overSort($event, entry)" @drop.stop="dropSort($event, entry)" @dragend.stop="endSort" @keydown.alt.left.prevent.stop="moveEntry(entry, -1)" @keydown.alt.right.prevent.stop="moveEntry(entry, 1)">
@@ -152,11 +178,12 @@
 
 <script setup lang="ts">
 import axios from "axios";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { IconAdjustments, IconArrowLeft, IconBook, IconCheck, IconCopy, IconDownload, IconLayoutGrid, IconMessage, IconPalette, IconPhoto, IconPlus, IconSearch, IconSend, IconStar, IconStarOff, IconUpload } from "@tabler/icons-vue";
+import { IconAdjustments, IconArrowLeft, IconBook, IconCheck, IconCopy, IconCpu, IconDownload, IconLayoutGrid, IconMessage, IconPalette, IconPhoto, IconPlus, IconSearch, IconSend, IconStar, IconStarOff, IconUpload } from "@tabler/icons-vue";
 import { translate } from "@toonflow/i18n/vue";
-import { saveSettings, settings, settingsStorage } from "@/stores/settings";
+import { modelChoices, saveSettings, settings, settingsStorage } from "@/stores/settings";
+import { useNodeModelMemory } from "@toonflow/nodes-scaffold/runtime";
 import { writeClipboardText } from "@/lib/clipboard";
 import saveFile from "@/lib/saveFile";
 import { currentUser } from "@/stores/multiTenant";
@@ -177,7 +204,7 @@ import stylePresetEditor from "@toonflow/node-shared/stylePresetEditor";
 type Entry = { id: string; kind: "skill" | "prompt"; title: string; content: string; cover?: string; name?: string; colors?: string[] };
 const visible = defineModel<boolean>({ default: false });
 const props = defineProps<{ sendToCanvas?: (entry: Entry) => Promise<void>; officialPromptsOnOpen?: boolean }>();
-const category = ref<"skill" | "prompt" | "builtin" | "style" | "color" | "composition">("prompt");
+const category = ref<"skill" | "prompt" | "builtin" | "models" | "style" | "color" | "composition">("prompt");
 const instructionTabs = [{ value: "text", label: translate("文本节点") }, { value: "comic", label: translate("漫画提示词") }, { value: "image", label: translate("图片生成节点") }] as const;
 const instructionType = ref<(typeof instructionTabs)[number]["value"]>("text");
 const libraryView = ref<"mine" | "official" | "recent">("mine");
@@ -192,6 +219,42 @@ const styleTabs = [
   { id: "threeD", label: "3D风格" },
 ] as const;
 const builtinCategory = computed(() => category.value === "builtin");
+const modelCategory = computed(() => category.value === "models");
+const builtinModelUsages = [
+  { id: "imageTranslate", name: "提示词翻译", memoryType: "builtinPrompt.image.translate" },
+  { id: "imageOptimize", name: "提示词优化", memoryType: "builtinPrompt.image.optimize" },
+  { id: "videoTranslate", name: "提示词翻译", memoryType: "builtinPrompt.video.translate" },
+  { id: "videoOptimize", name: "提示词优化", memoryType: "builtinPrompt.video.optimize" },
+] as const;
+const builtinModelGroups = [
+  { id: "image", name: "图片生成", usages: builtinModelUsages.slice(0, 2) },
+  { id: "video", name: "视频生成", usages: builtinModelUsages.slice(2) },
+];
+const builtinModelMemories = Object.fromEntries(builtinModelUsages.map(usage => [usage.id, useNodeModelMemory(usage.memoryType)]));
+const builtinModelSelections = reactive(Object.fromEntries(builtinModelUsages.map(usage => [usage.id, builtinModelMemories[usage.id].get()])));
+function getBuiltinModelValue(id: keyof typeof builtinModelMemories) {
+  const selected = builtinModelSelections[id];
+  return modelChoices.value.some(model => model.value === selected) ? selected : modelChoices.value[0]?.value ?? "";
+}
+function setBuiltinModel(id: keyof typeof builtinModelMemories, value: string) {
+  builtinModelSelections[id] = value;
+  builtinModelMemories[id].set(value);
+}
+const globalBuiltinModelValue = computed(() => {
+  const values = builtinModelUsages.map(usage => getBuiltinModelValue(usage.id));
+  return values.every(value => value && value === values[0]) ? values[0] : "";
+});
+function setAllBuiltinModels(value: string) {
+  let stored: unknown;
+  try { stored = JSON.parse(settingsStorage.getItem("toonflow.nodeModels") ?? "{}"); } catch {}
+  const memories = stored && typeof stored === "object" && !Array.isArray(stored) ? stored as Record<string, unknown> : {};
+  const nextMemories = { ...memories };
+  builtinModelUsages.forEach(usage => {
+    builtinModelSelections[usage.id] = value;
+    nextMemories[usage.memoryType] = value;
+  });
+  settingsStorage.setItem("toonflow.nodeModels", JSON.stringify(nextMemories));
+}
 const presetCategory = computed(() => ["style", "color", "composition"].includes(category.value) ? category.value as "style" | "color" | "composition" : undefined);
 const presetCategoryLabel = computed(() => presetCategory.value === "style" ? "风格" : presetCategory.value === "color" ? "配色" : "构图");
 const presetTabs = computed(() => [
@@ -752,7 +815,7 @@ defineExpose({ requestClose });
   padding-right: 26px;
   .el-dialog__title { margin: 0; color: var(--libraryMutedText); font-size: 14px; font-weight: 600; }
   .libraryViewTabs {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 2px 16px;
+    display: flex; flex-wrap: wrap; align-items: center; min-height: 32px; gap: 2px 16px;
     button {
       min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--libraryMutedText); font: inherit; font-size: 13px; font-weight: 400; cursor: pointer;
       &:hover { color: var(--el-text-color-regular); }
@@ -827,6 +890,62 @@ defineExpose({ requestClose });
       align-items: center;
       gap: 4px;
       :deep(.el-button) { margin: 0; padding: 0 8px; border-radius: 8px; }
+    }
+  }
+  .builtinModelPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-top: 2px;
+    .modelPanelHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      > div { display: grid; gap: 5px; }
+      h3 { margin: 0; color: var(--el-text-color-primary); font-size: 15px; font-weight: 600; }
+      > div > span { color: var(--el-text-color-secondary); font-size: 12px; }
+    }
+    .modelGlobalControl {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--el-text-color-secondary);
+      font-size: 12px;
+      .el-select { width: min(320px, 30vw); }
+      :deep(.el-select__wrapper) { min-height: 34px; border-radius: 8px; box-shadow: none; background: var(--el-fill-color-light); }
+    }
+    .modelUsageGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      max-width: 960px;
+    }
+    .modelUsageGroup {
+      min-width: 0;
+      padding: 12px 14px;
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: 8px;
+      h4 { margin: 0 0 4px; color: var(--el-text-color-secondary); font-size: 12px; font-weight: 600; }
+    }
+    .modelUsageRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 42px;
+      border-bottom: 1px solid var(--el-border-color-lighter);
+      &:last-child { border-bottom: 0; }
+    }
+    .modelUsageName { min-width: 0; color: var(--el-text-color-primary); font-size: 12px; }
+    .modelUsageSelect {
+      width: min(260px, 54%);
+      :deep(.el-select__wrapper) { min-height: 30px; border-radius: 7px; box-shadow: none; background: var(--el-fill-color-light); }
+    }
+    @media (max-width: 760px) {
+      .modelPanelHeader { align-items: stretch; flex-direction: column; }
+      .modelGlobalControl { justify-content: space-between; .el-select { width: min(320px, 58vw); } }
+      .modelUsageGrid { grid-template-columns: 1fr; }
     }
   }
   .presetSubTabs {

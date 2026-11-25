@@ -4,34 +4,17 @@
       <div class="noticeContent">
         <icon-barrier-block :size="36" aria-hidden="true" />
         <h3 id="developmentTitle">正在开发</h3>
-        <p>Toonflow 将在后续更新中推出多租户能力，敬请期待。</p>
+        <p>见白的多租户能力正在开发中。</p>
       </div>
     </section>
 
     <section class="businessContact" aria-labelledby="businessTitle">
       <div class="contactInfo">
         <h3 id="businessTitle">商务合作</h3>
-        <p>接受定制化功能开发或私有化部署，欢迎联系我们洽谈需求。</p>
-        <p class="scanTip">微信扫码洽谈商务合作</p>
-      </div>
-      <div class="businessQr">
-        <q-r-code
-          value="https://work.weixin.qq.com/u/vc66e4c7f8432af0d8?v=5.0.13.84802&bb=c03c3ad130"
-          :size="168"
-          type="svg"
-          color="#000000"
-          bgColor="#ffffff"
-          borderless
-          role="img"
-          aria-label="Toonflow 商务合作二维码" />
       </div>
     </section>
   </div>
 </template>
-
-<script setup lang="ts">
-import { QRCode } from "tdesign-vue-next";
-</script>
 
 <style lang="scss" scoped>
 .multiTenant {
@@ -88,30 +71,11 @@ import { QRCode } from "tdesign-vue-next";
       min-width: 0;
 
       h3 {
-        margin: 0 0 10px;
+        margin: 0;
         color: var(--el-text-color-primary);
         font-size: 14px;
       }
 
-      p {
-        margin: 0;
-        color: var(--el-text-color-regular);
-        font-size: 13px;
-        line-height: 1.7;
-      }
-
-      .scanTip {
-        margin-top: 12px;
-        color: var(--el-text-color-secondary);
-        font-size: 12px;
-      }
-    }
-
-    .businessQr {
-      flex-shrink: 0;
-      padding: 12px;
-      border-radius: var(--el-border-radius-base);
-      background: #ffffff;
     }
 
     @media (max-width: 700px) {

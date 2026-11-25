@@ -341,7 +341,12 @@ async function copyPrompt() {
 .dialogContent {
   .importForm {
     .methodField {
-      :deep(.el-segmented) { width: 100%; }
+      :deep(.el-segmented) {
+        width: 100%;
+        --el-segmented-bg-color: var(--el-fill-color);
+        --el-segmented-item-selected-bg-color: var(--el-bg-color);
+        --el-segmented-item-selected-color: var(--el-text-color-primary);
+      }
 
       .methodOption {
         display: flex;

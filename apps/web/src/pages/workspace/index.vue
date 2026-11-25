@@ -46,20 +46,6 @@
         </div>
       </div>
     </el-dialog>
-    <el-dialog v-model="contactVisible" :title="contactInfo.title" width="min(360px, calc(100vw - 32px))" alignCenter appendToBody>
-      <div class="contactContent">
-        <q-r-code
-          :value="contactInfo.url"
-          :size="192"
-          type="svg"
-          color="#000000"
-          bgColor="#ffffff"
-          borderless
-          role="img"
-          :aria-label="`${contactInfo.title}二维码`" />
-        <p class="contactTip">{{ contactInfo.tip }}</p>
-      </div>
-    </el-dialog>
   </main>
 </template>
 
@@ -69,7 +55,6 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onScopeDispose, pr
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import axios from "axios";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { QRCode } from "tdesign-vue-next";
 import type { AgentMention } from "@toonflow/server/agent/types";
 import settings from "@/components/settings/index.vue";
 import modelLoginGuide from "@/components/modelLoginGuide.vue";
@@ -145,32 +130,12 @@ provide("openSettingsPanel", (id: string) => settingsDialog.value?.openPanel(id)
 provide("modelLoginGuide", computed(() => !multiTenantEnabled.value && !toonflowAccountToken.value ? modelLoginGuide : undefined));
 const helpVisible = ref(false);
 const shortcutsVisible = ref(false);
-const contactVisible = ref(false);
-const contactType = ref<"community" | "business">("community");
-const contacts = {
-  community: {
-    title: "加入交流群",
-    url: "https://work.weixin.qq.com/u/vc66e4c7f8432af0d8?v=5.0.13.84802&bb=c03c3ad130",
-    tip: "Toonflow 是为爱发电的开源项目。欢迎文明交流、友善反馈；回复可能需要一些时间，请避免责问或命令式沟通，感谢你的理解与尊重。",
-  },
-  business: {
-    title: "商务合作",
-    url: "https://work.weixin.qq.com/u/vc66e4c7f8432af0d8?v=5.0.13.84802&bb=c03c3ad130",
-    tip: "此联系方式仅用于商务合作接洽，不提供问题答疑。使用问题欢迎在交流群交流，需求与 BUG 可通过反馈表提交。感谢理解。",
-  },
-};
-const contactInfo = computed(() => contacts[contactType.value]);
 
 function showShortcuts() {
   helpVisible.value = false;
   shortcutsVisible.value = true;
 }
 
-function showContact(type: "community" | "business") {
-  contactType.value = type;
-  helpVisible.value = false;
-  contactVisible.value = true;
-}
 const canvasPanelRef = ref<InstanceType<typeof canvasPanel>>();
 provide("workspaceBottomActions", {
   undoDisabled: () => !canvasPanelRef.value?.canvasReady || (!textHistory.value && !canvasPanelRef.value?.canUndo) || historyBusy.value || settingsVisible.value,
@@ -179,7 +144,6 @@ provide("workspaceBottomActions", {
   redo: () => void changeHistory("redo"),
   helpVisible,
   showShortcuts,
-  showContact,
   shortcutLabel: (id: "undo" | "redo") => shortcutLabel(generalSettings.value.canvasShortcuts[id]),
 });
 const projectMenuTarget = ref<HTMLElement>();
@@ -475,17 +439,4 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
   }
 }
 
-.contactContent {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-
-  .contactTip {
-    margin: 0;
-    color: var(--el-text-color-secondary);
-    font-size: 12px;
-    line-height: 1.7;
-  }
-}
 </style>

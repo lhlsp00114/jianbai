@@ -9,10 +9,10 @@
           <button class="navButton" type="button" :aria-pressed="activeTab === 'ffmpeg'" @click="activeTab = 'ffmpeg'">FFmpeg</button>
         </nav>
         <div class="marketLinks">
-          <el-button tag="a" href="https://api.toonflow.net/console/plugIn" target="_blank" rel="noopener noreferrer" size="small" text :icon="IconExternalLink">
+          <el-button disabled size="small" text :icon="IconExternalLink">
             网页版市场
           </el-button>
-          <el-button tag="a" href="https://qcn7xdsqgc4z.feishu.cn/docx/KNBNd9naqolsy6xjAOCcEAkqnRd" target="_blank" rel="noopener noreferrer" size="small" text :icon="IconBook">
+          <el-button disabled size="small" text :icon="IconBook">
             开发者文档
           </el-button>
         </div>

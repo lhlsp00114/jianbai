@@ -1223,12 +1223,15 @@ async function generateCatalogVideo(context: Context, request: VideoRequest) {
           || field.min_pixels && width * height < field.min_pixels || field.max_pixels && width * height > field.max_pixels
           || field.aspect_min && width / height < field.aspect_min || field.aspect_max && width / height > field.aspect_max) throw new Error("参考视频尺寸或宽高比不符合模型要求");
       }
-      const bytes = item.type === "binary" ? item.data.byteLength : item.type === "base64" ? atob(item.data).length : undefined;
-      if (field?.max_bytes && bytes !== undefined && bytes > field.max_bytes) throw new Error(`${field.title}单个文件不能超过 ${field.max_bytes / 1024 / 1024} MB`);
       if (key === "images" && field && (field.min_edge_px || field.max_edge_px || field.aspect_min || field.aspect_max)) {
         const { width, height } = await context.tool.media.inspectImage(item);
         if (field.min_edge_px && Math.min(width, height) < field.min_edge_px || field.max_edge_px && Math.max(width, height) > field.max_edge_px
           || field.aspect_min && width / height < field.aspect_min || field.aspect_max && width / height > field.aspect_max) throw new Error(`${definition.label}参考图尺寸或宽高比不符合模型要求`);
+      }
+      // 参考图按原文件上传，图片大小由平台判定。
+      if (key !== "images" && field?.max_bytes) {
+        const bytes = item.type === "binary" ? item.data.byteLength : item.type === "base64" ? atob(item.data).length : undefined;
+        if (bytes !== undefined && bytes > field.max_bytes) throw new Error(`${field.title}单个文件不能超过 ${field.max_bytes / 1024 / 1024} MB`);
       }
     }
   }
@@ -2939,7 +2942,7 @@ export default {
       } : {
         size: request.ratio,
       }),
-    }, images.length ? "edit" : "generate");
+    }, images.length ? "edit" : "generate", images);
   },
   async generateVideo(this: Context, request: VideoRequest) {
     return generateCatalogVideo(this, request);
