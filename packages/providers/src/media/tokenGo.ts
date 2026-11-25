@@ -1183,10 +1183,11 @@ async function generateCatalogVideo(context: Context, request: VideoRequest) {
   const mode = avatar ? "avatar" : request.mode === "text" ? "text-to-video" : frames.length === 2 ? "first-last" : frames.length === 1 || request.mode === "singleImage" ? "first-frame"
     : referenceMode ? operation : images.length || videos.length || audios.length ? "reference" : "text-to-video";
   const params: Record<string, unknown> = { prompt: request.prompt, count: 1 };
+  const defaultDuration = definition.id === "vo-4-omni" && mode === "first-last" ? "4" : fields.duration?.default;
   for (const [key, field] of Object.entries(fields)) {
     if (field.type === "upload") continue;
     const common: Record<string, unknown> = { mode, duration: request.duration === undefined ? undefined : String(request.duration), resolution: request.resolution, aspect_ratio: request.ratio };
-    params[key] = common[key] ?? request.other?.[imageField(key)] ?? field.default;
+    params[key] = common[key] ?? request.other?.[imageField(key)] ?? (key === "duration" ? defaultDuration : field.default);
   }
   if (!fields.mode && mode !== "first-frame") throw new Error("当前模型必须使用单张首帧图片");
   const matches = (condition?: Record<string, string[]>) => !condition || Object.entries(condition).every(([key, values]) => values.includes(String(params[key])));

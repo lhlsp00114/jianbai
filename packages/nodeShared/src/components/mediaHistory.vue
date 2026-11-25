@@ -50,11 +50,30 @@
       <video v-else-if="mediaSrc && selected" class="pendingPreview" :src="mediaSrc" muted playsinline preload="auto" aria-hidden="true" @loadeddata="readPreview" @error="previewFailed" />
     </div>
   </el-dialog>
-  <el-dialog v-if="viewerVisible" v-model="viewerVisible" :title="`${mediaLabel}预览`" width="min(1080px, calc(100vw - 32px))" appendToBody destroyOnClose @closed="selected = undefined">
+  <el-dialog v-if="viewerVisible" v-model="viewerVisible" :title="`${mediaLabel}预览`" width="min(1080px, calc(100vw - 32px))" appendToBody destroyOnClose>
     <div class="historyViewer nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop>
       <div class="historyViewerStage" v-loading="!!selected && !previewReady && !previewError">
-        <img v-if="mediaType === 'image' && mediaSrc" :src="mediaSrc" alt="历史图片放大预览" @load="readPreview" @error="previewFailed" />
-        <video v-else-if="mediaType === 'video' && mediaSrc" :src="mediaSrc" controls playsinline preload="auto" aria-label="历史视频放大预览" @loadeddata="readPreview" @error="previewFailed" />
+        <template v-if="mediaType === 'image' && mediaSrc && !previewError">
+          <div
+            ref="imageViewport"
+            class="imageViewport"
+            :class="{ zoomed: imageZoom > 1 }"
+            @wheel.prevent.stop="zoomImage(imageZoom + ($event.deltaY < 0 ? 0.25 : -0.25), $event)"
+            @pointerdown="startImagePan"
+            @pointermove="panImage"
+            @lostpointercapture="imagePan = undefined"
+            @pointerup="imagePan = undefined"
+            @pointercancel="imagePan = undefined"
+            @dblclick="zoomImage(1)">
+            <img :src="mediaSrc" :style="{ width: `${imageZoom * 100}%`, height: `${imageZoom * 100}%` }" draggable="false" alt="历史图片放大预览" @load="readPreview" @error="previewFailed" />
+          </div>
+          <div v-if="previewReady" class="imageZoomControls" role="group" aria-label="图片缩放">
+            <el-button :icon="IconZoomOut" circle :disabled="imageZoom <= 1" title="缩小图片" aria-label="缩小图片" @click="zoomImage(imageZoom - 0.25)" />
+            <el-button :icon="IconZoomIn" circle :disabled="imageZoom >= 5" title="放大图片" aria-label="放大图片" @click="zoomImage(imageZoom + 0.25)" />
+            <el-button round @click="zoomImage(1)">适应窗口</el-button>
+          </div>
+        </template>
+        <video v-else-if="mediaType === 'video' && mediaSrc" :key="mediaSrc" ref="viewerVideo" :src="mediaSrc" controls playsinline preload="auto" aria-label="历史视频放大预览" @loadeddata="readViewerVideo" @error="previewFailed" />
         <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" />
       </div>
       <div class="historyViewerVersions" aria-label="节点历史版本" :aria-busy="loading">
@@ -110,17 +129,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
 import { ElAlert, ElButton, ElDialog, ElEmpty, ElLoading, ElPagination, ElPopover } from "element-plus";
-import { IconHistory, IconMaximize, IconTransfer, IconUpload, IconPhoto } from "@tabler/icons-vue";
+import { IconHistory, IconMaximize, IconTransfer, IconUpload, IconPhoto, IconZoomIn, IconZoomOut } from "@tabler/icons-vue";
 import { useNodeFiles } from "@toonflow/nodes-scaffold/workspaceFiles";
 import { isNodeOutput, type NodeMediaValue } from "@toonflow/nodes-scaffold/values";
 import { useMediaPreview } from "../mediaPreview";
 import { getMediaMimeType } from "../mediaTypes";
 import promptReferenceThumbnail from "./promptReferenceThumbnail.vue";
 
-const props = defineProps<{ mediaType: "image" | "video"; current?: NodeMediaValue; disabled?: boolean; inline?: boolean; replaceable?: boolean; hideHistory?: boolean }>();
+const props = defineProps<{ mediaType: "image" | "video"; current?: NodeMediaValue; disabled?: boolean; inline?: boolean; replaceable?: boolean; hideHistory?: boolean; getVideoElement?: () => HTMLVideoElement | undefined }>();
 const emit = defineEmits<{ select: [value: NodeMediaValue]; upload: []; open: [] }>();
 const vLoading = ElLoading.directive;
 const { id, node } = useNode();
@@ -144,6 +163,13 @@ watch(() => (visible.value || replaceVisible.value) && props.inline ? [viewport.
   void replacePopover.value?.popperRef?.popperInstanceRef?.update();
 }, { flush: "post" });
 const viewerVisible = ref(false);
+const imageViewport = ref<HTMLElement>();
+const imageZoom = ref(1);
+let imagePan: { id: number; x: number; y: number; left: number; top: number } | undefined;
+const viewerVideo = ref<HTMLVideoElement>();
+type VideoPlayback = { time: number; playing: boolean; muted: boolean; volume: number; rate: number };
+let inlinePlayback: { video: HTMLVideoElement; src: string | null; url: string | undefined; state: VideoPlayback } | undefined;
+let restoredViewerVideo: HTMLVideoElement | undefined;
 const previewOnly = ref(false);
 const loading = ref(false);
 const loadError = ref("");
@@ -193,8 +219,24 @@ watch(visible, open => {
   if (open) page.value = getHistoryPage(currentUrl.value);
 });
 watch(viewerVisible, open => {
-  if (open) viewerPage.value = getHistoryPage(selected.value?.url);
-});
+  if (open) {
+    viewerPage.value = getHistoryPage(selected.value?.url);
+    const video = props.getVideoElement?.();
+    if (video) {
+      inlinePlayback = { video, src: video.getAttribute("src"), url: currentUrl.value, state: getVideoPlayback(video) };
+      video.pause();
+    }
+  } else {
+    saveViewerPlayback();
+    const playback = inlinePlayback;
+    inlinePlayback = undefined;
+    if (playback && playback.url === currentUrl.value && playback.video.isConnected && playback.video.getAttribute("src") === playback.src) {
+      restoreVideoPlayback(playback.video, playback.state);
+    }
+    selected.value = undefined;
+  }
+}, { flush: "sync" });
+onBeforeUnmount(() => { viewerVideo.value?.pause(); });
 
 // 内联历史仅在选中节点后检查目录，媒体仍在展开后按页读取。
 const shouldReadHistory = computed(() => props.inline ? !props.hideHistory && !props.disabled : visible.value);
@@ -254,6 +296,7 @@ function openViewer() {
 
 function switchViewer(item: NodeMediaValue) {
   if (loading.value || selected.value?.url === item.url) return;
+  saveViewerPlayback();
   previewOnly.value = true;
   previewReady.value = false;
   previewReadError.value = "";
@@ -270,7 +313,73 @@ function completeMediaAction() {
 
 function readPreview(event: Event) {
   previewReady.value = handleLoaded(event);
-  if (props.inline && previewReady.value) completeMediaAction();
+  if (props.inline && !viewerVisible.value && previewReady.value) completeMediaAction();
+}
+
+watch(mediaSrc, () => {
+  imageZoom.value = 1;
+  imageViewport.value?.scrollTo(0, 0);
+}, { flush: "sync" });
+
+function zoomImage(value: number, event?: WheelEvent) {
+  const viewport = imageViewport.value;
+  if (!viewport || !previewReady.value) return;
+  const zoom = Math.min(5, Math.max(1, value));
+  if (zoom === imageZoom.value) return;
+  const bounds = viewport.getBoundingClientRect();
+  const x = event ? event.clientX - bounds.left : viewport.clientWidth / 2;
+  const y = event ? event.clientY - bounds.top : viewport.clientHeight / 2;
+  const ratio = zoom / imageZoom.value;
+  const left = (viewport.scrollLeft + x) * ratio - x;
+  const top = (viewport.scrollTop + y) * ratio - y;
+  imageZoom.value = zoom;
+  void nextTick(() => {
+    if (imageViewport.value === viewport && imageZoom.value === zoom) viewport.scrollTo(left, top);
+  });
+}
+
+function startImagePan(event: PointerEvent) {
+  const viewport = imageViewport.value;
+  if (!viewport || imageZoom.value <= 1 || (event.button !== 0 && event.button !== 1)) return;
+  event.preventDefault();
+  viewport.setPointerCapture(event.pointerId);
+  imagePan = { id: event.pointerId, x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+}
+
+function panImage(event: PointerEvent) {
+  if (imagePan?.id !== event.pointerId) return;
+  imageViewport.value?.scrollTo(imagePan.left + imagePan.x - event.clientX, imagePan.top + imagePan.y - event.clientY);
+}
+
+function getVideoPlayback(video: HTMLVideoElement): VideoPlayback {
+  return { time: video.currentTime, playing: !video.paused && !video.ended, muted: video.muted, volume: video.volume, rate: video.playbackRate };
+}
+
+function restoreVideoPlayback(video: HTMLVideoElement, state: VideoPlayback) {
+  video.currentTime = Number.isFinite(video.duration) ? Math.min(state.time, video.duration) : state.time;
+  video.muted = state.muted;
+  video.volume = state.volume;
+  video.playbackRate = state.rate;
+  if (state.playing) void video.play().catch(() => {}); // 自动续播被浏览器拦截时，仍保留位置并可手动播放。
+}
+
+function readViewerVideo(event: Event) {
+  const video = viewerVideo.value;
+  if (!viewerVisible.value || !video || video !== event.currentTarget) return;
+  previewReady.value = handleLoaded(event);
+  if (!previewReady.value || restoredViewerVideo === video || !inlinePlayback || inlinePlayback.url !== selected.value?.url) return;
+  restoredViewerVideo = video;
+  restoreVideoPlayback(video, inlinePlayback.state);
+}
+
+function saveViewerPlayback() {
+  const video = viewerVideo.value;
+  if (!video) return;
+  if (video === restoredViewerVideo && inlinePlayback && inlinePlayback.url === selected.value?.url) {
+    inlinePlayback.state = getVideoPlayback(video);
+  }
+  restoredViewerVideo = undefined;
+  video.pause();
 }
 
 function previewFailed(event: Event) {
@@ -306,6 +415,7 @@ defineExpose({ openViewer });
   min-height: min(620px, 70vh);
 
   .historyViewerStage {
+    position: relative;
     display: grid;
     min-width: 0;
     min-height: 0;
@@ -314,8 +424,24 @@ defineExpose({ openViewer });
     border-radius: 8px;
     background: #111;
 
-    img, video { display: block; max-width: 100%; max-height: min(620px, 70vh); object-fit: contain; }
-    video { width: 100%; }
+    video { display: block; width: 100%; max-height: min(620px, 70vh); object-fit: contain; }
+
+    .imageViewport {
+      width: 100%;
+      height: min(620px, 70vh);
+      overflow: hidden;
+      touch-action: none;
+
+      &.zoomed { cursor: grab; }
+      &.zoomed:active { cursor: grabbing; }
+      img { display: block; max-width: none; max-height: none; object-fit: contain; user-select: none; }
+    }
+
+    .imageZoomControls {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+    }
   }
 
   .historyViewerVersions {

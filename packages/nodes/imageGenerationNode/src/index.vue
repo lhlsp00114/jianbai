@@ -57,7 +57,7 @@
       <imageOutpaint v-if="outpaintVisible" ref="outpaintPrompt" :src="imagePreviewUrl" :target="outpaintTarget" :sourceWidth="imageNaturalWidth" :sourceHeight="imageNaturalHeight" :models="models" :createDraft="createOutpaint" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || gridSplit?.splitting" @close="outpaintVisible = false" />
       <mediaHistory
         ref="mediaHistoryRef"
-        v-if="node.selected && !editor?.mode && !outpaintVisible"
+        v-if="(node.selected || skeleton?.documentTarget) && !editor?.mode && !outpaintVisible"
         mediaType="image"
         inline
         replaceable

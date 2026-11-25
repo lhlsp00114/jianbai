@@ -45,7 +45,7 @@
       <div v-else class="videoEmpty" role="img" aria-label="暂无生成视频">
         <videoGenerationIcon :size="30" stroke="1.4" />
       </div>
-      <mediaHistory ref="mediaHistoryRef" v-if="node.selected" mediaType="video" inline replaceable :current="outputFile" :disabled="generating || deleting || uploading || player?.capturing || actions?.processing" @open="skeleton?.focusNode()" @select="outputs.video = { dataType: 'VIDEO', value: $event }" @upload="fileInput?.click()" />
+      <mediaHistory ref="mediaHistoryRef" v-if="node.selected || skeleton?.documentTarget" mediaType="video" inline replaceable :current="outputFile" :getVideoElement="player?.getVideoElement" :disabled="generating || deleting || uploading || player?.capturing || actions?.processing" @open="skeleton?.focusNode()" @select="outputs.video = { dataType: 'VIDEO', value: $event }" @upload="fileInput?.click()" />
     </div>
     <template #bottom>
       <generationPromptPanel>
