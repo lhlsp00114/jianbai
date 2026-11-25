@@ -75,6 +75,7 @@
         </template>
         <video v-else-if="mediaType === 'video' && mediaSrc" :key="mediaSrc" ref="viewerVideo" :src="mediaSrc" controls playsinline preload="auto" aria-label="历史视频放大预览" @loadeddata="readViewerVideo" @error="previewFailed" />
         <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" />
+        <el-button v-if="mediaType === 'image' && previewUrl && selected && (previewReady || previewError)" class="imageDownload" tag="a" :href="previewUrl" :download="selected.url.split('/').at(-1) || 'image.png'" :icon="IconDownload" circle title="下载图片" aria-label="下载图片" />
       </div>
       <div class="historyViewerVersions" aria-label="节点历史版本" :aria-busy="loading">
         <div class="historyViewerHeader"><span>节点历史</span><span>{{ items.length }} {{ mediaType === 'video' ? '段' : '张' }}</span></div>
@@ -132,14 +133,14 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
 import { ElAlert, ElButton, ElDialog, ElEmpty, ElLoading, ElPagination, ElPopover } from "element-plus";
-import { IconHistory, IconMaximize, IconTransfer, IconUpload, IconPhoto, IconZoomIn, IconZoomOut } from "@tabler/icons-vue";
+import { IconDownload, IconHistory, IconMaximize, IconTransfer, IconUpload, IconPhoto, IconZoomIn, IconZoomOut } from "@tabler/icons-vue";
 import { useNodeFiles } from "@toonflow/nodes-scaffold/workspaceFiles";
 import { isNodeOutput, type NodeMediaValue } from "@toonflow/nodes-scaffold/values";
 import { useMediaPreview } from "../mediaPreview";
 import { getMediaMimeType } from "../mediaTypes";
 import promptReferenceThumbnail from "./promptReferenceThumbnail.vue";
 
-const props = defineProps<{ mediaType: "image" | "video"; current?: NodeMediaValue; disabled?: boolean; inline?: boolean; replaceable?: boolean; hideHistory?: boolean; getVideoElement?: () => HTMLVideoElement | undefined }>();
+const props = defineProps<{ mediaType: "image" | "video"; current?: NodeMediaValue; disabled?: boolean; previewDisabled?: boolean; inline?: boolean; replaceable?: boolean; hideHistory?: boolean; getVideoElement?: () => HTMLVideoElement | undefined }>();
 const emit = defineEmits<{ select: [value: NodeMediaValue]; upload: []; open: [] }>();
 const vLoading = ElLoading.directive;
 const { id, node } = useNode();
@@ -239,7 +240,7 @@ watch(viewerVisible, open => {
 onBeforeUnmount(() => { viewerVideo.value?.pause(); });
 
 // 内联历史仅在选中节点后检查目录，媒体仍在展开后按页读取。
-const shouldReadHistory = computed(() => props.inline ? !props.hideHistory && !props.disabled : visible.value);
+const shouldReadHistory = computed(() => props.inline ? !props.hideHistory && (!props.disabled || viewerVisible.value) : visible.value);
 watch([shouldReadHistory, () => props.inline ? currentUrl.value : undefined], async ([active, url], _previous, onCleanup) => {
   if (!active) {
     loading.value = false;
@@ -285,7 +286,7 @@ function chooseMedia(item: NodeMediaValue, preview = false) {
 }
 
 function openViewer() {
-  if (props.disabled || !currentFile.value) return;
+  if ((props.previewDisabled ?? props.disabled) || !currentFile.value) return;
   visible.value = false;
   previewOnly.value = true;
   previewReady.value = false;
@@ -440,6 +441,12 @@ defineExpose({ openViewer });
     .imageZoomControls {
       position: absolute;
       right: 12px;
+      bottom: 12px;
+    }
+
+    .imageDownload {
+      position: absolute;
+      left: 12px;
       bottom: 12px;
     }
   }
