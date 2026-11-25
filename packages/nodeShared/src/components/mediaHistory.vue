@@ -57,14 +57,19 @@
         <video v-else-if="mediaType === 'video' && mediaSrc" :src="mediaSrc" controls playsinline preload="auto" aria-label="历史视频放大预览" @loadeddata="readPreview" @error="previewFailed" />
         <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" />
       </div>
-      <div class="historyViewerVersions" aria-label="节点历史版本">
+      <div class="historyViewerVersions" aria-label="节点历史版本" :aria-busy="loading">
         <div class="historyViewerHeader"><span>节点历史</span><span>{{ items.length }} {{ mediaType === 'video' ? '段' : '张' }}</span></div>
-        <div class="historyViewerGrid">
-          <button v-for="(item, index) in items" :key="item.url" type="button" class="historyViewerItem" :class="{ current: item.url === selected?.url }" :aria-label="`查看历史${mediaLabel} ${index + 1}`" :aria-pressed="item.url === selected?.url" @click="switchViewer(item)">
-            <promptReferenceThumbnail class="historyViewerThumbnail" :dataType="mediaType === 'video' ? 'VIDEO' : 'IMAGE'" :media="item" />
-            <span v-if="item.url === selected?.url" class="historyViewerBadge">当前</span>
-          </button>
-        </div>
+        <div v-if="loading" role="status">正在读取历史记录</div>
+        <template v-else>
+          <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" />
+          <div class="historyViewerGrid">
+            <button v-for="(item, index) in viewerPageItems" :key="item.url" type="button" class="historyViewerItem" :class="{ current: item.url === selected?.url }" :aria-label="`查看历史${mediaLabel} ${(viewerPage - 1) * historyPageSize + index + 1}`" :aria-pressed="item.url === selected?.url" @click="switchViewer(item)">
+              <promptReferenceThumbnail class="historyViewerThumbnail" :dataType="mediaType === 'video' ? 'VIDEO' : 'IMAGE'" :media="item" />
+              <span v-if="item.url === selected?.url" class="historyViewerBadge">当前</span>
+            </button>
+          </div>
+          <el-pagination v-model:currentPage="viewerPage" :pageSize="historyPageSize" :total="items.length" layout="prev, pager, next" :pagerCount="5" hideOnSinglePage small />
+        </template>
       </div>
     </div>
   </el-dialog>
@@ -159,6 +164,7 @@ const mediaLabel = computed(() => props.mediaType === "video" ? "视频" : "图�
 const currentUrl = computed(() => currentFile.value?.url);
 const selected = ref<NodeMediaValue>();
 const page = ref(1);
+const viewerPage = ref(1);
 const pageSize = 20;
 const historyPageSize = computed(() => props.inline ? 9 : pageSize);
 const canvasMedia = computed(() => !canvasVisible.value ? [] : getNodes.value.flatMap(source => source.id === id ? [] :
@@ -166,6 +172,7 @@ const canvasMedia = computed(() => !canvasVisible.value ? [] : getNodes.value.fl
     ? [{ key: `${source.id}:${handle}`, name: String(source.data.label || mediaLabel.value), file: { ...output.value, url: output.value.url.replaceAll("\\", "/") } }] : [])));
 const canvasPageItems = computed(() => canvasMedia.value.slice((canvasPage.value - 1) * pageSize, canvasPage.value * pageSize));
 const pageItems = computed(() => items.value.slice((page.value - 1) * historyPageSize.value, page.value * historyPageSize.value));
+const viewerPageItems = computed(() => items.value.slice((viewerPage.value - 1) * historyPageSize.value, viewerPage.value * historyPageSize.value));
 const previewFile = computed(() => visible.value || viewerVisible.value || canvasVisible.value ? selected.value : undefined);
 watch(previewFile, () => { previewReadError.value = ""; }, { flush: "sync" });
 const previewUrl = files.useFileUrl(previewFile, () => { previewReadError.value = "历史文件读取失败，文件可能已被移动或删除"; });
@@ -176,14 +183,17 @@ watch([previewFile, mediaSrc], () => { previewReady.value = false; }, { flush: "
 watch(() => props.disabled, disabled => { if (disabled) visible.value = replaceVisible.value = canvasVisible.value = false; });
 watch(replaceVisible, open => { if (open) visible.value = false; });
 watch(canvasVisible, () => { canvasPage.value = 1; selected.value = undefined; });
-function showCurrentPage() {
-  const index = items.value.findIndex(item => item.url === currentUrl.value);
-  page.value = Math.floor(Math.max(0, index) / historyPageSize.value) + 1;
+function getHistoryPage(url: string | undefined) {
+  const index = items.value.findIndex(item => item.url === url);
+  return Math.floor(Math.max(0, index) / historyPageSize.value) + 1;
 }
 
 watch(visible, open => {
   if (!viewerVisible.value) selected.value = undefined;
-  if (open) showCurrentPage();
+  if (open) page.value = getHistoryPage(currentUrl.value);
+});
+watch(viewerVisible, open => {
+  if (open) viewerPage.value = getHistoryPage(selected.value?.url);
 });
 
 // 内联历史仅在选中节点后检查目录，媒体仍在展开后按页读取。
@@ -212,8 +222,9 @@ watch([shouldReadHistory, () => props.inline ? currentUrl.value : undefined], as
     });
     if (!props.inline) {
       selected.value = currentFile.value ?? items.value[0];
-      showCurrentPage();
+      page.value = getHistoryPage(currentUrl.value);
     }
+    if (viewerVisible.value) viewerPage.value = getHistoryPage(selected.value?.url);
   } catch (error) {
     if (!cancelled) {
       const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -232,7 +243,7 @@ function chooseMedia(item: NodeMediaValue, preview = false) {
 }
 
 function openViewer() {
-  if (props.disabled || loading.value || !currentFile.value) return;
+  if (props.disabled || !currentFile.value) return;
   visible.value = false;
   previewOnly.value = true;
   previewReady.value = false;
@@ -311,6 +322,8 @@ defineExpose({ openViewer });
     min-width: 0;
     padding: 4px;
     overflow: auto;
+
+    .el-pagination { justify-content: center; margin-top: 8px; }
   }
 
   .historyViewerHeader {

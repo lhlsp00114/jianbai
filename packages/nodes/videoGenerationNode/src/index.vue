@@ -229,9 +229,11 @@ const mediaCounts = computed(() => ({
   video: refList.value.filter((item) => item.dataType === "VIDEO").length,
   audio: refList.value.filter((item) => item.dataType === "AUDIO").length,
 }));
+const hasSourceVideo = computed(() => refList.value.some(item => item.dataType === "VIDEO" && !!item.value?.url));
 const matchingModes = computed(() => getMatchingModes(selectedModel.value));
 
 function getMatchingModes(choice?: NodeMediaModel) {
+  if (choice?.modelId === "vo-4-omni-v2v" && !hasSourceVideo.value) return [];
   return (choice?.mode ?? []).filter((mode) => {
     const { image, video, audio } = mediaCounts.value;
     if (Array.isArray(mode)) {
@@ -480,6 +482,7 @@ async function startGeneration() {
   if (data.value.cameraSettings && !isCameraSettings(data.value.cameraSettings)) throw new Error("摄影参数已失效，请重新选择相机参数后生成");
   const choice = selectedModel.value;
   if (!choice) throw new Error("请先选择视频模型");
+  if (choice.modelId === "vo-4-omni-v2v" && !hasSourceVideo.value) throw new Error("视频转视频至少需要连接一段源视频");
   if (frameMode.value) {
     if (selectedMode.value === "startEndRequired" && mediaCounts.value.image < 2) throw new Error("首尾帧模式需要 2 张图片，请分别提供首帧和尾帧。");
   }
