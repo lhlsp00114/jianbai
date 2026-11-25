@@ -12,7 +12,7 @@
     fullscreenLabel="放大预览"
     :downloadUrl="previewUrl"
     :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
-    @fullscreen="previewVisible = true"
+    @fullscreen="mediaHistoryRef?.openViewer()"
     :bottomWidth="660"
     :style="nodePreviewStyle">
     <template v-if="imageResolution" #titleMeta><span :title="`${imageResolution} 像素`" :aria-label="`图片分辨率：${imageResolution}`">{{ imageResolution }}</span></template>
@@ -43,7 +43,7 @@
           alt="生成图片"
           :focusOnDoubleClick="!skeleton?.documentTarget"
           @focus="skeleton?.focusNode()"
-          @preview="previewVisible = true"
+          @preview="mediaHistoryRef?.openViewer()"
           @load="resizeImage"
           @error="showNodeError('无法预览该图片', '图片预览失败')" />
       </div>
@@ -56,7 +56,8 @@
       </div>
       <imageOutpaint v-if="outpaintVisible" ref="outpaintPrompt" :src="imagePreviewUrl" :target="outpaintTarget" :sourceWidth="imageNaturalWidth" :sourceHeight="imageNaturalHeight" :models="models" :createDraft="createOutpaint" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || panorama?.busy || gridSplit?.splitting" @close="outpaintVisible = false" />
       <mediaHistory
-        v-if="node.selected && !editor?.mode && !outpaintVisible"
+        ref="mediaHistoryRef"
+        v-if="(node.selected || skeleton?.documentTarget) && !editor?.mode && !outpaintVisible"
         mediaType="image"
         inline
         replaceable
@@ -131,12 +132,6 @@
   <imagePanorama ref="panorama" :src="imagePreviewUrl" :source="outputFile" :disabled="generating || deleting || uploading || editor?.busy || lighting?.generating || multiAngle?.generating || gridSplit?.splitting" @open="openPanorama" />
   <imageGridSplit ref="gridSplit" :src="imagePreviewUrl" :disabled="generating || deleting || uploading || layerSplit?.splitting || lighting?.generating || multiAngle?.generating || panorama?.busy" :active="node.selected" />
   <imageViewer v-if="inpaintPreviewVisible && inpaintGuideUrl" :urlList="[inpaintGuideUrl]" :downloadUrl="inpaintGuideUrl" downloadName="inpaint-guide.png" @close="inpaintPreviewVisible = false" />
-  <imageViewer
-    v-if="previewVisible && previewUrl"
-    :urlList="[imagePreviewUrl]"
-    :downloadUrl="imagePreviewUrl"
-    :downloadName="outputFile?.url.split(/[\\/]/).at(-1)"
-    @close="previewVisible = false" />
 </template>
 
 <script setup lang="ts">
@@ -169,6 +164,7 @@ import referenceItem from "@toonflow/node-shared/referenceItem";
 import referenceActions from "@toonflow/node-shared/referenceActions";
 import mediaHistory from "@toonflow/node-shared/mediaHistory";
 import imageGridSplit from "@toonflow/node-image/imageGridSplit";
+import imageViewer from "@toonflow/node-shared/imageViewer";
 import imageLayerSplit from "@toonflow/node-image/imageLayerSplit";
 import imageEditor from "@toonflow/node-image/imageEditor";
 import imageSmartEdit from "@toonflow/node-image/imageSmartEdit";
@@ -182,7 +178,6 @@ import { buildPanoramaPrompt, panoramaPromptPresets } from "@toonflow/node-image
 import imageMultiAngle from "@toonflow/node-image/imageMultiAngle";
 import imageGenerationSettings from "@toonflow/node-shared/imageGenerationSettings";
 import imageOutpaint from "@toonflow/node-image/outpaint";
-import imageViewer from "@toonflow/node-shared/imageViewer";
 import { buildOutpaintPrompt, defaultOutpaintPromptInstruction, readOutpaintPrompt, type OutpaintDraftInput } from "@toonflow/node-image/imageOutpaint";
 import { imagePromptPresets, imagePromptPresetColumns, readImagePresetPrompt } from "./imagePromptPresets";
 
@@ -271,7 +266,7 @@ const multiAngleVisible = ref(false);
 const panorama = ref<InstanceType<typeof imagePanorama>>();
 let disposed = false;
 const deleting = ref(false);
-const previewVisible = ref(false);
+const mediaHistoryRef = ref<InstanceType<typeof mediaHistory>>();
 const inpaintPreviewVisible = ref(false);
 const smartEditToolbar = ref<HTMLElement>();
 const imageWidth = ref(0);

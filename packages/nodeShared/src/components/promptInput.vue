@@ -46,6 +46,7 @@ const props = defineProps<{
   selectMaterial?: (id: string) => Promise<Reference | undefined>;
   selectAsset?: () => Promise<Reference | undefined>;
   expandable?: boolean;
+  compact?: boolean;
   highlightImageMentions?: boolean;
   highlightVideoMentions?: boolean;
   placeholder?: string;
@@ -57,6 +58,7 @@ const registerTextHistory = useCanvasTextHistory();
 const expanded = ref(false);
 const panelExpanded = inject<Ref<boolean> | undefined>("expandedGenerationPrompt", undefined);
 const editorExpanded = computed(() => expanded.value || panelExpanded?.value === true);
+const inlineHeight = computed(() => props.compact ? { minHeight: "24px", maxHeight: "72px" } : { minHeight: "70px", maxHeight: "180px" });
 const expandedTarget = ref<HTMLElement>();
 const { nextZIndex } = useZIndex();
 const mentionMenu = ref<InstanceType<typeof promptReferenceMenu>>();
@@ -393,7 +395,7 @@ watch(senderElement, (element, _previous, onCleanup) => {
   const instance = new xSender(element, {
     autoFocus: false,
     placeholder: props.placeholder ?? "描述一下生成风格提示词，输入 @ 引用参考",
-    chatStyle: { minHeight: "70px", maxHeight: "180px", fontSize: "14px", lineHeight: "1.6" },
+    chatStyle: { ...inlineHeight.value, fontSize: "14px", lineHeight: "1.6" },
     getPopupContainer: () => popup,
     // ACT: XSender 1.4.6 不支持分组候选渲染，扩展引用菜单由 Vue 管理，标签仍走编辑器公开 API。
     ...(props.materials === undefined ? { mentionConfig: { dialogTitle: "选择参考", callEvery: false, options: props.references } } : {}),
@@ -402,10 +404,10 @@ watch(senderElement, (element, _previous, onCleanup) => {
   });
   sender = instance;
   // ACT: 弹窗只移动现有编辑器，保留参考标签、光标与撤销记录。
-  const stopExpandedWatch = watch([editorExpanded, expandedTarget], async ([visible]) => {
+  const stopExpandedWatch = watch([editorExpanded, expandedTarget, inlineHeight], async ([visible, , height]) => {
     instance.bus.emit(xSender.EventSet.EVENT_COMMON_DIALOG_CLOSE);
     closeMentionMenu();
-    instance.updateConfig({ chatStyle: { minHeight: visible ? "100%" : "70px", maxHeight: visible ? "100%" : "180px", fontSize: visible ? "16px" : "14px", lineHeight: visible ? "1.8" : "1.6" } });
+    instance.updateConfig({ chatStyle: { ...(visible ? { minHeight: "100%", maxHeight: "100%" } : height), fontSize: visible ? "16px" : "14px", lineHeight: visible ? "1.8" : "1.6" } });
     if (!visible) return;
     await nextTick();
     if (sender !== instance || !editorExpanded.value) return;

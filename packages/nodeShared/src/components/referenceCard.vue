@@ -1,5 +1,5 @@
 <template>
-  <div ref="card" class="referenceItem" :class="{ labeledReference: (insertable && item.dataType === 'IMAGE') || labelTextReference }" role="group" :title="title" :aria-label="insertable ? `插入提示词：${title}` : title" :aria-busy="preparingPreview" @click="insertable && emit('insert')" @keydown.enter.self.stop.prevent="activate" @keydown.space.self.stop.prevent="activate">
+  <div ref="card" class="referenceItem" :class="{ labeledReference: insertable || labelTextReference || previewVideo }" role="group" :title="title" :aria-label="insertable ? `插入提示词：${title}` : title" :aria-busy="preparingPreview" @click="insertable && emit('insert')" @keydown.enter.self.stop.prevent="activate" @keydown.space.self.stop.prevent="activate">
     <el-image
       v-if="item.dataType === 'IMAGE' && mediaSrc && !preparingPreview && !previewError"
       ref="imageRef"
@@ -55,17 +55,17 @@
       @before-enter="followPreviewAnchor"
       @before-leave="stopFollowingPreviewAnchor">
       <template #default="{ hide }">
-        <button v-if="item.dataType === 'IMAGE'" type="button" class="referencePreview" @click.stop="viewerVisible = true; hide()">
+        <button type="button" class="referencePreview" @click.stop="viewerVisible = true; hide()">
           <img :src="hoverPreviewSrc" :style="{ maxHeight: `${previewImageHeight}px` }" alt="" draggable="false" @load="updatePreviewPosition" />
-          <span>查看原图</span>
+          <span>{{ previewVideo ? '查看视频' : '查看原图' }}</span>
         </button>
-        <div v-else class="referencePreview">
-          <img :src="hoverPreviewSrc" :style="{ maxHeight: `${previewImageHeight}px` }" alt="视频封面" draggable="false" @load="updatePreviewPosition" />
-        </div>
       </template>
     </el-popover>
-    <imageViewer v-if="viewerVisible && mediaSrc" :urlList="[mediaSrc]" @close="viewerVisible = false" />
-    <div v-if="item.dataType === 'VIDEO' && mediaSrc && !preparingPreview && !previewError" class="videoInfo" aria-hidden="true">
+    <imageViewer v-if="!previewVideo && viewerVisible && mediaSrc" :urlList="[mediaSrc]" @close="viewerVisible = false" />
+    <el-dialog v-if="previewVideo" v-model="viewerVisible" title="查看视频" width="min(900px, calc(100vw - 32px))" alignCenter appendToBody destroyOnClose>
+      <video v-if="viewerVisible && mediaSrc" class="videoViewer" :src="mediaSrc" :poster="videoThumbnail || undefined" controls autoplay playsinline :aria-label="displayName || '参考视频'" />
+    </el-dialog>
+    <div v-if="item.dataType === 'VIDEO' && !previewVideo && mediaSrc && !preparingPreview && !previewError" class="videoInfo" aria-hidden="true">
       <icon-player-play :size="12" />
       <span v-if="duration">{{ duration }}</span>
     </div>
@@ -75,7 +75,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useVueFlow } from "@vue-flow/core";
-import { ElButton, ElImage, ElPopover } from "element-plus";
+import { ElButton, ElDialog, ElImage, ElPopover } from "element-plus";
 import { IconX, IconFileText, IconPhoto, IconVideo, IconMusic, IconPlayerPlay } from "@tabler/icons-vue";
 import textNodeIcon from "./textNodeIcon.vue";
 import { useNodeFiles } from "@toonflow/nodes-scaffold/workspaceFiles";
@@ -84,7 +84,7 @@ import type { NodeInputValue } from "@toonflow/nodes-scaffold/values";
 import { useMediaPreview } from "../mediaPreview";
 import imageViewer from "./imageViewer.vue";
 
-const props = defineProps<{ item: NodeInputValue; index: number; insertable?: boolean; labelTextReference?: boolean; displayName?: string }>();
+const props = defineProps<{ item: NodeInputValue; index: number; insertable?: boolean; labelTextReference?: boolean; displayName?: string; previewVideo?: boolean }>();
 const emit = defineEmits<{ remove: []; preview: [url: string]; insert: [] }>();
 const { findNode } = useVueFlow();
 const card = ref<HTMLElement>();
@@ -120,7 +120,7 @@ const previewUrl = useFileUrl(media, error => {
 const { src: mediaSrc, preparing: preparingPreview, error: mediaError, handleError, handleLoaded } = useMediaPreview(previewUrl, () => props.item.dataType === "VIDEO" ? "video" : "image");
 const previewError = computed(() => previewReadError.value || mediaError.value);
 const hoverPreviewSrc = computed(() => {
-  if (!props.insertable || preparingPreview.value || previewError.value) return "";
+  if ((!props.insertable && !props.previewVideo) || preparingPreview.value || previewError.value) return "";
   return props.item.dataType === "VIDEO" ? videoThumbnail.value : mediaSrc.value;
 });
 watch(mediaSrc, () => {
@@ -152,7 +152,7 @@ function followPreviewAnchor() {
     const rect = card.value.getBoundingClientRect();
     const spaceAbove = rect.top;
     const spaceBelow = window.innerHeight - rect.bottom;
-    // 给“查看原图”和弹层间距预留空间，离视口顶边太近时挂到下方。
+    // 为预览按钮和弹层间距预留空间，靠近视口顶边时挂到下方。
     const placement = spaceAbove >= 116 || spaceAbove >= spaceBelow ? "top" : "bottom";
     const imageHeight = Math.max(1, Math.min(300, Math.floor((placement === "top" ? spaceAbove : spaceBelow) - 50)));
     if (!lastRect || rect.x !== lastRect.x || rect.y !== lastRect.y || rect.width !== lastRect.width || rect.height !== lastRect.height
@@ -174,8 +174,8 @@ function stopFollowingPreviewAnchor() {
 }
 
 function activate(event: KeyboardEvent) {
-  if (props.insertable && props.item.dataType === "IMAGE" && event.key === "Enter" && event.shiftKey) {
-    viewerVisible.value = !!hoverPreviewSrc.value;
+  if (event.key === "Enter" && event.shiftKey && (props.previewVideo || (props.insertable && props.item.dataType === "IMAGE"))) {
+    viewerVisible.value = props.previewVideo ? !!mediaSrc.value && !preparingPreview.value && !previewError.value : !!hoverPreviewSrc.value;
     return;
   }
   if (props.insertable) emit("insert");
@@ -196,6 +196,7 @@ function readVideoPreview(event: Event) {
 }
 
 function readDuration(event: Event) {
+  if (props.previewVideo) return;
   const seconds = (event.currentTarget as HTMLVideoElement).duration;
   if (!Number.isFinite(seconds) || seconds < 0) return;
   const totalSeconds = Math.floor(seconds);
@@ -319,6 +320,12 @@ function readDuration(event: Event) {
     line-height: 12px;
   }
 }
+.videoViewer {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  background: #000;
+}
 .referencePreview {
   display: block;
   width: 100%;
@@ -328,7 +335,7 @@ function readDuration(event: Event) {
   color: #fff;
   font: inherit;
 
-  &:is(button) { cursor: zoom-in; }
+  cursor: zoom-in;
 
   img {
     display: block;

@@ -32,14 +32,15 @@
       :title="selectedModel?.label"
       placement="top-start"
       :fallbackPlacements="['bottom-start']"
+      :popperClass="compact ? 'videoModelDropdown' : undefined"
       :disabled="disabled || !selectedProvider"
       placeholder="选择模型"
       aria-label="生成模型"
       @update:modelValue="value => typeof value === 'string' && selectModel(value)"
       @visible-change="onCascaderVisible">
-      <template #prefix><modelIcon v-if="selectedModel && modelIcon" :model="selectedModel.modelId" aria-hidden="true" /></template>
+      <template #prefix><modelIcon v-if="selectedModel && modelIcon" :model="modelIconKey(selectedModel.modelId)" aria-hidden="true" /></template>
       <template #default="{ data }">
-        <modelLabel v-if="data.model" :label="data.model.label" :providerId="data.model.providerId" :modelId="data.model.modelId" />
+        <modelLabel v-if="data.model" :label="data.model.label" :providerId="data.model.providerId" :modelId="modelIconKey(data.model.modelId)" />
         <modelLabel v-else :label="data.label" modelId="seedance" />
       </template>
     </el-cascader>
@@ -54,12 +55,13 @@
       aria-label="生成模型"
       :noDataText="noDataText"
       placement="top-start"
+      :popperClass="compact ? 'videoModelDropdown' : undefined"
       @update:modelValue="selectModel"
       @visible-change="visible => visible && emit('open')">
       <template v-if="!selectedModel" #prefix><icon-sparkles :size="17" /></template>
-      <template #label="{ label }"><modelLabel :title="label" :label="compactLabel(label)" :providerId="compact ? undefined : selectedModel?.providerId" :modelId="selectedModel?.modelId" /></template>
+      <template #label="{ label }"><modelLabel :title="label" :label="compactLabel(label)" :providerId="compact ? undefined : selectedModel?.providerId" :modelId="selectedModel && modelIconKey(selectedModel.modelId)" /></template>
       <el-option v-for="item in selectedProvider?.models ?? []" :key="getNodeModelKey(item)" :label="item.label" :value="getNodeModelKey(item)">
-        <modelLabel :label="item.label" :providerId="item.providerId" :modelId="item.modelId" />
+        <modelLabel :label="item.label" :providerId="item.providerId" :modelId="modelIconKey(item.modelId)" />
       </el-option>
     </el-select>
   </div>
@@ -78,6 +80,11 @@ import modelSelect from "./modelSelect.vue";
 
 const props = defineProps<{ models: NodeMediaModel[]; loading?: boolean; disabled?: boolean; noDataText: string; providerTarget?: HTMLElement; compact?: boolean }>();
 const modelIcon = modelIcons?.modelIcon;
+function modelIconKey(modelId: string) {
+  // ACT: 节点可独立更新，直接传品牌名以兼容未更新的画布宿主。
+  if (modelId === "mj-img") return "midjourney";
+  return /^(?:vo-|gm-omni-flash-)/i.test(modelId) ? "gemini" : modelId;
+}
 const model = defineModel<string>({ required: true });
 const emit = defineEmits<{ open: [] }>();
 const cascader = ref<InstanceType<typeof ElCascader>>();
@@ -226,4 +233,17 @@ function selectProvider(id: string) {
   }
 }
 .providerOption { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+
+:global(.videoModelDropdown .el-cascader-menu:first-child),
+:global(.videoModelDropdown .el-select-dropdown) {
+  min-width: min(240px, calc(100vw - 24px));
+}
+
+:global(.videoModelDropdown .el-cascader-menu__wrap.el-scrollbar__wrap) {
+  height: min(274px, 60vh);
+}
+
+:global(.videoModelDropdown .el-select-dropdown__wrap) {
+  max-height: min(274px, 60vh);
+}
 </style>

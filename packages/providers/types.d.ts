@@ -3,6 +3,7 @@
 type ModelType = "text" | "image" | "video" | "audio";
 
 type ImageMode = "text" | "singleImage" | "multiReference";
+type VideoDurationResolution = { duration: number[]; resolution: string[]; imageRatios?: string[] };
 type VideoMode =
   | "singleImage"
   | "startEndRequired"
@@ -25,8 +26,8 @@ interface ProviderModel<TRules extends readonly ProviderFormRule[] = readonly Pr
   maxPromptLength?: number;
   promptOptional?: boolean;
   audioOptions?: { nativeParameters: boolean; referenceLimits: Record<string, number> };
-  videoVariants?: { quality?: string; operation: string; mode: VideoMode; imageRatios: string[]; durationResolutionMap: { duration: number[]; resolution: string[] }[] }[];
-  durationResolutionMap?: { duration: number[]; resolution: string[] }[];
+  videoVariants?: { quality?: string; operation: string; mode: VideoMode; imageRatios: string[]; durationResolutionMap: VideoDurationResolution[] }[];
+  durationResolutionMap?: VideoDurationResolution[];
   voices?: { title: string; voice: string }[];
   /** 模型专属的 form-create JSON 规则，节点表单值作为 request.other 传入。 */
   rules?: TRules;

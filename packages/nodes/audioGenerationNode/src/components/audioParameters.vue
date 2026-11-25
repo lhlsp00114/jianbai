@@ -1,17 +1,30 @@
 <template>
-  <div v-if="rules.length" :class="section === 'content' ? 'audioWriting' : 'audioControls'" class="nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @keydown.stop @wheel.stop>
-    <template v-if="section === 'content'">
-      <label v-for="rule in rules" :key="String(rule.field)" class="writingField" :class="{ shortField: ['title', 'negativeTags'].includes(String(rule.field)) }">
-        <span class="writingLabel">{{ rule.title }}<span v-if="!required(rule)" class="optionalLabel">可选</span></span>
-        <el-input :modelValue="String(other[String(rule.field)] ?? '')" :disabled="disabled" :type="['instructions', 'lyrics', 'infillLyrics', 'previewText', 'audioUrls'].includes(String(rule.field)) ? 'textarea' : 'text'" :autosize="{ minRows: 2, maxRows: 7 }" :placeholder="placeholders[String(rule.field)] ?? rule.props?.placeholder" :aria-label="String(rule.title)" resize="none" @update:modelValue="value => update(String(rule.field), value)" />
-      </label>
+  <div v-if="rules.length" :class="section === 'controls' ? 'audioControls' : 'audioWriting'" class="nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @keydown.stop @wheel.stop>
+    <template v-if="section !== 'controls'">
+      <div v-for="rule in rules" :key="String(rule.field)" class="writingField" :class="{ shortField: ['title', 'negativeTags'].includes(String(rule.field)) }">
+        <div class="writingLabel">
+          {{ rule.title }}<span v-if="!required(rule)" class="optionalLabel">可选</span>
+          <el-button v-if="section === 'lyrics'" class="expandLyrics" :icon="IconMaximize" :disabled="disabled" text circle title="展开编辑歌词" aria-label="展开编辑歌词" @click.stop="lyricsExpanded = true" />
+        </div>
+        <el-input :modelValue="String(other[String(rule.field)] ?? '')" :disabled="disabled" :type="['instructions', 'lyrics', 'infillLyrics', 'previewText', 'audioUrls'].includes(String(rule.field)) ? 'textarea' : 'text'" :autosize="{ minRows: section === 'lyrics' ? 5 : 2, maxRows: section === 'lyrics' ? 10 : 7 }" :placeholder="placeholders[String(rule.field)] ?? rule.props?.placeholder" :aria-label="String(rule.title)" resize="none" @update:modelValue="value => update(String(rule.field), value)" />
+      </div>
+      <el-dialog v-if="section === 'lyrics'" v-model="lyricsExpanded" title="编辑歌词" width="min(800px, calc(100vw - 32px))" alignCenter appendToBody :closeOnClickModal="false" @opened="lyricsEditor?.focus()">
+        <el-input ref="lyricsEditor" class="lyricsEditor nodrag nopan nowheel" :modelValue="String(other.lyrics ?? '')" type="textarea" :disabled="disabled" :placeholder="placeholders.lyrics" aria-label="歌词" resize="none" @update:modelValue="value => update('lyrics', value)" @keydown.stop @wheel.stop />
+      </el-dialog>
     </template>
     <template v-else>
       <template v-for="rule in rules" :key="String(rule.field)">
       <voicePicker v-if="rule.field === 'voice' && voiceOptions.some(option => option.previewUrl)" :modelValue="String(other.voice ?? '')" :options="voiceOptions" :modelKey="`${model?.providerId}/${model?.modelId}`" :allowCustom="!Array.isArray(rule.options)" :disabled="disabled" @update:modelValue="value => update('voice', value)" />
       <el-select v-else-if="Array.isArray(rule.options)" class="parameterSelect" :title="`${rule.title}：${displayValue(rule)}`" :modelValue="other[String(rule.field)] as string | number | undefined" :disabled="disabled" :filterable="rule.field === 'voice'" placement="top-start" :aria-label="String(rule.title)" @update:modelValue="value => update(String(rule.field), value)">
         <template #prefix><span class="chipLabel">{{ rule.title }}</span></template>
-        <el-option v-for="option in rule.options" :key="String(option.value)" :label="String(option.label)" :value="option.value as string | number" />
+        <template v-if="rule.field === 'operation' && sunoOperationGroups.length">
+          <el-option-group v-for="group in sunoOperationGroups" :key="group.label" :label="group.label">
+            <el-option v-for="option in group.options" :key="String(option.value)" :label="String(option.label)" :value="option.value as string | number" />
+          </el-option-group>
+        </template>
+        <template v-else>
+          <el-option v-for="option in rule.options" :key="String(option.value)" :label="String(option.label)" :value="option.value as string | number" />
+        </template>
       </el-select>
       <el-popover v-else trigger="click" placement="top-start" :width="rule.field === 'voice' ? 280 : 230" :showArrow="false" :disabled="disabled" :popperStyle="{ padding: '14px', borderRadius: '12px' }">
         <template #reference>
@@ -31,15 +44,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { ElInput, ElInputNumber, ElOption, ElPopover, ElSelect } from "element-plus";
-import { IconChevronDown } from "@tabler/icons-vue";
+import { computed, ref, watch } from "vue";
+import { ElButton, ElDialog, ElInput, ElInputNumber, ElOption, ElOptionGroup, ElPopover, ElSelect } from "element-plus";
+import { IconChevronDown, IconMaximize } from "@tabler/icons-vue";
 import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
 import { audioContentFields, audioQuickFields, getAudioRules } from "../audioSettings";
 import voicePicker from "./voicePicker.vue";
 
-const props = defineProps<{ model?: NodeMediaModel; section: "content" | "controls"; disabled?: boolean }>();
+const props = defineProps<{ model?: NodeMediaModel; section: "content" | "lyrics" | "controls"; disabled?: boolean }>();
 const other = defineModel<Record<string, unknown>>({ required: true });
+const lyricsExpanded = ref(false);
+const lyricsEditor = ref<InstanceType<typeof ElInput>>();
 type AudioRule = NonNullable<NodeMediaModel["rules"]>[number];
 const voiceOptions = computed(() => {
   const rule = props.model?.rules?.find(rule => rule.field === "voice");
@@ -52,15 +67,40 @@ const voiceOptions = computed(() => {
     previewUrl: typeof option.previewUrl === "string" && /^https?:\/\//i.test(option.previewUrl) ? option.previewUrl : undefined,
   })) : [];
 });
+const sunoContentFields = ["title", "negativeTags", ...audioContentFields.filter(field => !["title", "negativeTags", "lyrics"].includes(field))];
+const sunoOperationCategories = [
+  { label: "音乐创作", operations: ["generate", "lyrics", "inspo", "sample"] },
+  { label: "歌曲改编与编辑", operations: ["extend", "cover", "upload_cover", "upload_extend", "replace_section", "concat", "mashup"] },
+  { label: "音轨分离与添加", operations: ["stems", "stems_all", "add_vocals", "add_instrumental", "add_stem"] },
+  { label: "音频导入与音色", operations: ["import", "persona"] },
+];
 const rules = computed(() => {
   if (!props.model?.audioOptions?.nativeParameters) return [];
-  const fields = props.section === "content" ? audioContentFields : audioQuickFields;
+  const fields = {
+    content: props.model.modelId === "music" ? sunoContentFields : audioContentFields,
+    lyrics: ["lyrics"],
+    controls: audioQuickFields,
+  }[props.section];
   const available = getAudioRules(props.model, other.value);
   return fields.flatMap(field => available.filter(rule => rule.field === field));
 });
+const sunoOperationGroups = computed(() => {
+  if (props.model?.modelId !== "music") return [];
+  const options = rules.value.find(rule => rule.field === "operation")?.options;
+  if (!Array.isArray(options)) return [];
+  const groups = sunoOperationCategories.map(({ label, operations }) => ({
+    label,
+    options: options.filter(option => operations.includes(String(option.value))),
+  }));
+  const otherOptions = options.filter(option => !sunoOperationCategories.some(group => group.operations.includes(String(option.value))));
+  return [...groups, { label: "其他操作", options: otherOptions }].filter(group => group.options.length);
+});
+watch(() => rules.value.length, count => {
+  if (!count) lyricsExpanded.value = false;
+});
 const placeholders: Record<string, string> = {
   instructions: "描述语气、口音或情绪，例如：轻声、舒缓地朗读",
-  lyrics: "填写歌词；曲风、乐器和氛围在下方描述",
+  lyrics: "填写歌曲歌词",
   infillLyrics: "填写需要替换的这一段歌词",
   audioUrl: "填写源音频地址，或连接音频素材，二选一",
   audioUrls: "填写 1–4 个音频地址，每行一个；也可连接音频素材",
@@ -110,10 +150,12 @@ function displayValue(rule: AudioRule) {
     &.shortField { grid-column: auto; }
     .writingLabel { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; color: var(--el-text-color-regular); font-size: 12px; }
     .optionalLabel { color: var(--el-text-color-placeholder); font-size: 11px; }
+    .expandLyrics { margin-left: auto; width: 24px; height: 24px; padding: 4px; color: var(--el-text-color-secondary); }
     :deep(.el-input__wrapper), :deep(.el-textarea__inner) { padding: 2px 0; background: transparent; box-shadow: none; border-radius: 0; font-size: 13px; line-height: 1.7; }
     &:focus-within { :deep(.el-input__wrapper), :deep(.el-textarea__inner) { box-shadow: 0 1px 0 var(--el-border-color); } }
   }
 }
+.lyricsEditor :deep(.el-textarea__inner) { height: min(55vh, 640px); line-height: 1.7; }
 .audioControls {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(148px, 100%), 1fr));

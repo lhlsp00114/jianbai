@@ -26,6 +26,7 @@ const fallbackIcon = {
 const aliases: Record<string, string[]> = {
   openai: ["gt", "gpt", "chatgpt", "codex", "whisper", "tts", "o1", "o3", "o4", "全能图片g"],
   grok: ["gk"],
+  midjourney: ["mj-img"],
   nanobanana: ["gm-nb-2-1-image", "gm-3-1-flash-image", "gm-3-pro-image", "gm-3-1-flash-lite-image"],
   claude: ["cl", "anthropic"],
   qwen: ["qwq", "qvq", "qwenimage", "cosyvoice", "funasr", "sensevoice", "通义千问"],
@@ -37,6 +38,7 @@ const aliases: Record<string, string[]> = {
   kling: ["klingai", "可灵"],
   vidu: ["viduq"],
   google: ["veo", "imagen", "lyria"],
+  gemini: ["vo", "gm-omni-flash"],
   runway: ["gen2", "gen3", "gen4", "gen-2", "gen-3", "gen-4"],
   luma: ["ray", "dream-machine"],
   hailuo: ["minimax-hailuo", "海螺"],
